@@ -21,6 +21,7 @@ import {
   LineChart,
   Database,
   BookOpen,
+  Activity,
 } from "lucide-react";
 import { ThemeLogo } from "@/components/theme-logo";
 import {
@@ -178,6 +179,22 @@ export function AppSidebar() {
                     <Link href="/tickets">
                       <Ticket className="h-4 w-4" />
                       <span>Chamados</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {/* 41 Ops Center — hidden for plain "Usuario" role */}
+              {!isUsuarioOnly && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location.startsWith("/ops")}
+                    data-testid="nav-ops"
+                  >
+                    <Link href="/ops">
+                      <Activity className="h-4 w-4" />
+                      <span>Ops Center</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

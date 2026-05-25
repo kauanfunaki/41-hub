@@ -21,7 +21,16 @@
       "Bash(where node:*)",
       "Bash(\"C:\\\\nvm4w\\\\nodejs\\\\npx.cmd\" tsc:*)",
       "Bash(node node_modules/typescript/bin/tsc --noEmit)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "mcp__obsidian__obsidian_get_note",
+      "Read(//mnt/c/Users/kauan.brasileiro/Documents/1. Apps/**)",
+      "Bash(ls -la \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\")",
+      "Bash(ls -la \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\\\\\\\\server\")",
+      "Bash(grep -n \"app\\\\.\\\\\\(get\\\\|post\\\\|put\\\\|delete\\\\|patch\\\\\\)\" \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\\\\\\\\server\\\\\\\\routes.ts\")",
+      "Bash(ls -la \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\\\\\\\\client\\\\\\\\src\\\\\\\\pages\")",
+      "Bash(ls -la \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\\\\\\\\docs\")",
+      "mcp__obsidian__obsidian_write_note",
+      "mcp__obsidian__obsidian_list_notes"
     ]
   }
 }

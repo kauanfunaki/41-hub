@@ -184,6 +184,33 @@ async function requireAdminOrCoordinator(req: Request, res: Response, next: Next
   next();
 }
 
+// Token-based auth for n8n → Ops Center integration (requires "ops" scope)
+async function requireOpsToken(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing Bearer token" });
+  }
+  const rawToken = authHeader.slice(7);
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  try {
+    const result = await pool.query(
+      `SELECT id, scopes FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL`,
+      [tokenHash]
+    );
+    if (!result.rows.length) {
+      return res.status(401).json({ error: "Invalid or revoked token" });
+    }
+    const scopes: string[] = result.rows[0].scopes ?? [];
+    if (!scopes.includes("ops")) {
+      return res.status(403).json({ error: "Token does not have 'ops' scope" });
+    }
+    next();
+  } catch (err) {
+    console.error("[requireOpsToken] error:", err);
+    return res.status(500).json({ error: "Internal error" });
+  }
+}
+
 // Helper to check if coordinator can manage a sector
 function canCoordinatorManageSector(user: UserWithRoles, sectorId: string): boolean {
   if (user.isAdmin) return true;
@@ -272,6 +299,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // typing_scores.level column (added after initial schema)
     await pool.query(`ALTER TABLE typing_scores ADD COLUMN IF NOT EXISTS level VARCHAR(10) NOT NULL DEFAULT 'medium'`);
+
+    // ── 41 Ops Center ────────────────────────────────────────────────────────
+    await pool.query(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ops_event_status') THEN
+        CREATE TYPE ops_event_status AS ENUM ('SUCCESS', 'ERROR', 'WARNING');
+      END IF;
+    END $$`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS ops_watchers (
+      slug        VARCHAR(60) PRIMARY KEY,
+      name        VARCHAR(120) NOT NULL,
+      description TEXT,
+      client      VARCHAR(80),
+      folder      TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS ops_events (
+      id                VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+      watcher_slug      VARCHAR(60) NOT NULL REFERENCES ops_watchers(slug),
+      filename          VARCHAR(500) NOT NULL,
+      filename_renamed  VARCHAR(500),
+      status            ops_event_status NOT NULL,
+      error_message     TEXT,
+      client            VARCHAR(80),
+      n8n_execution_id  VARCHAR(120),
+      metadata          JSONB DEFAULT '{}',
+      processed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_watcher_slug ON ops_events(watcher_slug)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_processed_at ON ops_events(processed_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_status ON ops_events(status)`);
+
+    // Seed watchers
+    await pool.query(`INSERT INTO ops_watchers (slug, name, description, client, folder) VALUES
+      ('watcher-bld',           'Watcher BLD',           'Notas fiscais BLD empresa 1',          'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\NOTAS - BLD'),
+      ('watcher-bld-2',         'Watcher BLD 2',         'Notas fiscais BLD empresa 2',          'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\NOTAS - BLD 2'),
+      ('watcher-bpo-contratos', 'Watcher BPO Contratos', 'Contratos de aluguel BPO',             'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR CONTRATOS'),
+      ('watcher-bpo-recibos',   'Watcher BPO Recibos',   'Contratos e recibos RPA BPO',          'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR RECIBOS'),
+      ('watcher-bpo-folha',     'Watcher BPO Folha',     'Folhas de pagamento BPO',              'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR FOLHA')
+    ON CONFLICT (slug) DO NOTHING`);
 
     console.info("[startup] Schema bootstrap OK");
   } catch (e: any) {
@@ -3657,6 +3727,167 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error generating audit logs report:", error);
       res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
+  // ==================== 41 OPS CENTER ====================
+
+  // POST /api/ops/events — called by n8n after each file processing (token auth)
+  app.post("/api/ops/events", requireOpsToken, async (req, res) => {
+    try {
+      const schema = z.object({
+        watcherSlug:      z.string().min(1).max(60),
+        filename:         z.string().min(1).max(500),
+        filenameRenamed:  z.string().max(500).optional(),
+        status:           z.enum(["SUCCESS", "ERROR", "WARNING"]),
+        errorMessage:     z.string().optional(),
+        client:           z.string().max(80).optional(),
+        n8nExecutionId:   z.string().max(120).optional(),
+        metadata:         z.record(z.any()).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+
+      const d = parsed.data;
+
+      // Verify watcher exists
+      const watcherCheck = await pool.query(
+        `SELECT slug FROM ops_watchers WHERE slug = $1 AND is_active = true`,
+        [d.watcherSlug]
+      );
+      if (!watcherCheck.rows.length) {
+        return res.status(400).json({ error: `Watcher '${d.watcherSlug}' não encontrado` });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO ops_events (id, watcher_slug, filename, filename_renamed, status, error_message, client, n8n_execution_id, metadata, processed_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         RETURNING id, processed_at as "processedAt"`,
+        [d.watcherSlug, d.filename, d.filenameRenamed ?? null, d.status, d.errorMessage ?? null,
+         d.client ?? null, d.n8nExecutionId ?? null, JSON.stringify(d.metadata ?? {})]
+      );
+
+      res.status(201).json({ id: result.rows[0].id, processedAt: result.rows[0].processedAt });
+    } catch (error) {
+      console.error("[ops/events POST] error:", error);
+      res.status(500).json({ error: "Falha ao registrar evento" });
+    }
+  });
+
+  // GET /api/ops/watchers — list all watchers with last event info
+  app.get("/api/ops/watchers", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          w.slug, w.name, w.description, w.client, w.folder, w.is_active as "isActive",
+          e.status        AS "lastStatus",
+          e.processed_at  AS "lastProcessedAt",
+          e.filename      AS "lastFilename",
+          e.error_message AS "lastErrorMessage",
+          counts.total_today    AS "totalToday",
+          counts.success_today  AS "successToday",
+          counts.error_today    AS "errorToday"
+        FROM ops_watchers w
+        LEFT JOIN LATERAL (
+          SELECT status, processed_at, filename, error_message
+          FROM ops_events
+          WHERE watcher_slug = w.slug
+          ORDER BY processed_at DESC
+          LIMIT 1
+        ) e ON true
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*)                                        AS total_today,
+            COUNT(*) FILTER (WHERE status = 'SUCCESS')     AS success_today,
+            COUNT(*) FILTER (WHERE status = 'ERROR')       AS error_today
+          FROM ops_events
+          WHERE watcher_slug = w.slug
+            AND processed_at >= NOW() AT TIME ZONE 'America/Sao_Paulo' - INTERVAL '24 hours'
+        ) counts ON true
+        ORDER BY w.client, w.name
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("[ops/watchers GET] error:", error);
+      res.status(500).json({ error: "Falha ao buscar watchers" });
+    }
+  });
+
+  // GET /api/ops/events — paginated event list with filters
+  app.get("/api/ops/events", requireAuth, async (req, res) => {
+    try {
+      const watcherSlug = req.query.watcher as string | undefined;
+      const status      = req.query.status  as string | undefined;
+      const date        = req.query.date    as string | undefined; // YYYY-MM-DD
+      const limit       = Math.min(parseInt(req.query.limit  as string) || 50, 200);
+      const offset      = parseInt(req.query.offset as string) || 0;
+
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let i = 1;
+
+      if (watcherSlug) { conditions.push(`e.watcher_slug = $${i++}`); params.push(watcherSlug); }
+      if (status && ["SUCCESS","ERROR","WARNING"].includes(status)) {
+        conditions.push(`e.status = $${i++}::ops_event_status`); params.push(status);
+      }
+      if (date) {
+        conditions.push(`e.processed_at::date = $${i++}::date`); params.push(date);
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const result = await pool.query(`
+        SELECT
+          e.id, e.watcher_slug as "watcherSlug", w.name as "watcherName",
+          e.filename, e.filename_renamed as "filenameRenamed",
+          e.status, e.error_message as "errorMessage",
+          e.client, e.n8n_execution_id as "n8nExecutionId",
+          e.metadata, e.processed_at as "processedAt"
+        FROM ops_events e
+        JOIN ops_watchers w ON w.slug = e.watcher_slug
+        ${where}
+        ORDER BY e.processed_at DESC
+        LIMIT $${i++} OFFSET $${i++}
+      `, [...params, limit, offset]);
+
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as total FROM ops_events e ${where}`,
+        params
+      );
+
+      res.json({ events: result.rows, total: parseInt(countResult.rows[0].total) });
+    } catch (error) {
+      console.error("[ops/events GET] error:", error);
+      res.status(500).json({ error: "Falha ao buscar eventos" });
+    }
+  });
+
+  // GET /api/ops/summary — today's counts for dashboard cards
+  app.get("/api/ops/summary", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          COUNT(*)                                     AS total,
+          COUNT(*) FILTER (WHERE status = 'SUCCESS')  AS success,
+          COUNT(*) FILTER (WHERE status = 'ERROR')    AS error,
+          COUNT(*) FILTER (WHERE status = 'WARNING')  AS warning,
+          ROUND(
+            100.0 * COUNT(*) FILTER (WHERE status = 'SUCCESS') / NULLIF(COUNT(*), 0), 1
+          ) AS success_rate
+        FROM ops_events
+        WHERE processed_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+      `);
+      const row = result.rows[0];
+      res.json({
+        total:       parseInt(row.total),
+        success:     parseInt(row.success),
+        error:       parseInt(row.error),
+        warning:     parseInt(row.warning),
+        successRate: row.success_rate ? parseFloat(row.success_rate) : null,
+      });
+    } catch (error) {
+      console.error("[ops/summary GET] error:", error);
+      res.status(500).json({ error: "Falha ao buscar resumo" });
     }
   });
 
