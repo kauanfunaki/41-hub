@@ -959,6 +959,7 @@ X-Hub-Event: ticket_created
                 <SelectContent>
                   <SelectItem value="read">read — somente leitura</SelectItem>
                   <SelectItem value="write">write — leitura e escrita</SelectItem>
+                  <SelectItem value="ops">ops — 41 Ops Center (n8n)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
