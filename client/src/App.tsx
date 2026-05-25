@@ -54,6 +54,7 @@ import Analytics from "@/pages/analytics";
 import AdminIntegrations from "@/pages/admin/integrations";
 import Kb from "@/pages/kb";
 import KbArticle from "@/pages/kb-article";
+import OpsCenter from "@/pages/ops";
 
 function TicketAccessDenied() {
   return (
@@ -111,6 +112,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/kb" component={Kb} />
       <Route path="/kb/articles/:id" component={KbArticle} />
+      <Route path="/ops" component={OpsCenter} />
       <Route component={NotFound} />
     </Switch>
   );

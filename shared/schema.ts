@@ -627,3 +627,36 @@ export type TicketWithDetails = Ticket & {
 export type TicketCategoryTree = TicketCategory & {
   children?: TicketCategory[];
 };
+
+// ============ 41 Ops Center ============
+
+export const opsEventStatusEnum = pgEnum("ops_event_status", ["SUCCESS", "ERROR", "WARNING"]);
+
+export const opsWatchers = pgTable("ops_watchers", {
+  slug: varchar("slug", { length: 60 }).primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  description: text("description"),
+  client: varchar("client", { length: 80 }),
+  folder: text("folder"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const opsEvents = pgTable("ops_events", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  watcherSlug: varchar("watcher_slug", { length: 60 }).notNull().references(() => opsWatchers.slug),
+  filename: varchar("filename", { length: 500 }).notNull(),
+  filenameRenamed: varchar("filename_renamed", { length: 500 }),
+  status: opsEventStatusEnum("status").notNull(),
+  errorMessage: text("error_message"),
+  client: varchar("client", { length: 80 }),
+  n8nExecutionId: varchar("n8n_execution_id", { length: 120 }),
+  metadata: jsonb("metadata").$type<Record<string, any>>().default({}),
+  processedAt: timestamp("processed_at").notNull().defaultNow(),
+});
+
+export const insertOpsEventSchema = createInsertSchema(opsEvents).omit({ id: true });
+
+export type OpsWatcher = typeof opsWatchers.$inferSelect;
+export type OpsEvent = typeof opsEvents.$inferSelect;
+export type InsertOpsEvent = z.infer<typeof insertOpsEventSchema>;
