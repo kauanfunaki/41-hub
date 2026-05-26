@@ -339,7 +339,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS folder_output TEXT`);
 
     // Watcher ↔ Sector M2M visibility table (replaces old user_watcher_clients)
-    await pool.query(`DROP TABLE IF EXISTS user_watcher_clients`);
+    // DROP old broken table if it exists (had integer user_id but users are VARCHAR UUIDs)
+    try { await pool.query(`DROP TABLE IF EXISTS user_watcher_clients`); } catch (_) {}
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ops_watcher_sectors (
         watcher_slug VARCHAR(60) NOT NULL REFERENCES ops_watchers(slug) ON DELETE CASCADE,
@@ -3989,21 +3990,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = await pool.query(`
         SELECT
           w.slug, w.name, w.description, w.client,
-          w.folder AS "folderInput", w.folder_output AS "folderOutput", w.is_active AS "isActive",
+          w.folder        AS "folderInput",
+          w.folder_output AS "folderOutput",
+          w.is_active     AS "isActive",
           COALESCE(
-            JSON_AGG(JSON_BUILD_OBJECT('id', s.id, 'name', s.name) ORDER BY s.name)
-              FILTER (WHERE s.id IS NOT NULL),
-            '[]'
+            (
+              SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name)
+              FROM ops_watcher_sectors ows
+              JOIN sectors s ON s.id = ows.sector_id
+              WHERE ows.watcher_slug = w.slug
+            ),
+            '[]'::json
           ) AS sectors
         FROM ops_watchers w
-        LEFT JOIN ops_watcher_sectors ows ON ows.watcher_slug = w.slug
-        LEFT JOIN sectors s ON s.id = ows.sector_id
-        GROUP BY w.slug, w.name, w.description, w.client, w.folder, w.folder_output, w.is_active
         ORDER BY w.client, w.name
       `);
       res.json(result.rows);
-    } catch (e) {
-      res.status(500).json({ error: "Falha ao buscar watchers" });
+    } catch (e: any) {
+      console.error("[admin/ops-watchers GET] error:", e?.message ?? e);
+      res.status(500).json({ error: "Falha ao buscar watchers", detail: e?.message });
     }
   });
 

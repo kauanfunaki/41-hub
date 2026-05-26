@@ -26,7 +26,7 @@ interface OpsWatcherAdmin {
   folderInput: string | null;
   folderOutput: string | null;
   isActive: boolean;
-  sectors: { id: string; name: string }[];
+  sectors?: { id: string; name: string }[];  // undefined-safe (old server compat)
 }
 
 interface SectorRow {
@@ -65,7 +65,9 @@ function WatcherEditDialog({
   });
 
   const [selectedSectors, setSelectedSectors] = useState<Set<string> | null>(null);
-  const activeSectors = selectedSectors ?? new Set(currentSectorIds);
+  // currentSectorIds from API takes precedence; watcher.sectors is a fallback
+  const fallbackIds = (watcher.sectors ?? []).map((s) => s.id);
+  const activeSectors = selectedSectors ?? new Set(currentSectorIds.length ? currentSectorIds : fallbackIds);
 
   const toggleSector = (id: string) =>
     setSelectedSectors((prev) => {
@@ -247,11 +249,11 @@ export default function AdminOpsWatchers() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {w.sectors.length === 0 ? (
+                      {(w.sectors ?? []).length === 0 ? (
                         <span className="text-xs text-amber-600 italic">Nenhum — invisível</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {w.sectors.map((s) => (
+                          {(w.sectors ?? []).map((s) => (
                             <Badge key={s.id} variant="outline" className="text-xs">{s.name}</Badge>
                           ))}
                         </div>
