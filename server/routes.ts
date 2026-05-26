@@ -3766,11 +3766,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const schema = z.object({
         watcherSlug:      z.string().min(1).max(60),
         filename:         z.string().min(1).max(500),
-        filenameRenamed:  z.string().max(500).optional(),
+        filenameRenamed:  z.string().max(500).nullish(),
         status:           z.enum(["SUCCESS", "ERROR", "WARNING"]),
-        errorMessage:     z.string().optional(),
-        client:           z.string().max(80).optional(),
-        n8nExecutionId:   z.string().max(120).optional(),
+        errorMessage:     z.string().nullish(),
+        client:           z.string().max(80).nullish(),
+        n8nExecutionId:   z.string().max(120).nullish(),
         metadata:         z.record(z.any()).optional(),
       });
       const parsed = schema.safeParse(req.body);
