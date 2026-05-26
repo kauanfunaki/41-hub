@@ -3791,7 +3791,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: `Watcher '${d.watcherSlug}' não encontrado` });
       }
 
-      // Upsert: if a recent event for same watcher+filename exists within 5 min,
+      // Upsert: if an event for same watcher+filename exists TODAY,
       // update it with filenameRenamed / corrected status instead of inserting a duplicate.
       let result;
       if (d.filenameRenamed || d.status !== "SUCCESS") {
@@ -3803,7 +3803,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
            WHERE id = (
              SELECT id FROM ops_events
              WHERE watcher_slug = $1 AND filename = $2
-               AND processed_at > NOW() - INTERVAL '5 minutes'
+               AND processed_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
              ORDER BY processed_at DESC LIMIT 1
            )
            RETURNING id, processed_at as "processedAt"`,

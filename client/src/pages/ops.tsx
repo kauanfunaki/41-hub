@@ -497,9 +497,9 @@ export default function OpsCenter() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-32">Status</TableHead>
-                <TableHead className="w-40">Watcher</TableHead>
+                <TableHead className="w-36">Watcher</TableHead>
                 <TableHead>Arquivo</TableHead>
-                <TableHead className="w-48 hidden md:table-cell">Renomeado para</TableHead>
+                <TableHead className="hidden md:table-cell">Renomeado para</TableHead>
                 <TableHead className="w-36">Processado em</TableHead>
               </TableRow>
             </TableHeader>
@@ -527,7 +527,7 @@ export default function OpsCenter() {
                     <TableCell>{statusBadge(ev.status)}</TableCell>
                     <TableCell className="text-xs font-medium">{ev.watcherName}</TableCell>
                     <TableCell
-                      className="text-xs max-w-xs cursor-pointer select-none group"
+                      className="text-xs cursor-pointer select-none group max-w-0"
                       title="Clique para copiar o caminho do arquivo"
                       onClick={() => handleEventRowClick(ev)}
                     >
@@ -540,9 +540,9 @@ export default function OpsCenter() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground hidden md:table-cell">
+                    <TableCell className="text-xs text-muted-foreground hidden md:table-cell max-w-0">
                       {ev.filenameRenamed
-                        ? <span title={ev.filenameRenamed}>{truncate(basename(ev.filenameRenamed), 40)}</span>
+                        ? <span className="truncate block" title={ev.filenameRenamed}>{basename(ev.filenameRenamed)}</span>
                         : "—"}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
