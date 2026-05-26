@@ -228,6 +228,12 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
         <div className="flex items-center gap-2">
           {watcherStatusDot(watcher.lastHeartbeatAt)}
           <span className="text-sm font-semibold leading-tight flex-1 truncate">{watcher.name}</span>
+          {/* Total shown only when collapsed — positioned between name and client badge */}
+          {!expanded && total > 0 && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+              <Activity className="h-3 w-3" /> {total} hoje
+            </span>
+          )}
           {watcher.client && (
             <Badge variant="secondary" className="text-xs shrink-0">{watcher.client}</Badge>
           )}
@@ -236,25 +242,18 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
           />
         </div>
 
-        {/* Status label + total today — same baseline */}
-        <div className="flex items-baseline justify-between gap-2 mt-0.5">
-          <span className={`text-xs font-medium leading-none ${procLabel[procStatus].cls}`}>
-            {procLabel[procStatus].text}
-          </span>
-          {total > 0 && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground leading-none shrink-0">
-              <Activity className="h-3 w-3 relative top-px" /> {total} hoje
-            </span>
-          )}
-        </div>
+        {/* Status label only */}
+        <span className={`text-xs font-medium mt-0.5 block ${procLabel[procStatus].cls}`}>
+          {procLabel[procStatus].text}
+        </span>
       </CardHeader>
 
       {/* ── Expanded details ── */}
       {expanded && (
         <CardContent className="pt-0 border-t border-border/50 mt-1" onClick={(e) => e.stopPropagation()}>
-          <div className="pt-3 space-y-3">
+          <div className="pt-3 space-y-3 flex flex-col items-center text-center">
             {/* Today's stats */}
-            <div className="flex gap-3 text-xs">
+            <div className="flex gap-4 text-xs">
               <span className="flex items-center gap-1 text-muted-foreground">
                 <Activity className="h-3 w-3" /> {total} hoje
               </span>
@@ -273,7 +272,7 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
 
             {/* Last status badge + error message (no filename, no timestamp) */}
             {watcher.lastStatus && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 <span className="text-xs text-muted-foreground">Último status:</span>
                 {statusBadge(watcher.lastStatus)}
                 {watcher.lastStatus === "ERROR" && watcher.lastErrorMessage && (
@@ -286,7 +285,7 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
 
             {/* Folder copy buttons */}
             {(watcher.folderInput || watcher.folderOutput) && (
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap justify-center">
                 {watcher.folderInput  && <CopyFolderButton label="Entrada" path={watcher.folderInput} />}
                 {watcher.folderOutput && <CopyFolderButton label="Saída"   path={watcher.folderOutput} />}
               </div>
@@ -438,7 +437,7 @@ export default function OpsCenter() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 items-start">
             {watchers.map((w) => <WatcherCard key={w.slug} watcher={w} />)}
           </div>
         )}
@@ -477,7 +476,7 @@ export default function OpsCenter() {
 
           <Input
             type="date"
-            className="h-8 w-40 text-xs"
+            className="h-8 w-40 text-xs dark:[color-scheme:dark]"
             value={filterDate}
             onChange={(e) => { setFilterDate(e.target.value); setPage(0); }}
           />
