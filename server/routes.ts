@@ -3985,7 +3985,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Admin: manage watcher config ────────────────────────────────────────────
 
   // GET /api/admin/ops-watchers — all watchers with their sector assignments (admin)
-  app.get("/api/admin/ops-watchers", requireAdmin, async (req, res) => {
+  app.get("/api/admin/ops-watchers", requireAuth, requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(`
         SELECT
@@ -4013,7 +4013,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // PATCH /api/admin/ops-watchers/:slug — update watcher config (admin)
-  app.patch("/api/admin/ops-watchers/:slug", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/ops-watchers/:slug", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { slug } = req.params;
       const schema = z.object({
@@ -4045,7 +4045,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // GET /api/admin/ops-watcher-sectors/:slug — sector IDs assigned to a watcher
-  app.get("/api/admin/ops-watcher-sectors/:slug", requireAdmin, async (req, res) => {
+  app.get("/api/admin/ops-watcher-sectors/:slug", requireAuth, requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(
         `SELECT sector_id AS "sectorId" FROM ops_watcher_sectors WHERE watcher_slug = $1 ORDER BY sector_id`,
@@ -4058,7 +4058,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // PUT /api/admin/ops-watcher-sectors/:slug — replace sector list for a watcher
-  app.put("/api/admin/ops-watcher-sectors/:slug", requireAdmin, async (req, res) => {
+  app.put("/api/admin/ops-watcher-sectors/:slug", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { slug } = req.params;
       const parsed = z.object({ sectorIds: z.array(z.string()) }).safeParse(req.body);
