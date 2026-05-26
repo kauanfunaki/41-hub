@@ -338,12 +338,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS folder_output TEXT`);
 
-    // User → client visibility permissions for Ops Center
+    // Watcher ↔ Sector M2M visibility table (replaces old user_watcher_clients)
+    await pool.query(`DROP TABLE IF EXISTS user_watcher_clients`);
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_watcher_clients (
-        user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        client   VARCHAR(80) NOT NULL,
-        PRIMARY KEY (user_id, client)
+      CREATE TABLE IF NOT EXISTS ops_watcher_sectors (
+        watcher_slug VARCHAR(60) NOT NULL REFERENCES ops_watchers(slug) ON DELETE CASCADE,
+        sector_id    VARCHAR(36) NOT NULL REFERENCES sectors(id) ON DELETE CASCADE,
+        PRIMARY KEY (watcher_slug, sector_id)
       )
     `);
 
@@ -3841,21 +3842,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // GET /api/ops/watchers — list all watchers with last event info
+  // GET /api/ops/watchers — list all watchers with last event info.
+  // Admins see everything. All other users (Coordenador or Usuário) see only
+  // watchers that share at least one sector with their own sector memberships.
   app.get("/api/ops/watchers", requireAuth, async (req, res) => {
     try {
       const u = (req as any).user;
       const isAdmin = u?.isAdmin;
-      const isCoord = u?.roles?.some((r: any) => r.roleName === "Coordenador");
 
-      // For plain "Usuário" role, filter by permitted clients
-      let clientFilter = "";
+      let sectorFilter = "";
       const filterParams: any[] = [];
-      if (!isAdmin && !isCoord) {
+      if (!isAdmin) {
         filterParams.push(u.id);
-        clientFilter = `AND (w.client IS NULL OR w.client IN (
-          SELECT client FROM user_watcher_clients WHERE user_id = $1
-        ))`;
+        sectorFilter = `
+          AND EXISTS (
+            SELECT 1 FROM ops_watcher_sectors ows
+            JOIN user_sector_roles usr ON usr.sector_id = ows.sector_id
+            WHERE ows.watcher_slug = w.slug AND usr.user_id = $1
+          )`;
       }
 
       const result = await pool.query(`
@@ -3889,7 +3893,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           WHERE watcher_slug = w.slug
             AND processed_at >= NOW() AT TIME ZONE 'America/Sao_Paulo' - INTERVAL '24 hours'
         ) counts ON true
-        WHERE w.is_active = true ${clientFilter}
+        WHERE w.is_active = true ${sectorFilter}
         ORDER BY w.client, w.name
       `, filterParams);
       res.json(result.rows);
@@ -3979,13 +3983,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ── Admin: manage watcher config ────────────────────────────────────────────
 
-  // GET /api/admin/ops-watchers — all watchers (admin)
+  // GET /api/admin/ops-watchers — all watchers with their sector assignments (admin)
   app.get("/api/admin/ops-watchers", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(`
-        SELECT slug, name, description, client,
-               folder AS "folderInput", folder_output AS "folderOutput", is_active AS "isActive"
-        FROM ops_watchers ORDER BY client, name
+        SELECT
+          w.slug, w.name, w.description, w.client,
+          w.folder AS "folderInput", w.folder_output AS "folderOutput", w.is_active AS "isActive",
+          COALESCE(
+            JSON_AGG(JSON_BUILD_OBJECT('id', s.id, 'name', s.name) ORDER BY s.name)
+              FILTER (WHERE s.id IS NOT NULL),
+            '[]'
+          ) AS sectors
+        FROM ops_watchers w
+        LEFT JOIN ops_watcher_sectors ows ON ows.watcher_slug = w.slug
+        LEFT JOIN sectors s ON s.id = ows.sector_id
+        GROUP BY w.slug, w.name, w.description, w.client, w.folder, w.folder_output, w.is_active
+        ORDER BY w.client, w.name
       `);
       res.json(result.rows);
     } catch (e) {
@@ -4025,47 +4039,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // GET /api/admin/user-watcher-clients/:userId — list permitted clients for a user
-  app.get("/api/admin/user-watcher-clients/:userId", requireAdmin, async (req, res) => {
+  // GET /api/admin/ops-watcher-sectors/:slug — sector IDs assigned to a watcher
+  app.get("/api/admin/ops-watcher-sectors/:slug", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(
-        `SELECT client FROM user_watcher_clients WHERE user_id = $1 ORDER BY client`,
-        [parseInt(req.params.userId)]
+        `SELECT sector_id AS "sectorId" FROM ops_watcher_sectors WHERE watcher_slug = $1 ORDER BY sector_id`,
+        [req.params.slug]
       );
-      res.json(result.rows.map((r: any) => r.client));
+      res.json(result.rows.map((r: any) => r.sectorId));
     } catch (e) {
-      res.status(500).json({ error: "Falha ao buscar permissões" });
+      res.status(500).json({ error: "Falha ao buscar setores do watcher" });
     }
   });
 
-  // PUT /api/admin/user-watcher-clients/:userId — replace client list for a user
-  app.put("/api/admin/user-watcher-clients/:userId", requireAdmin, async (req, res) => {
+  // PUT /api/admin/ops-watcher-sectors/:slug — replace sector list for a watcher
+  app.put("/api/admin/ops-watcher-sectors/:slug", requireAdmin, async (req, res) => {
     try {
-      const userId = parseInt(req.params.userId);
-      const clients: string[] = Array.isArray(req.body.clients) ? req.body.clients : [];
-      await pool.query(`DELETE FROM user_watcher_clients WHERE user_id = $1`, [userId]);
-      if (clients.length) {
-        const values = clients.map((c: string, i: number) => `($1, $${i + 2})`).join(", ");
+      const { slug } = req.params;
+      const parsed = z.object({ sectorIds: z.array(z.string()) }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos" });
+      const { sectorIds } = parsed.data;
+      await pool.query(`DELETE FROM ops_watcher_sectors WHERE watcher_slug = $1`, [slug]);
+      if (sectorIds.length) {
+        const values = sectorIds.map((_: string, i: number) => `($1, $${i + 2})`).join(", ");
         await pool.query(
-          `INSERT INTO user_watcher_clients (user_id, client) VALUES ${values}`,
-          [userId, ...clients]
+          `INSERT INTO ops_watcher_sectors (watcher_slug, sector_id) VALUES ${values}`,
+          [slug, ...sectorIds]
         );
       }
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ error: "Falha ao salvar permissões" });
-    }
-  });
-
-  // GET /api/admin/watcher-clients — distinct client list from ops_watchers
-  app.get("/api/admin/watcher-clients", requireAdmin, async (req, res) => {
-    try {
-      const result = await pool.query(
-        `SELECT DISTINCT client FROM ops_watchers WHERE client IS NOT NULL ORDER BY client`
-      );
-      res.json(result.rows.map((r: any) => r.client));
-    } catch (e) {
-      res.status(500).json({ error: "Falha ao buscar clientes" });
+      res.status(500).json({ error: "Falha ao salvar setores do watcher" });
     }
   });
 
