@@ -334,8 +334,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_processed_at ON ops_events(processed_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_status ON ops_events(status)`);
 
-    // Heartbeat column (added after initial schema)
+    // Heartbeat + folder columns (added after initial schema)
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS folder_output TEXT`);
+
+    // User → client visibility permissions for Ops Center
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_watcher_clients (
+        user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client   VARCHAR(80) NOT NULL,
+        PRIMARY KEY (user_id, client)
+      )
+    `);
 
     // Seed watchers (n8n + local)
     await pool.query(`INSERT INTO ops_watchers (slug, name, description, client, folder) VALUES
@@ -348,6 +358,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ('watcher-er-dias',       'Watcher ER Dias',       'Renomeador de NFs Elio Rubens',        'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\ELIO RUBENS\\08-RENOMEADOR NOTAS'),
       ('watcher-separador',     'Watcher Separador',     'Organiza arquivos em pastas de mês',   'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\00 OLD\\2025\\0. ORGANIZADOR DE PASTAS')
     ON CONFLICT (slug) DO NOTHING`);
+
+    // Seed folder_output for known local watchers
+    await pool.query(`
+      UPDATE ops_watchers SET folder_output = '\\\\192.168.140.249\\Publico\\DOCS BPO\\IRRIGA FOUR\\09-DESTINO NOTAS'
+      WHERE slug = 'watcher-irriga' AND folder_output IS NULL
+    `);
+    await pool.query(`
+      UPDATE ops_watchers SET folder_output = '\\\\192.168.140.249\\Publico\\DOCS BPO\\ELIO RUBENS\\09-DESTINO NOTAS'
+      WHERE slug = 'watcher-er-dias' AND folder_output IS NULL
+    `);
 
     console.info("[startup] Schema bootstrap OK");
   } catch (e: any) {
@@ -3765,7 +3785,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: `Watcher '${d.watcherSlug}' não encontrado` });
       }
 
-      const result = await pool.query(
+      // Upsert: if a recent event for same watcher+filename exists within 5 min,
+      // update it with filenameRenamed / corrected status instead of inserting a duplicate.
+      let result;
+      if (d.filenameRenamed || d.status !== "SUCCESS") {
+        const upd = await pool.query(
+          `UPDATE ops_events
+           SET filename_renamed = COALESCE($3, filename_renamed),
+               status           = $4::ops_event_status,
+               error_message    = COALESCE($5, error_message)
+           WHERE id = (
+             SELECT id FROM ops_events
+             WHERE watcher_slug = $1 AND filename = $2
+               AND processed_at > NOW() - INTERVAL '5 minutes'
+             ORDER BY processed_at DESC LIMIT 1
+           )
+           RETURNING id, processed_at as "processedAt"`,
+          [d.watcherSlug, d.filename, d.filenameRenamed ?? null, d.status, d.errorMessage ?? null]
+        );
+        if (upd.rows.length) {
+          return res.status(200).json({ id: upd.rows[0].id, processedAt: upd.rows[0].processedAt, updated: true });
+        }
+      }
+
+      result = await pool.query(
         `INSERT INTO ops_events (id, watcher_slug, filename, filename_renamed, status, error_message, client, n8n_execution_id, metadata, processed_at)
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW())
          RETURNING id, processed_at as "processedAt"`,
@@ -3801,9 +3844,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // GET /api/ops/watchers — list all watchers with last event info
   app.get("/api/ops/watchers", requireAuth, async (req, res) => {
     try {
+      const u = (req as any).user;
+      const isAdmin = u?.isAdmin;
+      const isCoord = u?.roles?.some((r: any) => r.roleName === "Coordenador");
+
+      // For plain "Usuário" role, filter by permitted clients
+      let clientFilter = "";
+      const filterParams: any[] = [];
+      if (!isAdmin && !isCoord) {
+        filterParams.push(u.id);
+        clientFilter = `AND (w.client IS NULL OR w.client IN (
+          SELECT client FROM user_watcher_clients WHERE user_id = $1
+        ))`;
+      }
+
       const result = await pool.query(`
         SELECT
-          w.slug, w.name, w.description, w.client, w.folder, w.is_active as "isActive",
+          w.slug, w.name, w.description, w.client,
+          w.folder        AS "folderInput",
+          w.folder_output AS "folderOutput",
+          w.is_active     AS "isActive",
           w.last_heartbeat_at AS "lastHeartbeatAt",
           e.status        AS "lastStatus",
           e.processed_at  AS "lastProcessedAt",
@@ -3829,8 +3889,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           WHERE watcher_slug = w.slug
             AND processed_at >= NOW() AT TIME ZONE 'America/Sao_Paulo' - INTERVAL '24 hours'
         ) counts ON true
+        WHERE w.is_active = true ${clientFilter}
         ORDER BY w.client, w.name
-      `);
+      `, filterParams);
       res.json(result.rows);
     } catch (error) {
       console.error("[ops/watchers GET] error:", error);
@@ -3913,6 +3974,98 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("[ops/summary GET] error:", error);
       res.status(500).json({ error: "Falha ao buscar resumo" });
+    }
+  });
+
+  // ── Admin: manage watcher config ────────────────────────────────────────────
+
+  // GET /api/admin/ops-watchers — all watchers (admin)
+  app.get("/api/admin/ops-watchers", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT slug, name, description, client,
+               folder AS "folderInput", folder_output AS "folderOutput", is_active AS "isActive"
+        FROM ops_watchers ORDER BY client, name
+      `);
+      res.json(result.rows);
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao buscar watchers" });
+    }
+  });
+
+  // PATCH /api/admin/ops-watchers/:slug — update watcher config (admin)
+  app.patch("/api/admin/ops-watchers/:slug", requireAdmin, async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const schema = z.object({
+        name:         z.string().min(1).max(120).optional(),
+        description:  z.string().max(500).nullish(),
+        client:       z.string().max(80).nullish(),
+        folderInput:  z.string().max(1000).nullish(),
+        folderOutput: z.string().max(1000).nullish(),
+        isActive:     z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      const d = parsed.data;
+      await pool.query(
+        `UPDATE ops_watchers SET
+           name         = COALESCE($2, name),
+           description  = COALESCE($3, description),
+           client       = COALESCE($4, client),
+           folder       = COALESCE($5, folder),
+           folder_output= COALESCE($6, folder_output),
+           is_active    = COALESCE($7, is_active)
+         WHERE slug = $1`,
+        [slug, d.name ?? null, d.description, d.client, d.folderInput, d.folderOutput, d.isActive ?? null]
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao atualizar watcher" });
+    }
+  });
+
+  // GET /api/admin/user-watcher-clients/:userId — list permitted clients for a user
+  app.get("/api/admin/user-watcher-clients/:userId", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT client FROM user_watcher_clients WHERE user_id = $1 ORDER BY client`,
+        [parseInt(req.params.userId)]
+      );
+      res.json(result.rows.map((r: any) => r.client));
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao buscar permissões" });
+    }
+  });
+
+  // PUT /api/admin/user-watcher-clients/:userId — replace client list for a user
+  app.put("/api/admin/user-watcher-clients/:userId", requireAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const clients: string[] = Array.isArray(req.body.clients) ? req.body.clients : [];
+      await pool.query(`DELETE FROM user_watcher_clients WHERE user_id = $1`, [userId]);
+      if (clients.length) {
+        const values = clients.map((c: string, i: number) => `($1, $${i + 2})`).join(", ");
+        await pool.query(
+          `INSERT INTO user_watcher_clients (user_id, client) VALUES ${values}`,
+          [userId, ...clients]
+        );
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao salvar permissões" });
+    }
+  });
+
+  // GET /api/admin/watcher-clients — distinct client list from ops_watchers
+  app.get("/api/admin/watcher-clients", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT DISTINCT client FROM ops_watchers WHERE client IS NOT NULL ORDER BY client`
+      );
+      res.json(result.rows.map((r: any) => r.client));
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao buscar clientes" });
     }
   });
 

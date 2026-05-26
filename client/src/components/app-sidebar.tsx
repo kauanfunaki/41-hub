@@ -62,6 +62,7 @@ const adminSubItems = [
   { title: "Gestão de Alertas", url: "/admin/alerts", icon: Bell },
   { title: "Config. Chamados", url: "/admin/tickets-settings", icon: FileText },
   { title: "Config. Digitação", url: "/admin/typing", icon: Keyboard },
+  { title: "Config. Ops", url: "/admin/ops-watchers", icon: Activity },
   { title: "Integrações", url: "/admin/integrations", icon: Puzzle },
 ];
 
