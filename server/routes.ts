@@ -3791,28 +3791,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: `Watcher '${d.watcherSlug}' não encontrado` });
       }
 
-      // Upsert: if an event for same watcher+filename exists TODAY,
-      // update it with filenameRenamed / corrected status instead of inserting a duplicate.
+      // Upsert: always try to update an existing event for the same watcher+filename created
+      // today before inserting. COALESCE preserves filenameRenamed if the incoming call has null
+      // (e.g. n8n also calls this endpoint without filenameRenamed; Python calls with it).
       let result;
-      if (d.filenameRenamed || d.status !== "SUCCESS") {
-        const upd = await pool.query(
-          `UPDATE ops_events
-           SET filename_renamed = COALESCE($3, filename_renamed),
-               status           = $4::ops_event_status,
-               error_message    = COALESCE($5, error_message)
-           WHERE id = (
-             SELECT id FROM ops_events
-             WHERE watcher_slug = $1 AND filename = $2
-               AND processed_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
-             ORDER BY processed_at DESC LIMIT 1
-           )
-           RETURNING id, processed_at as "processedAt"`,
-          [d.watcherSlug, d.filename, d.filenameRenamed ?? null, d.status, d.errorMessage ?? null]
-        );
-        if (upd.rows.length) {
-          console.log(`[ops/events POST] UPDATED existing event id=${upd.rows[0].id} → filenameRenamed stored`);
-          return res.status(200).json({ id: upd.rows[0].id, processedAt: upd.rows[0].processedAt, updated: true });
-        }
+      const upd = await pool.query(
+        `UPDATE ops_events
+         SET filename_renamed = COALESCE($3, filename_renamed),
+             status           = $4::ops_event_status,
+             error_message    = COALESCE($5, error_message)
+         WHERE id = (
+           SELECT id FROM ops_events
+           WHERE watcher_slug = $1 AND filename = $2
+             AND processed_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+           ORDER BY processed_at DESC LIMIT 1
+         )
+         RETURNING id, processed_at as "processedAt"`,
+        [d.watcherSlug, d.filename, d.filenameRenamed ?? null, d.status, d.errorMessage ?? null]
+      );
+      if (upd.rows.length) {
+        console.log(`[ops/events POST] UPDATED id=${upd.rows[0].id} filenameRenamed=${d.filenameRenamed ?? "null"}`);
+        return res.status(200).json({ id: upd.rows[0].id, processedAt: upd.rows[0].processedAt, updated: true });
       }
 
       result = await pool.query(
