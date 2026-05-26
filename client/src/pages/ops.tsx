@@ -142,6 +142,18 @@ function truncate(s: string | null, max = 40) {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
+/** Extrai apenas o nome do arquivo de um caminho completo (Windows ou UNC). */
+function basename(p: string | null): string | null {
+  if (!p) return null;
+  const parts = p.split(/[\\/]/);
+  return parts[parts.length - 1] || p;
+}
+
+/** Verifica se a string parece um caminho completo (contém separador de diretório). */
+function isFullPath(p: string | null): boolean {
+  return !!p && (p.includes("\\") || p.startsWith("//"));
+}
+
 // ── Copy Folder Button ────────────────────────────────────────────────────────
 
 function CopyFolderButton({ label, path }: { label: string; path: string }) {
@@ -224,14 +236,14 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
           />
         </div>
 
-        {/* Status label + total today */}
-        <div className="flex items-center justify-between mt-0.5">
-          <span className={`text-xs font-medium ${procLabel[procStatus].cls}`}>
+        {/* Status label + total today — same baseline */}
+        <div className="flex items-baseline justify-between gap-2 mt-0.5">
+          <span className={`text-xs font-medium leading-none ${procLabel[procStatus].cls}`}>
             {procLabel[procStatus].text}
           </span>
           {total > 0 && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Activity className="h-3 w-3" /> {total} hoje
+            <span className="flex items-center gap-1 text-xs text-muted-foreground leading-none shrink-0">
+              <Activity className="h-3 w-3 relative top-px" /> {total} hoje
             </span>
           )}
         </div>
@@ -335,11 +347,19 @@ export default function OpsCenter() {
     setPage(0);
   }
 
-  // Copy the full path to the file when clicking an event row
+  // Copy the destination path of the file when clicking the filename cell.
+  // Priority: filenameRenamed (full dest path sent by script) > constructed source path.
   function handleEventRowClick(ev: OpsEvent) {
-    const watcher = watcherBySlug[ev.watcherSlug];
-    const folder  = watcher?.folderInput ?? null;
-    const path    = folder ? `${folder}\\${ev.filename}` : ev.filename;
+    let path: string;
+    if (isFullPath(ev.filenameRenamed)) {
+      // Script sent the full destination path as filenameRenamed
+      path = ev.filenameRenamed!;
+    } else {
+      // Fallback: construct source path from folderInput + original filename
+      const watcher = watcherBySlug[ev.watcherSlug];
+      const folder  = watcher?.folderInput ?? null;
+      path = folder ? `${folder}\\${ev.filename}` : ev.filename;
+    }
     navigator.clipboard.writeText(path).then(() => {
       toast({
         title: "Caminho copiado",
@@ -394,10 +414,12 @@ export default function OpsCenter() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Watchers
           </h2>
-          <TooltipProvider delayDuration={100}>
+          <TooltipProvider delayDuration={80}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors" />
+                <button className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-muted hover:bg-muted-foreground/20 transition-colors cursor-help" tabIndex={-1}>
+                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-xs text-xs leading-relaxed">
                 Ao copiar o caminho dos watchers, pressione{" "}
@@ -521,7 +543,7 @@ export default function OpsCenter() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground hidden md:table-cell">
                       {ev.filenameRenamed
-                        ? <span title={ev.filenameRenamed}>{truncate(ev.filenameRenamed, 40)}</span>
+                        ? <span title={ev.filenameRenamed}>{truncate(basename(ev.filenameRenamed), 40)}</span>
                         : "—"}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
