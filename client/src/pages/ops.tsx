@@ -130,14 +130,34 @@ function truncate(s: string | null, max = 40) {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
-/** Converts UNC path \\server\share\dir to file:// URL */
-function uncToFileUrl(unc: string): string {
-  return "file://" + unc.replace(/\\/g, "/").replace(/^\/\//, "//");
+/**
+ * Opens Windows File Explorer at the given UNC/local path by downloading
+ * a tiny Windows .url shortcut file. The browser downloads it and Windows
+ * auto-opens Explorer when the user clicks "Open" in the download bar.
+ *
+ * Why .url files: Chrome blocks file:// navigation for security, but a
+ * downloaded .url shortcut is handled by the Windows Shell, which opens Explorer.
+ */
+function openInExplorer(path: string, e: React.MouseEvent) {
+  e.stopPropagation(); // prevent row expand/collapse in events table
+  // UNC: \\server\share → file://server/share (file:// + forward slashes)
+  const fileUrl = "file://" + path.replace(/\\/g, "/");
+  const content = `[InternetShortcut]\r\nURL=${fileUrl}\r\n`;
+  const blob = new Blob([content], { type: "application/x-mswinurl" });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = "pasta.url";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
 }
 
-function CopyPathButton({ path }: { path: string }) {
+function CopyPathButton({ path, stopProp }: { path: string; stopProp?: boolean }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => {
+  const copy = (e: React.MouseEvent) => {
+    if (stopProp) e.stopPropagation();
     navigator.clipboard.writeText(path).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -146,7 +166,7 @@ function CopyPathButton({ path }: { path: string }) {
   return (
     <button
       onClick={copy}
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
       title="Copiar caminho"
     >
       {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -158,16 +178,14 @@ function FolderRow({ label, path }: { label: string; path: string }) {
   return (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <FolderOpen className="h-3 w-3 shrink-0" />
-      <span className="font-medium">{label}:</span>
-      <a
-        href={uncToFileUrl(path)}
-        target="_blank"
-        rel="noreferrer"
-        className="truncate max-w-[200px] hover:text-foreground hover:underline font-mono"
-        title={path}
+      <span className="font-medium shrink-0">{label}:</span>
+      <button
+        onClick={(e) => openInExplorer(path, e)}
+        className="truncate max-w-[200px] hover:text-foreground hover:underline font-mono text-left"
+        title={`Abrir no Explorer: ${path}`}
       >
         {path.split("\\").slice(-2).join("\\")}
-      </a>
+      </button>
       <CopyPathButton path={path} />
     </div>
   );
@@ -510,23 +528,29 @@ export default function OpsCenter() {
                               {watcher.folderInput && (
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                   <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="font-medium">Entrada:</span>
-                                  <a href={uncToFileUrl(watcher.folderInput)} target="_blank" rel="noreferrer"
-                                     className="font-mono hover:underline hover:text-foreground" title={watcher.folderInput}>
+                                  <span className="font-medium shrink-0">Entrada:</span>
+                                  <button
+                                    onClick={(e) => openInExplorer(watcher.folderInput!, e)}
+                                    className="font-mono hover:underline hover:text-foreground text-left truncate max-w-xs"
+                                    title={`Abrir no Explorer: ${watcher.folderInput}`}
+                                  >
                                     {watcher.folderInput}
-                                  </a>
-                                  <CopyPathButton path={watcher.folderInput} />
+                                  </button>
+                                  <CopyPathButton path={watcher.folderInput} stopProp />
                                 </div>
                               )}
                               {watcher.folderOutput && (
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                   <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="font-medium">Saída:</span>
-                                  <a href={uncToFileUrl(watcher.folderOutput)} target="_blank" rel="noreferrer"
-                                     className="font-mono hover:underline hover:text-foreground" title={watcher.folderOutput}>
+                                  <span className="font-medium shrink-0">Saída:</span>
+                                  <button
+                                    onClick={(e) => openInExplorer(watcher.folderOutput!, e)}
+                                    className="font-mono hover:underline hover:text-foreground text-left truncate max-w-xs"
+                                    title={`Abrir no Explorer: ${watcher.folderOutput}`}
+                                  >
                                     {watcher.folderOutput}
-                                  </a>
-                                  <CopyPathButton path={watcher.folderOutput} />
+                                  </button>
+                                  <CopyPathButton path={watcher.folderOutput} stopProp />
                                 </div>
                               )}
                               {!watcher.folderInput && !watcher.folderOutput && (
