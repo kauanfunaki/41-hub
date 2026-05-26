@@ -130,27 +130,6 @@ function truncate(s: string | null, max = 40) {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
-/**
- * Opens Windows File Explorer at the given UNC path via the custom
- * hub-explorer:// protocol registered on the user's machine.
- *
- * Requires running scripts/hub-explorer-setup.bat once per machine.
- * Chrome shows a one-time "Allow hub-explorer?" confirmation popup.
- *
- * URL format: hub-explorer://server/share/path
- * Handler converts back to \\server\share\path and calls Invoke-Item.
- */
-function openInExplorer(path: string, e: React.MouseEvent) {
-  e.stopPropagation(); // prevent row expand/collapse in events table
-  // \\server\share\path → hub-explorer://server/share/path
-  const hubUrl = "hub-explorer://" + path.replace(/^\\\\/, "").replace(/\\/g, "/");
-  const a = document.createElement("a");
-  a.href = hubUrl;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
 function CopyPathButton({ path, stopProp }: { path: string; stopProp?: boolean }) {
   const [copied, setCopied] = useState(false);
   const copy = (e: React.MouseEvent) => {
@@ -176,13 +155,9 @@ function FolderRow({ label, path }: { label: string; path: string }) {
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <FolderOpen className="h-3 w-3 shrink-0" />
       <span className="font-medium shrink-0">{label}:</span>
-      <button
-        onClick={(e) => openInExplorer(path, e)}
-        className="truncate max-w-[200px] hover:text-foreground hover:underline font-mono text-left"
-        title={`Abrir no Explorer: ${path}`}
-      >
+      <span className="truncate max-w-[200px] font-mono" title={path}>
         {path.split("\\").slice(-2).join("\\")}
-      </button>
+      </span>
       <CopyPathButton path={path} />
     </div>
   );
@@ -526,13 +501,9 @@ export default function OpsCenter() {
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                   <FolderOpen className="h-3.5 w-3.5 shrink-0" />
                                   <span className="font-medium shrink-0">Entrada:</span>
-                                  <button
-                                    onClick={(e) => openInExplorer(watcher.folderInput!, e)}
-                                    className="font-mono hover:underline hover:text-foreground text-left truncate max-w-xs"
-                                    title={`Abrir no Explorer: ${watcher.folderInput}`}
-                                  >
+                                  <span className="font-mono truncate max-w-xs" title={watcher.folderInput}>
                                     {watcher.folderInput}
-                                  </button>
+                                  </span>
                                   <CopyPathButton path={watcher.folderInput} stopProp />
                                 </div>
                               )}
@@ -540,13 +511,9 @@ export default function OpsCenter() {
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                   <FolderOpen className="h-3.5 w-3.5 shrink-0" />
                                   <span className="font-medium shrink-0">Saída:</span>
-                                  <button
-                                    onClick={(e) => openInExplorer(watcher.folderOutput!, e)}
-                                    className="font-mono hover:underline hover:text-foreground text-left truncate max-w-xs"
-                                    title={`Abrir no Explorer: ${watcher.folderOutput}`}
-                                  >
+                                  <span className="font-mono truncate max-w-xs" title={watcher.folderOutput}>
                                     {watcher.folderOutput}
-                                  </button>
+                                  </span>
                                   <CopyPathButton path={watcher.folderOutput} stopProp />
                                 </div>
                               )}
