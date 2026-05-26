@@ -338,6 +338,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS folder_output TEXT`);
 
+    // filename_renamed column (added after initial ops_events schema)
+    await pool.query(`ALTER TABLE ops_events ADD COLUMN IF NOT EXISTS filename_renamed VARCHAR(500)`);
+
     // Watcher ↔ Sector M2M visibility table (replaces old user_watcher_clients)
     // DROP old broken table if it exists (had integer user_id but users are VARCHAR UUIDs)
     try { await pool.query(`DROP TABLE IF EXISTS user_watcher_clients`); } catch (_) {}
@@ -3777,6 +3780,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parsed.success) return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
 
       const d = parsed.data;
+      console.log(`[ops/events POST] slug=${d.watcherSlug} file=${d.filename} status=${d.status} filenameRenamed=${d.filenameRenamed ?? "null"}`);
 
       // Verify watcher exists
       const watcherCheck = await pool.query(
@@ -3806,6 +3810,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           [d.watcherSlug, d.filename, d.filenameRenamed ?? null, d.status, d.errorMessage ?? null]
         );
         if (upd.rows.length) {
+          console.log(`[ops/events POST] UPDATED existing event id=${upd.rows[0].id} → filenameRenamed stored`);
           return res.status(200).json({ id: upd.rows[0].id, processedAt: upd.rows[0].processedAt, updated: true });
         }
       }
@@ -3818,6 +3823,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
          d.client ?? null, d.n8nExecutionId ?? null, JSON.stringify(d.metadata ?? {})]
       );
 
+      console.log(`[ops/events POST] INSERTED new event id=${result.rows[0].id} filenameRenamed=${d.filenameRenamed ?? "null"}`);
       res.status(201).json({ id: result.rows[0].id, processedAt: result.rows[0].processedAt });
     } catch (error) {
       console.error("[ops/events POST] error:", error);
