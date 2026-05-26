@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Copy,
   Check,
+  HelpCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -217,10 +224,17 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
           />
         </div>
 
-        {/* Status label only — no heartbeat timestamp */}
-        <span className={`text-xs font-medium mt-0.5 ${procLabel[procStatus].cls}`}>
-          {procLabel[procStatus].text}
-        </span>
+        {/* Status label + total today */}
+        <div className="flex items-center justify-between mt-0.5">
+          <span className={`text-xs font-medium ${procLabel[procStatus].cls}`}>
+            {procLabel[procStatus].text}
+          </span>
+          {total > 0 && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Activity className="h-3 w-3" /> {total} hoje
+            </span>
+          )}
+        </div>
       </CardHeader>
 
       {/* ── Expanded details ── */}
@@ -376,9 +390,25 @@ export default function OpsCenter() {
 
       {/* Watchers Grid */}
       <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-          Watchers
-        </h2>
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Watchers
+          </h2>
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors" />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs text-xs leading-relaxed">
+                Ao copiar o caminho dos watchers, pressione{" "}
+                <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px]">WIN</kbd>
+                {" + "}
+                <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px]">R</kbd>
+                {" "}e cole o caminho copiado para navegar até a pasta de destino.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         {watchersQuery.isLoading ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 5 }).map((_, i) => (
