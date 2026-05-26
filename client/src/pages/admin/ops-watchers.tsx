@@ -208,7 +208,8 @@ export default function AdminOpsWatchers() {
         </p>
       </div>
 
-      <Card>
+
+<Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Folder className="h-4 w-4" /> Watchers
