@@ -131,27 +131,24 @@ function truncate(s: string | null, max = 40) {
 }
 
 /**
- * Opens Windows File Explorer at the given UNC/local path by downloading
- * a tiny Windows .url shortcut file. The browser downloads it and Windows
- * auto-opens Explorer when the user clicks "Open" in the download bar.
+ * Opens Windows File Explorer at the given UNC path via the custom
+ * hub-explorer:// protocol registered on the user's machine.
  *
- * Why .url files: Chrome blocks file:// navigation for security, but a
- * downloaded .url shortcut is handled by the Windows Shell, which opens Explorer.
+ * Requires running scripts/hub-explorer-setup.bat once per machine.
+ * Chrome shows a one-time "Allow hub-explorer?" confirmation popup.
+ *
+ * URL format: hub-explorer://server/share/path
+ * Handler converts back to \\server\share\path and calls Invoke-Item.
  */
 function openInExplorer(path: string, e: React.MouseEvent) {
   e.stopPropagation(); // prevent row expand/collapse in events table
-  // UNC: \\server\share → file://server/share (file:// + forward slashes)
-  const fileUrl = "file://" + path.replace(/\\/g, "/");
-  const content = `[InternetShortcut]\r\nURL=${fileUrl}\r\n`;
-  const blob = new Blob([content], { type: "application/x-mswinurl" });
-  const blobUrl = URL.createObjectURL(blob);
+  // \\server\share\path → hub-explorer://server/share/path
+  const hubUrl = "hub-explorer://" + path.replace(/^\\\\/, "").replace(/\\/g, "/");
   const a = document.createElement("a");
-  a.href = blobUrl;
-  a.download = "pasta.url";
+  a.href = hubUrl;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(blobUrl);
 }
 
 function CopyPathButton({ path, stopProp }: { path: string; stopProp?: boolean }) {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Folder } from "lucide-react";
+import { Save, Folder, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -206,6 +206,25 @@ export default function AdminOpsWatchers() {
         <p className="text-muted-foreground text-sm mt-1">
           Configure as pastas de entrada/saída dos watchers e os setores que têm acesso a cada um.
         </p>
+      </div>
+
+      {/* Setup banner for hub-explorer:// protocol */}
+      <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40 px-4 py-3 text-sm">
+        <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+        <div className="space-y-1">
+          <p className="font-medium text-blue-800 dark:text-blue-300">
+            Clique nas pastas para abrir o Explorer — requer instalação uma vez por máquina
+          </p>
+          <p className="text-blue-700 dark:text-blue-400">
+            Cada usuário precisa executar{" "}
+            <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded font-mono text-xs">
+              scripts/hub-explorer-setup.bat
+            </code>{" "}
+            (disponível na raiz do projeto) para registrar o protocolo{" "}
+            <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded font-mono text-xs">hub-explorer://</code>{" "}
+            no Windows. Sem admin, sem instalação de software — apenas um duplo-clique no .bat.
+          </p>
+        </div>
       </div>
 
       <Card>
