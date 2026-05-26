@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, integer, jsonb, pgEnum, unique, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, jsonb, pgEnum, unique, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -637,7 +637,8 @@ export const opsWatchers = pgTable("ops_watchers", {
   name: varchar("name", { length: 120 }).notNull(),
   description: text("description"),
   client: varchar("client", { length: 80 }),
-  folder: text("folder"),
+  folder: text("folder"),          // pasta de entrada (input)
+  folderOutput: text("folder_output"), // pasta de saída (output)
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -656,6 +657,12 @@ export const opsEvents = pgTable("ops_events", {
 });
 
 export const insertOpsEventSchema = createInsertSchema(opsEvents).omit({ id: true });
+
+// Permissions: which clients a "Usuário" can see in Ops Center
+export const userWatcherClients = pgTable("user_watcher_clients", {
+  userId:  integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  client:  varchar("client", { length: 80 }).notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.client] }) }));
 
 export type OpsWatcher = typeof opsWatchers.$inferSelect;
 export type OpsEvent = typeof opsEvents.$inferSelect;

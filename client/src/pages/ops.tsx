@@ -10,6 +10,9 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  FolderOpen,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +51,8 @@ interface OpsWatcher {
   description: string | null;
   client: string | null;
   isActive: boolean;
+  folderInput: string | null;
+  folderOutput: string | null;
   lastHeartbeatAt: string | null;
   lastStatus: "SUCCESS" | "ERROR" | "WARNING" | null;
   lastProcessedAt: string | null;
@@ -123,6 +128,49 @@ function formatTime(iso: string | null) {
 function truncate(s: string | null, max = 40) {
   if (!s) return "—";
   return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+/** Converts UNC path \\server\share\dir to file:// URL */
+function uncToFileUrl(unc: string): string {
+  return "file://" + unc.replace(/\\/g, "/").replace(/^\/\//, "//");
+}
+
+function CopyPathButton({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(path).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      onClick={copy}
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      title="Copiar caminho"
+    >
+      {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
+function FolderRow({ label, path }: { label: string; path: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <FolderOpen className="h-3 w-3 shrink-0" />
+      <span className="font-medium">{label}:</span>
+      <a
+        href={uncToFileUrl(path)}
+        target="_blank"
+        rel="noreferrer"
+        className="truncate max-w-[200px] hover:text-foreground hover:underline font-mono"
+        title={path}
+      >
+        {path.split("\\").slice(-2).join("\\")}
+      </a>
+      <CopyPathButton path={path} />
+    </div>
+  );
 }
 
 // ── Summary Cards ────────────────────────────────────────────────────────────
@@ -209,6 +257,12 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
             {truncate(watcher.lastErrorMessage, 60)}
           </div>
         )}
+        {(watcher.folderInput || watcher.folderOutput) && (
+          <div className="border-t border-border/50 pt-2 space-y-1">
+            {watcher.folderInput  && <FolderRow label="Entrada" path={watcher.folderInput} />}
+            {watcher.folderOutput && <FolderRow label="Saída"   path={watcher.folderOutput} />}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -221,6 +275,7 @@ export default function OpsCenter() {
   const [filterStatus,  setFilterStatus]  = useState<string>("all");
   const [filterDate,    setFilterDate]    = useState<string>("");
   const [page, setPage] = useState(0);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const summaryQuery = useQuery<OpsSummary>({
     queryKey: ["/api/ops/summary"],
@@ -249,6 +304,11 @@ export default function OpsCenter() {
   const events   = eventsQuery.data?.events ?? [];
   const total    = eventsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  // Map watcher slug → folder info for event row expansion
+  const watcherBySlug = Object.fromEntries(
+    watchers.map((w) => [w.slug, w])
+  );
 
   const anyLoading = summaryQuery.isLoading || watchersQuery.isLoading;
 
@@ -411,29 +471,74 @@ export default function OpsCenter() {
                   </TableCell>
                 </TableRow>
               ) : (
-                events.map((ev) => (
-                  <TableRow key={ev.id} className={ev.status === "ERROR" ? "bg-red-50/50 dark:bg-red-950/10" : undefined}>
-                    <TableCell>{statusBadge(ev.status)}</TableCell>
-                    <TableCell className="text-xs font-medium">{ev.watcherName}</TableCell>
-                    <TableCell className="text-xs max-w-xs">
-                      <span className="truncate block" title={ev.filename}>{ev.filename}</span>
-                      {ev.status === "ERROR" && ev.errorMessage && (
-                        <span className="text-red-500 block truncate mt-0.5" title={ev.errorMessage}>
-                          {truncate(ev.errorMessage, 60)}
-                        </span>
+                events.map((ev) => {
+                  const watcher = watcherBySlug[ev.watcherSlug];
+                  const isExpanded = expandedEventId === ev.id;
+                  return (
+                    <>
+                      <TableRow
+                        key={ev.id}
+                        className={`cursor-pointer ${ev.status === "ERROR" ? "bg-red-50/50 dark:bg-red-950/10" : ""} ${isExpanded ? "border-b-0" : ""}`}
+                        onClick={() => setExpandedEventId(isExpanded ? null : ev.id)}
+                      >
+                        <TableCell>{statusBadge(ev.status)}</TableCell>
+                        <TableCell className="text-xs font-medium">{ev.watcherName}</TableCell>
+                        <TableCell className="text-xs max-w-xs">
+                          <span className="truncate block" title={ev.filename}>{ev.filename}</span>
+                          {ev.status === "ERROR" && ev.errorMessage && (
+                            <span className="text-red-500 block truncate mt-0.5" title={ev.errorMessage}>
+                              {truncate(ev.errorMessage, 60)}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground hidden md:table-cell">
+                          {ev.filenameRenamed ? (
+                            <span title={ev.filenameRenamed}>{truncate(ev.filenameRenamed, 40)}</span>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {formatTime(ev.processedAt)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && watcher && (
+                        <TableRow key={`${ev.id}-detail`} className="bg-muted/30">
+                          <TableCell colSpan={5} className="py-2 px-4">
+                            <div className="flex flex-wrap gap-x-6 gap-y-1">
+                              {watcher.folderInput && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="font-medium">Entrada:</span>
+                                  <a href={uncToFileUrl(watcher.folderInput)} target="_blank" rel="noreferrer"
+                                     className="font-mono hover:underline hover:text-foreground" title={watcher.folderInput}>
+                                    {watcher.folderInput}
+                                  </a>
+                                  <CopyPathButton path={watcher.folderInput} />
+                                </div>
+                              )}
+                              {watcher.folderOutput && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="font-medium">Saída:</span>
+                                  <a href={uncToFileUrl(watcher.folderOutput)} target="_blank" rel="noreferrer"
+                                     className="font-mono hover:underline hover:text-foreground" title={watcher.folderOutput}>
+                                    {watcher.folderOutput}
+                                  </a>
+                                  <CopyPathButton path={watcher.folderOutput} />
+                                </div>
+                              )}
+                              {!watcher.folderInput && !watcher.folderOutput && (
+                                <span className="text-xs text-muted-foreground">Pastas não configuradas — configure em Admin → Config. Ops</span>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground hidden md:table-cell">
-                      {truncate(ev.filenameRenamed, 40)}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3 shrink-0" />
-                        {formatTime(ev.processedAt)}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))
+                    </>
+                  );
+                })
               )}
             </TableBody>
           </Table>
