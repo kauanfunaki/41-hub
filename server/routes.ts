@@ -334,13 +334,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_processed_at ON ops_events(processed_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_ops_events_status ON ops_events(status)`);
 
-    // Seed watchers
+    // Heartbeat column (added after initial schema)
+    await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ`);
+
+    // Seed watchers (n8n + local)
     await pool.query(`INSERT INTO ops_watchers (slug, name, description, client, folder) VALUES
       ('watcher-bld',           'Watcher BLD',           'Notas fiscais BLD empresa 1',          'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\NOTAS - BLD'),
       ('watcher-bld-2',         'Watcher BLD 2',         'Notas fiscais BLD empresa 2',          'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\NOTAS - BLD 2'),
       ('watcher-bpo-contratos', 'Watcher BPO Contratos', 'Contratos de aluguel BPO',             'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR CONTRATOS'),
       ('watcher-bpo-recibos',   'Watcher BPO Recibos',   'Contratos e recibos RPA BPO',          'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR RECIBOS'),
-      ('watcher-bpo-folha',     'Watcher BPO Folha',     'Folhas de pagamento BPO',              'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR FOLHA')
+      ('watcher-bpo-folha',     'Watcher BPO Folha',     'Folhas de pagamento BPO',              'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR FOLHA'),
+      ('watcher-irriga',        'Watcher Irriga',        'Renomeador de NFs Irriga Four',        'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\IRRIGA FOUR\\08-RENOMEADOR NOTAS'),
+      ('watcher-er-dias',       'Watcher ER Dias',       'Renomeador de NFs Elio Rubens',        'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\ELIO RUBENS\\08-RENOMEADOR NOTAS'),
+      ('watcher-separador',     'Watcher Separador',     'Organiza arquivos em pastas de mês',   'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\00 OLD\\2025\\0. ORGANIZADOR DE PASTAS')
     ON CONFLICT (slug) DO NOTHING`);
 
     console.info("[startup] Schema bootstrap OK");
@@ -3774,12 +3780,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // POST /api/ops/watchers/:slug/heartbeat — called by Python scripts every 30s (token auth)
+  app.post("/api/ops/watchers/:slug/heartbeat", requireOpsToken, async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const result = await pool.query(
+        `UPDATE ops_watchers SET last_heartbeat_at = NOW() WHERE slug = $1 AND is_active = true RETURNING slug`,
+        [slug]
+      );
+      if (!result.rows.length) {
+        return res.status(404).json({ error: `Watcher '${slug}' não encontrado` });
+      }
+      res.json({ ok: true, slug, ts: new Date().toISOString() });
+    } catch (error) {
+      console.error("[ops/heartbeat POST] error:", error);
+      res.status(500).json({ error: "Falha ao registrar heartbeat" });
+    }
+  });
+
   // GET /api/ops/watchers — list all watchers with last event info
   app.get("/api/ops/watchers", requireAuth, async (req, res) => {
     try {
       const result = await pool.query(`
         SELECT
           w.slug, w.name, w.description, w.client, w.folder, w.is_active as "isActive",
+          w.last_heartbeat_at AS "lastHeartbeatAt",
           e.status        AS "lastStatus",
           e.processed_at  AS "lastProcessedAt",
           e.filename      AS "lastFilename",

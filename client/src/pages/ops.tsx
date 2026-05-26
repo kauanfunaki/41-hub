@@ -48,6 +48,7 @@ interface OpsWatcher {
   description: string | null;
   client: string | null;
   isActive: boolean;
+  lastHeartbeatAt: string | null;
   lastStatus: "SUCCESS" | "ERROR" | "WARNING" | null;
   lastProcessedAt: string | null;
   lastFilename: string | null;
@@ -90,10 +91,27 @@ function statusBadge(status: "SUCCESS" | "ERROR" | "WARNING" | null) {
   return <Badge variant="outline" className={className}>{label}</Badge>;
 }
 
-function watcherStatusDot(status: "SUCCESS" | "ERROR" | "WARNING" | null) {
-  if (!status) return <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 inline-block" />;
-  const colors = { SUCCESS: "bg-green-500", ERROR: "bg-red-500", WARNING: "bg-amber-400" };
-  return <span className={`h-2.5 w-2.5 rounded-full ${colors[status]} inline-block`} />;
+// Watcher process status based on heartbeat (3-minute window)
+const HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;
+
+function getProcessStatus(lastHeartbeatAt: string | null): "running" | "offline" | "unknown" {
+  if (!lastHeartbeatAt) return "unknown";
+  const diff = Date.now() - new Date(lastHeartbeatAt).getTime();
+  return diff < HEARTBEAT_TIMEOUT_MS ? "running" : "offline";
+}
+
+function watcherStatusDot(lastHeartbeatAt: string | null) {
+  const status = getProcessStatus(lastHeartbeatAt);
+  if (status === "running")
+    return (
+      <span title="Em execução" className="relative inline-flex h-2.5 w-2.5">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+      </span>
+    );
+  if (status === "offline")
+    return <span title="Inativo" className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block" />;
+  return <span title="Sem heartbeat" className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 inline-block" />;
 }
 
 function formatTime(iso: string | null) {
@@ -129,18 +147,35 @@ function SummaryCard({
 // ── Watcher Card ─────────────────────────────────────────────────────────────
 
 function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
-  const total   = parseInt(watcher.totalToday)   || 0;
-  const success = parseInt(watcher.successToday) || 0;
-  const error   = parseInt(watcher.errorToday)   || 0;
+  const total      = parseInt(watcher.totalToday)   || 0;
+  const success    = parseInt(watcher.successToday) || 0;
+  const error      = parseInt(watcher.errorToday)   || 0;
+  const procStatus = getProcessStatus(watcher.lastHeartbeatAt);
+
+  const procLabel: Record<typeof procStatus, { text: string; cls: string }> = {
+    running: { text: "Em execução", cls: "text-green-600" },
+    offline: { text: "Inativo",     cls: "text-red-500"   },
+    unknown: { text: "Sem heartbeat", cls: "text-muted-foreground" },
+  };
 
   return (
     <Card className="flex flex-col gap-0">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
-          {watcherStatusDot(watcher.lastStatus)}
+          {watcherStatusDot(watcher.lastHeartbeatAt)}
           <CardTitle className="text-sm font-semibold leading-tight">{watcher.name}</CardTitle>
           {watcher.client && (
             <Badge variant="secondary" className="ml-auto text-xs">{watcher.client}</Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className={`text-xs font-medium ${procLabel[procStatus].cls}`}>
+            {procLabel[procStatus].text}
+          </span>
+          {watcher.lastHeartbeatAt && (
+            <span className="text-xs text-muted-foreground">
+              · {formatTime(watcher.lastHeartbeatAt)}
+            </span>
           )}
         </div>
         {watcher.description && (
@@ -161,7 +196,7 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
         </div>
         {watcher.lastProcessedAt && (
           <div className="text-xs text-muted-foreground">
-            Último: <span className="font-medium text-foreground">{formatTime(watcher.lastProcessedAt)}</span>
+            Último arquivo: <span className="font-medium text-foreground">{formatTime(watcher.lastProcessedAt)}</span>
           </div>
         )}
         {watcher.lastFilename && (
