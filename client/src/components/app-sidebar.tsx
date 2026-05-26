@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import {
   Home,
@@ -85,6 +86,17 @@ export function AppSidebar() {
   const [adminOpen, setAdminOpen] = useState(
     location.startsWith("/admin")
   );
+
+  // Show Ops Center only for admins (always) or users that have ≥1 visible watcher.
+  // Use staleTime so we don't hammer the API; the ops page itself keeps cache fresh.
+  const { data: opsWatchers } = useQuery<{ slug: string }[]>({
+    queryKey: ["/api/ops/watchers"],
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+  const showOpsCenter = isAdmin || (opsWatchers !== undefined && opsWatchers.length > 0);
 
   const getInitials = (name: string) => {
     return name
@@ -185,8 +197,8 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               )}
 
-              {/* 41 Ops Center — hidden for plain "Usuario" role */}
-              {!isUsuarioOnly && (
+              {/* Ops Center — visible only to users with at least one accessible watcher */}
+              {showOpsCenter && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild

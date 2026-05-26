@@ -658,12 +658,15 @@ export const opsEvents = pgTable("ops_events", {
 
 export const insertOpsEventSchema = createInsertSchema(opsEvents).omit({ id: true });
 
-// Permissions: which clients a "Usuário" can see in Ops Center
-export const userWatcherClients = pgTable("user_watcher_clients", {
-  userId:  integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  client:  varchar("client", { length: 80 }).notNull(),
-}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.client] }) }));
+// Watcher ↔ Sector M2M — controls who can see each watcher in Ops Center.
+// Non-admin users (including Coordinators) see only watchers that have at least
+// one sector matching the user's own sector memberships (user_sector_roles).
+export const opsWatcherSectors = pgTable("ops_watcher_sectors", {
+  watcherSlug: varchar("watcher_slug", { length: 60 }).notNull().references(() => opsWatchers.slug, { onDelete: "cascade" }),
+  sectorId:    varchar("sector_id",    { length: 36 }).notNull().references(() => sectors.id,       { onDelete: "cascade" }),
+}, (t) => ({ pk: primaryKey({ columns: [t.watcherSlug, t.sectorId] }) }));
 
 export type OpsWatcher = typeof opsWatchers.$inferSelect;
 export type OpsEvent = typeof opsEvents.$inferSelect;
 export type InsertOpsEvent = z.infer<typeof insertOpsEventSchema>;
+export type OpsWatcherSector = typeof opsWatcherSectors.$inferSelect;
