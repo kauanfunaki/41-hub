@@ -3897,7 +3897,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             COUNT(*) FILTER (WHERE status = 'ERROR')       AS error_today
           FROM ops_events
           WHERE watcher_slug = w.slug
-            AND processed_at >= NOW() AT TIME ZONE 'America/Sao_Paulo' - INTERVAL '24 hours'
+            AND processed_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
         ) counts ON true
         WHERE w.is_active = true ${sectorFilter}
         ORDER BY w.client, w.name
