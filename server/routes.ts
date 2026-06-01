@@ -80,13 +80,13 @@ const ticketAttachmentStorage = multer.diskStorage({
 
 const ticketUpload = multer({
   storage: ticketAttachmentStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    const allowedTypes = ["image/jpeg", "image/png", "application/pdf", "video/mp4"];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Only JPEG, PNG and PDF files are allowed"));
+      cb(new Error("Only JPEG, PNG, PDF and MP4 files are allowed"));
     }
   },
 });
