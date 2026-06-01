@@ -699,7 +699,7 @@ export default function TicketsDetail() {
                   onClick={() => {
                     const input = document.createElement("input");
                     input.type = "file";
-                    input.accept = ".jpg,.jpeg,.png,.pdf";
+                    input.accept = ".jpg,.jpeg,.png,.pdf,.mp4";
                     input.onchange = (e) => {
                       const file = (e.target as HTMLInputElement).files?.[0];
                       if (file) uploadMutation.mutate(file);
