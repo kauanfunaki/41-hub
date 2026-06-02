@@ -14,13 +14,6 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -42,6 +35,7 @@ interface ReportDef {
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
+  bgColor: string;
   badge?: string;
 }
 
@@ -52,6 +46,7 @@ const REPORTS: ReportDef[] = [
     description: "Todos os chamados com status, prioridade, categoria e SLA.",
     icon: FileText,
     color: "text-primary",
+    bgColor: "bg-primary/10",
   },
   {
     key: "resources",
@@ -59,6 +54,7 @@ const REPORTS: ReportDef[] = [
     description: "Apps e dashboards cadastrados, com setor e status.",
     icon: Package,
     color: "text-chart-2",
+    bgColor: "bg-chart-2/10",
   },
   {
     key: "notifications",
@@ -66,6 +62,7 @@ const REPORTS: ReportDef[] = [
     description: "Notificações enviadas, com destinatário e status de leitura.",
     icon: Bell,
     color: "text-amber-500",
+    bgColor: "bg-amber-500/10",
   },
   {
     key: "users",
@@ -73,6 +70,7 @@ const REPORTS: ReportDef[] = [
     description: "Todos os usuários com setores e provedor de autenticação.",
     icon: Users,
     color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
     badge: "Novo",
   },
   {
@@ -81,6 +79,7 @@ const REPORTS: ReportDef[] = [
     description: "Scores e sessões do teste de digitação por dificuldade.",
     icon: Keyboard,
     color: "text-violet-500",
+    bgColor: "bg-violet-500/10",
     badge: "Novo",
   },
   {
@@ -89,6 +88,7 @@ const REPORTS: ReportDef[] = [
     description: "Trilha de auditoria completa de ações do sistema.",
     icon: Activity,
     color: "text-chart-4",
+    bgColor: "bg-chart-4/10",
     badge: "Novo",
   },
 ];
@@ -179,6 +179,7 @@ function ExportButtons({
         size="sm"
         onClick={() => onExport("csv")}
         disabled={loading === `${type}-csv`}
+        className="flex-1 justify-center"
         data-testid={`button-export-${type}-csv`}
       >
         {loading === `${type}-csv` ? (
@@ -193,6 +194,7 @@ function ExportButtons({
         size="sm"
         onClick={() => onExport("json")}
         disabled={loading === `${type}-json`}
+        className="flex-1 justify-center"
         data-testid={`button-export-${type}-json`}
       >
         {loading === `${type}-json` ? (
@@ -211,7 +213,6 @@ export default function AdminReports() {
   const [selected, setSelected] = useState<ReportType>("tickets");
   const [loading, setLoading] = useState<string | null>(null);
 
-  // Per-report states
   const [ticketFrom, setTicketFrom] = useState("");
   const [ticketTo, setTicketTo] = useState("");
   const [notifFrom, setNotifFrom] = useState("");
@@ -293,9 +294,12 @@ export default function AdminReports() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left: report list */}
-        <div className="lg:w-72 shrink-0">
-          <div className="space-y-1">
+        {/* Sidebar */}
+        <div className="lg:w-64 shrink-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2 px-1">
+            Tipo de relatório
+          </p>
+          <div className="space-y-0.5">
             {REPORTS.map((report) => {
               const Icon = report.icon;
               const isSelected = selected === report.key;
@@ -303,20 +307,30 @@ export default function AdminReports() {
                 <button
                   key={report.key}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
+                    "relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all",
                     isSelected
                       ? "bg-primary/10 text-primary"
-                      : "hover:bg-muted text-foreground"
+                      : "hover:bg-muted text-foreground",
                   )}
                   onClick={() => setSelected(report.key)}
                   data-testid={`report-select-${report.key}`}
                 >
-                  <Icon
+                  {isSelected && (
+                    <div className="absolute left-0 inset-y-1.5 w-0.5 rounded-full bg-primary" />
+                  )}
+                  <div
                     className={cn(
-                      "h-4 w-4 shrink-0",
-                      isSelected ? "text-primary" : report.color
+                      "flex h-7 w-7 items-center justify-center rounded-md shrink-0 transition-colors",
+                      isSelected ? "bg-primary/15" : report.bgColor,
                     )}
-                  />
+                  >
+                    <Icon
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        isSelected ? "text-primary" : report.color,
+                      )}
+                    />
+                  </div>
                   <span className="flex-1 text-sm font-medium">{report.label}</span>
                   {report.badge && (
                     <Badge variant="secondary" className="text-xs">
@@ -324,7 +338,7 @@ export default function AdminReports() {
                     </Badge>
                   )}
                   {isSelected && (
-                    <ChevronRight className="h-4 w-4 text-primary" />
+                    <ChevronRight className="h-3.5 w-3.5 text-primary shrink-0" />
                   )}
                 </button>
               );
@@ -332,30 +346,92 @@ export default function AdminReports() {
           </div>
         </div>
 
-        {/* Right: report config */}
+        {/* Right panel */}
         <div className="flex-1">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <SelectedIcon className={cn("h-4 w-4", selectedDef.color)} />
-                {selectedDef.label}
-              </CardTitle>
-              <CardDescription>{selectedDef.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Tickets filters */}
-              {selected === "tickets" && (
-                <DateRangeRow
-                  fromValue={ticketFrom}
-                  onFromChange={setTicketFrom}
-                  toValue={ticketTo}
-                  onToChange={setTicketTo}
-                  fromId="ticket-from"
-                  toId="ticket-to"
-                />
+          <div className="rounded-xl border bg-card overflow-hidden">
+            {/* Panel header */}
+            <div className="flex items-center gap-3 p-5 border-b">
+              <div
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg shrink-0",
+                  selectedDef.bgColor,
+                )}
+              >
+                <SelectedIcon className={cn("h-5 w-5", selectedDef.color)} />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold">{selectedDef.label}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {selectedDef.description}
+                </p>
+              </div>
+            </div>
+
+            {/* Filters + Export */}
+            <div className="p-5 space-y-5">
+              {/* Per-report filters */}
+              {(selected === "tickets" ||
+                selected === "notifications" ||
+                selected === "users" ||
+                selected === "typing" ||
+                selected === "audit-logs") && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+                    Período
+                  </p>
+                  {selected === "tickets" && (
+                    <DateRangeRow
+                      fromValue={ticketFrom}
+                      onFromChange={setTicketFrom}
+                      toValue={ticketTo}
+                      onToChange={setTicketTo}
+                      fromId="ticket-from"
+                      toId="ticket-to"
+                    />
+                  )}
+                  {selected === "notifications" && (
+                    <DateRangeRow
+                      fromValue={notifFrom}
+                      onFromChange={setNotifFrom}
+                      toValue={notifTo}
+                      onToChange={setNotifTo}
+                      fromId="notif-from"
+                      toId="notif-to"
+                    />
+                  )}
+                  {selected === "users" && (
+                    <DateRangeRow
+                      fromValue={usersFrom}
+                      onFromChange={setUsersFrom}
+                      toValue={usersTo}
+                      onToChange={setUsersTo}
+                      fromId="users-from"
+                      toId="users-to"
+                    />
+                  )}
+                  {selected === "typing" && (
+                    <DateRangeRow
+                      fromValue={typingFrom}
+                      onFromChange={setTypingFrom}
+                      toValue={typingTo}
+                      onToChange={setTypingTo}
+                      fromId="typing-from"
+                      toId="typing-to"
+                    />
+                  )}
+                  {selected === "audit-logs" && (
+                    <DateRangeRow
+                      fromValue={auditFrom}
+                      onFromChange={setAuditFrom}
+                      toValue={auditTo}
+                      onToChange={setAuditTo}
+                      fromId="audit-from"
+                      toId="audit-to"
+                    />
+                  )}
+                </div>
               )}
 
-              {/* Resources filters */}
               {selected === "resources" && (
                 <div className="flex items-center gap-2">
                   <Switch
@@ -364,67 +440,27 @@ export default function AdminReports() {
                     onCheckedChange={setIncludeInactive}
                     data-testid="switch-include-inactive"
                   />
-                  <Label htmlFor="include-inactive" className="text-sm cursor-pointer">
+                  <Label
+                    htmlFor="include-inactive"
+                    className="text-sm cursor-pointer"
+                  >
                     Incluir inativos
                   </Label>
                 </div>
               )}
 
-              {/* Notifications filters */}
-              {selected === "notifications" && (
-                <DateRangeRow
-                  fromValue={notifFrom}
-                  onFromChange={setNotifFrom}
-                  toValue={notifTo}
-                  onToChange={setNotifTo}
-                  fromId="notif-from"
-                  toId="notif-to"
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+                  Exportar como
+                </p>
+                <ExportButtons
+                  type={selected}
+                  loading={loading}
+                  onExport={(format) => handleExport(selected, format)}
                 />
-              )}
-
-              {/* Users filters */}
-              {selected === "users" && (
-                <DateRangeRow
-                  fromValue={usersFrom}
-                  onFromChange={setUsersFrom}
-                  toValue={usersTo}
-                  onToChange={setUsersTo}
-                  fromId="users-from"
-                  toId="users-to"
-                />
-              )}
-
-              {/* Typing filters */}
-              {selected === "typing" && (
-                <DateRangeRow
-                  fromValue={typingFrom}
-                  onFromChange={setTypingFrom}
-                  toValue={typingTo}
-                  onToChange={setTypingTo}
-                  fromId="typing-from"
-                  toId="typing-to"
-                />
-              )}
-
-              {/* Audit-logs filters */}
-              {selected === "audit-logs" && (
-                <DateRangeRow
-                  fromValue={auditFrom}
-                  onFromChange={setAuditFrom}
-                  toValue={auditTo}
-                  onToChange={setAuditTo}
-                  fromId="audit-from"
-                  toId="audit-to"
-                />
-              )}
-
-              <ExportButtons
-                type={selected}
-                loading={loading}
-                onExport={(format) => handleExport(selected, format)}
-              />
-            </CardContent>
-          </Card>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

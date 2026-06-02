@@ -47,6 +47,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SearchInput } from "@/components/search-input";
+import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { UserWithRoles, Sector } from "@shared/schema";
@@ -395,9 +396,12 @@ export default function AdminUsers() {
               ))}
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {searchQuery ? "Nenhum usuário encontrado" : "Nenhum usuário cadastrado"}
-            </div>
+            <EmptyState
+              icon={Users}
+              title={searchQuery ? "Nenhum usuário encontrado" : "Nenhum usuário cadastrado"}
+              description={searchQuery ? "Tente outro termo de busca." : "Clique em Novo Usuário para adicionar."}
+              action={!searchQuery ? <Button onClick={handleOpenCreate}><Plus className="h-4 w-4 mr-2" />Novo Usuário</Button> : undefined}
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

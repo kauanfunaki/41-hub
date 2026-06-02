@@ -2,18 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -305,60 +298,88 @@ export default function TypingTest() {
       </div>
 
       {state === "idle" && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-6">
-            <Keyboard className="h-16 w-16 text-muted-foreground/40" />
-            <div className="text-center space-y-2">
-              <p className="text-lg font-medium">Pronto para começar?</p>
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="h-[3px] bg-primary w-full" />
+          <div className="flex flex-col items-center justify-center py-14 px-6 gap-7">
+            {/* Icon */}
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
+              <Keyboard className="h-10 w-10 text-primary" />
+            </div>
+
+            {/* Text */}
+            <div className="text-center space-y-2 max-w-md">
+              <p className="text-lg font-semibold">Pronto para começar?</p>
               <p className="text-sm text-muted-foreground">
-                Um texto aleatório será exibido. Digite-o o mais rápido possível em 60 segundos.
+                Um texto aleatório será exibido. Digite-o o mais rápido e preciso possível em 60 segundos.
               </p>
             </div>
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-muted-foreground">Dificuldade:</label>
-                <Select
-                  value={level}
-                  onValueChange={(v) => setLevel(v as Level)}
-                >
-                  <SelectTrigger className="w-[140px]" data-testid="select-difficulty">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="easy">Fácil</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="hard">Difícil</SelectItem>
-                  </SelectContent>
-                </Select>
+
+            {/* Difficulty picker */}
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                Dificuldade
+              </p>
+              <div className="flex gap-0.5 p-0.5 rounded-xl bg-muted border border-border">
+                {(["easy", "medium", "hard"] as Level[]).map((lv) => (
+                  <button
+                    key={lv}
+                    onClick={() => setLevel(lv)}
+                    className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                      level === lv
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    data-testid={`button-difficulty-${lv}`}
+                  >
+                    {LEVEL_LABELS[lv]}
+                  </button>
+                ))}
               </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <ShieldAlert className="h-3.5 w-3.5" />
-                Colar texto é bloqueado e invalida o resultado
-              </div>
-              <Button
-                onClick={handleStart}
-                disabled={startSessionMutation.isPending}
-                data-testid="button-start-test"
-              >
-                {startSessionMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Play className="h-4 w-4 mr-2" />
-                )}
-                Iniciar Teste
-              </Button>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Anti-cheat notice */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              Colar texto é bloqueado e invalida o resultado
+            </div>
+
+            {/* Start button */}
+            <Button
+              size="lg"
+              onClick={handleStart}
+              disabled={startSessionMutation.isPending}
+              data-testid="button-start-test"
+            >
+              {startSessionMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              Iniciar Teste
+            </Button>
+          </div>
+        </div>
       )}
 
       {state === "loading" && (
-        <Card>
-          <CardContent className="py-12 flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Carregando texto...</p>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          {/* Mirrors the toolbar that appears in "ready" state */}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="h-6 w-28 rounded-full" />
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-28 rounded-lg" />
+              <Skeleton className="h-9 w-24 rounded-lg" />
+            </div>
+          </div>
+          {/* Mirrors the text display area */}
+          <Skeleton className="h-[160px] w-full rounded-xl" />
+          {/* Mirrors the input area */}
+          <Skeleton className="h-[100px] w-full rounded-xl" />
+        </div>
       )}
 
       {(state === "ready" || state === "running") && text && (
@@ -393,11 +414,9 @@ export default function TypingTest() {
             </div>
           </div>
 
-          <Card>
-            <CardContent className="p-4">
-              {renderText()}
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border bg-card p-4">
+            {renderText()}
+          </div>
 
           <textarea
             ref={inputRef}
@@ -418,58 +437,108 @@ export default function TypingTest() {
       )}
 
       {state === "finished" && result && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-yellow-500" />
-              Resultado
-              <Badge variant="outline" className="ml-2">{LEVEL_LABELS[level]}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center p-4 rounded-lg bg-muted/50">
-                <Zap className="h-5 w-5 mx-auto mb-2 text-primary" />
-                <p className="text-3xl font-bold" data-testid="text-result-wpm">{result.wpm}</p>
-                <p className="text-xs text-muted-foreground">PPM (palavras/min)</p>
-              </div>
-              <div className="text-center p-4 rounded-lg bg-muted/50">
-                <Target className="h-5 w-5 mx-auto mb-2 text-green-500" />
-                <p className="text-3xl font-bold" data-testid="text-result-accuracy">{result.accuracy}%</p>
-                <p className="text-xs text-muted-foreground">Precisão</p>
-              </div>
-              <div className="text-center p-4 rounded-lg bg-muted/50">
-                <Clock className="h-5 w-5 mx-auto mb-2 text-chart-4" />
-                <p className="text-3xl font-bold" data-testid="text-result-time">{TIMER_DURATION - remainingSeconds}s</p>
-                <p className="text-xs text-muted-foreground">Tempo</p>
-              </div>
-            </div>
+        <div className="rounded-xl border bg-card overflow-hidden">
+          {/* Accent stripe — dourado se bom resultado, azul padrão */}
+          <div
+            className={`h-[3px] w-full ${
+              result.wpm >= 80
+                ? "bg-yellow-500"
+                : result.wpm >= 50
+                ? "bg-primary"
+                : "bg-muted-foreground/30"
+            }`}
+          />
 
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-yellow-500" />
+              <h2 className="text-base font-semibold">Resultado</h2>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
+                {LEVEL_LABELS[level]}
+              </span>
+            </div>
+            {/* Qualidade do resultado */}
+            <span
+              className={`text-sm font-semibold ${
+                result.wpm >= 80
+                  ? "text-yellow-600 dark:text-yellow-400"
+                  : result.wpm >= 50
+                  ? "text-primary"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {result.wpm >= 80
+                ? "Excelente! 🏆"
+                : result.wpm >= 50
+                ? "Bom resultado!"
+                : "Continue praticando!"}
+            </span>
+          </div>
+
+          {/* Stats — divide-x pattern */}
+          <div className="grid grid-cols-3 divide-x">
+            <div className="text-center px-4 py-6">
+              <Zap className="h-5 w-5 mx-auto mb-3 text-primary" />
+              <p
+                className="text-4xl font-black tabular-nums leading-none"
+                data-testid="text-result-wpm"
+              >
+                {result.wpm}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">PPM</p>
+            </div>
+            <div className="text-center px-4 py-6">
+              <Target className="h-5 w-5 mx-auto mb-3 text-green-500" />
+              <p
+                className="text-4xl font-black tabular-nums leading-none"
+                data-testid="text-result-accuracy"
+              >
+                {result.accuracy}%
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">Precisão</p>
+            </div>
+            <div className="text-center px-4 py-6">
+              <Clock className="h-5 w-5 mx-auto mb-3 text-chart-4" />
+              <p
+                className="text-4xl font-black tabular-nums leading-none"
+                data-testid="text-result-time"
+              >
+                {TIMER_DURATION - remainingSeconds}s
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">Tempo</p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="border-t px-6 py-4 flex flex-col gap-3 items-center">
             {submitMutation.isPending && (
-              <p className="text-sm text-muted-foreground text-center flex items-center justify-center gap-2">
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Salvando resultado...
               </p>
             )}
-
             {result.score && (
-              <p className="text-sm text-green-600 dark:text-green-400 text-center">
-                Resultado salvo no ranking mensal ({LEVEL_LABELS[level]}).
+              <p className="text-sm text-green-600 dark:text-green-400">
+                ✓ Resultado salvo no ranking mensal ({LEVEL_LABELS[level]})
               </p>
             )}
-
-            <div className="flex justify-center gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap justify-center">
               <Button onClick={handleStart} data-testid="button-retry-test">
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Tentar Novamente
               </Button>
-              <Button variant="outline" onClick={() => setLocation("/typing/leaderboard")} data-testid="button-view-leaderboard">
+              <Button
+                variant="outline"
+                onClick={() => setLocation("/typing/leaderboard")}
+                data-testid="button-view-leaderboard"
+              >
                 <Trophy className="h-4 w-4 mr-2" />
                 Ver Ranking
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
     </div>
   );

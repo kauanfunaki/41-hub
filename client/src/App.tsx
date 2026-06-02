@@ -17,6 +17,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationProvider } from "@/providers/notification-provider";
 import { LoginLoadingScreen } from "@/components/login-loading-screen";
+import { TutorialModal } from "@/components/tutorial-modal";
+import { GlobalSearch, SearchTriggerButton } from "@/components/global-search";
 import { primeAudio } from "@/lib/sound";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -39,7 +41,6 @@ import AdminTicketSlaPolicies from "@/pages/admin/ticket-sla";
 import AdminTicketsSettings from "@/pages/admin/tickets-settings";
 import AdminNotifications from "@/pages/admin/notifications";
 import AdminKb from "@/pages/admin/kb";
-import AdminTiDashboard from "@/pages/admin/ti-dashboard";
 import AdminTyping from "@/pages/admin/typing";
 import AdminReports from "@/pages/admin/reports";
 import TicketsIndex from "@/pages/tickets/index";
@@ -101,7 +102,7 @@ function Router() {
       <Route path="/admin/tickets-settings" component={AdminTicketsSettings} />
       <Route path="/admin/notifications" component={AdminNotifications} />
       <Route path="/admin/kb" component={AdminKb} />
-      <Route path="/admin/ti" component={AdminTiDashboard} />
+      <Route path="/admin/ti" component={Analytics} />
       <Route path="/admin/typing" component={AdminTyping} />
       <Route path="/admin/reports" component={AdminReports} />
       <Route path="/admin/tickets/categories" component={AdminTicketCategories} />
@@ -133,7 +134,10 @@ function AuthenticatedLayout() {
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1 overflow-hidden">
           <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card px-4">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <div className="flex items-center gap-2">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <SearchTriggerButton />
+            </div>
             <div className="flex items-center gap-1">
               <NotificationBell />
               <ThemeToggle />
@@ -144,6 +148,8 @@ function AuthenticatedLayout() {
           </main>
         </SidebarInset>
       </div>
+      <TutorialModal />
+      <GlobalSearch />
     </SidebarProvider>
   );
 }

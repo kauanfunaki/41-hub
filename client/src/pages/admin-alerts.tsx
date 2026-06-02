@@ -6,13 +6,10 @@ import {
   Plus,
   Trash2,
   Edit,
-  AlertTriangle,
-  Info,
   Power,
   PowerOff,
   ShieldAlert,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,42 +34,22 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { EmptyState } from "@/components/empty-state";
+import { SeverityBadge, SEVERITY_CONFIG } from "@/components/severity-badge";
+import type { AlertSeverity } from "@/components/severity-badge";
+import { cn } from "@/lib/utils";
 
 interface AlertItem {
   id: string;
   title: string;
   message: string;
-  severity: "info" | "warning" | "critical";
+  severity: AlertSeverity;
   isActive: boolean;
   startsAt: string | null;
   endsAt: string | null;
   createdAt: string;
   createdByName: string | null;
 }
-
-const severityConfig = {
-  info: {
-    label: "Informação",
-    variant: "secondary" as const,
-    icon: Info,
-    color: "text-blue-500",
-    bg: "bg-blue-500/10",
-  },
-  warning: {
-    label: "Atenção",
-    variant: "default" as const,
-    icon: AlertTriangle,
-    color: "text-amber-500",
-    bg: "bg-amber-500/10",
-  },
-  critical: {
-    label: "Crítico",
-    variant: "destructive" as const,
-    icon: AlertTriangle,
-    color: "text-red-500",
-    bg: "bg-red-500/10",
-  },
-};
 
 export default function AdminAlerts() {
   const { toast } = useToast();
@@ -81,7 +58,7 @@ export default function AdminAlerts() {
   const [form, setForm] = useState({
     title: "",
     message: "",
-    severity: "info" as "info" | "warning" | "critical",
+    severity: "info" as AlertSeverity,
     isActive: true,
   });
 
@@ -118,7 +95,8 @@ export default function AdminAlerts() {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
       setDialogOpen(false);
     },
-    onError: () => toast({ title: "Erro ao atualizar alerta", variant: "destructive" }),
+    onError: () =>
+      toast({ title: "Erro ao atualizar alerta", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -128,7 +106,8 @@ export default function AdminAlerts() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
     },
-    onError: () => toast({ title: "Erro ao remover alerta", variant: "destructive" }),
+    onError: () =>
+      toast({ title: "Erro ao remover alerta", variant: "destructive" }),
   });
 
   const openCreate = () => {
@@ -168,6 +147,7 @@ export default function AdminAlerts() {
 
   return (
     <PageContainer className="flex flex-col gap-6 py-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
@@ -216,6 +196,7 @@ export default function AdminAlerts() {
         </TabsContent>
       </Tabs>
 
+      {/* Create / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -247,7 +228,7 @@ export default function AdminAlerts() {
                 <Select
                   value={form.severity}
                   onValueChange={(v) =>
-                    setForm((f) => ({ ...f, severity: v as "info" | "warning" | "critical" }))
+                    setForm((f) => ({ ...f, severity: v as AlertSeverity }))
                   }
                 >
                   <SelectTrigger>
@@ -289,6 +270,8 @@ export default function AdminAlerts() {
   );
 }
 
+// ── Alert List ────────────────────────────────────────────────────────────────
+
 function AlertList({
   alerts,
   loading,
@@ -306,7 +289,22 @@ function AlertList({
     return (
       <div className="space-y-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-full" />
+          <div
+            key={i}
+            className="rounded-xl border bg-card overflow-hidden flex items-stretch"
+          >
+            <div className="w-1 shrink-0 bg-muted" />
+            <div className="flex items-start gap-3 p-4 flex-1">
+              <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-5 w-16 rounded-md" />
+                </div>
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -314,38 +312,62 @@ function AlertList({
 
   if (alerts.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center text-muted-foreground">
-          Nenhum alerta encontrado
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={Bell}
+        title="Nenhum alerta encontrado"
+        description="Crie um novo alerta usando o botão acima."
+      />
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {alerts.map((alert) => {
-        const cfg = severityConfig[alert.severity] ?? severityConfig.info;
+        const cfg = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.info;
         const SevIcon = cfg.icon;
         return (
-          <Card key={alert.id} className={!alert.isActive ? "opacity-60" : ""}>
-            <CardHeader className="pb-2 flex flex-row items-start justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${cfg.bg}`}
-                >
-                  <SevIcon className={`h-4 w-4 ${cfg.color}`} />
-                </div>
-                <div className="min-w-0">
-                  <CardTitle className="text-sm font-medium">{alert.title}</CardTitle>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
-                    {!alert.isActive && (
-                      <Badge variant="outline" className="text-xs">Inativo</Badge>
-                    )}
-                  </div>
-                </div>
+          <div
+            key={alert.id}
+            className={cn(
+              "flex items-stretch rounded-xl border bg-card overflow-hidden",
+              !alert.isActive && "opacity-60",
+            )}
+          >
+            {/* Severity stripe */}
+            <div className={`w-1 shrink-0 ${cfg.stripe}`} />
+
+            <div className="flex items-start gap-3 p-4 flex-1 min-w-0">
+              {/* Icon */}
+              <div
+                className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${cfg.iconBg}`}
+              >
+                <SevIcon className={`h-4 w-4 ${cfg.iconColor}`} />
               </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <p className="font-semibold text-sm">{alert.title}</p>
+                  {!alert.isActive && (
+                    <Badge variant="outline" className="text-xs">Inativo</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <SeverityBadge severity={alert.severity} />
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                  {alert.message}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Intl.DateTimeFormat("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  }).format(new Date(alert.createdAt))}
+                  {alert.createdByName && ` · por ${alert.createdByName}`}
+                </p>
+              </div>
+
+              {/* Actions */}
               <div className="flex items-center gap-1 shrink-0">
                 <Button
                   variant="ghost"
@@ -377,18 +399,8 @@ function AlertList({
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent className="pt-0 pl-12">
-              <p className="text-sm text-muted-foreground line-clamp-2">{alert.message}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {new Intl.DateTimeFormat("pt-BR", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                }).format(new Date(alert.createdAt))}
-                {alert.createdByName && ` · por ${alert.createdByName}`}
-              </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         );
       })}
     </div>

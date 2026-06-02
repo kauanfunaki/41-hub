@@ -31,6 +31,7 @@ export const users = pgTable("users", {
   themePref: varchar("theme_pref", { length: 10 }).default("light"),
   whatsapp: varchar("whatsapp", { length: 20 }),
   photoUrl: varchar("photo_url", { length: 500 }),
+  tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

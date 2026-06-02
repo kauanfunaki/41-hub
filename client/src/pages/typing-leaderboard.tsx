@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -151,10 +149,11 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
     >
       {/* Card superior */}
       <div
-        className="w-full rounded-2xl p-4 flex flex-col items-center gap-3 relative overflow-hidden"
+        className="w-full rounded-t-2xl p-4 flex flex-col items-center gap-3 relative overflow-hidden"
         style={{
           background: cfg.cardGradient,
           border: `1px solid ${cfg.borderColor}`,
+          borderBottom: "none",
           boxShadow: `0 0 24px ${cfg.glowColor}, 0 4px 12px rgba(0,0,0,0.08)`,
         }}
       >
@@ -234,7 +233,7 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
       >
         <span
           className="font-black text-white/80 tracking-tight"
-          style={{ fontSize: rank === 1 ? 28 : 22 }}
+          style={{ fontSize: rank === 1 ? 28 : 22, lineHeight: 1 }}
         >
           {rank}
         </span>
@@ -429,139 +428,208 @@ export default function TypingLeaderboard() {
           />
         )}
 
-        {/* Filtros */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[200px]" data-testid="select-month">
-              <SelectValue placeholder="Mês" />
-            </SelectTrigger>
-            <SelectContent>
-              {monthOptions.map((m) => (
-                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Filtros + Tabs */}
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b">
+            {/* Tabs Global/Setor */}
+            <Tabs value={tab} onValueChange={(v) => setTab(v as "global" | "sector")}>
+              <TabsList>
+                <TabsTrigger value="global" data-testid="tab-global">Global</TabsTrigger>
+                <TabsTrigger value="sector" data-testid="tab-sector">Por Setor</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-          <div className="flex gap-1 border rounded-md p-1">
-            {(["all", "easy", "medium", "hard"] as Level[]).map((lv) => (
-              <Button
-                key={lv}
-                variant={selectedLevel === lv ? "default" : "ghost"}
-                size="sm"
-                className="h-7 text-xs px-3"
-                onClick={() => setSelectedLevel(lv)}
-                data-testid={`btn-level-${lv}`}
-              >
-                {LEVEL_LABELS[lv]}
-              </Button>
-            ))}
-          </div>
-        </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Month selector */}
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[180px] h-8 text-sm" data-testid="select-month">
+                  <SelectValue placeholder="Mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "global" | "sector")}>
-          <TabsList>
-            <TabsTrigger value="global" data-testid="tab-global">Global</TabsTrigger>
-            <TabsTrigger value="sector" data-testid="tab-sector">Por Setor</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="sector" className="mt-4">
-            <Select value={selectedSectorId} onValueChange={setSelectedSectorId}>
-              <SelectTrigger className="w-[220px]" data-testid="select-sector">
-                <SelectValue placeholder="Selecione o setor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os setores</SelectItem>
-                {sectors.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              {/* Level filter */}
+              <div className="flex gap-0.5 p-0.5 rounded-lg bg-muted border border-border">
+                {(["all", "easy", "medium", "hard"] as Level[]).map((lv) => (
+                  <button
+                    key={lv}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                      selectedLevel === lv
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setSelectedLevel(lv)}
+                    data-testid={`btn-level-${lv}`}
+                  >
+                    {LEVEL_LABELS[lv]}
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
-          </TabsContent>
-        </Tabs>
+              </div>
+            </div>
+          </div>
 
-        {/* Tabela de ranking */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              {tab === "global" ? "Ranking Global" : "Ranking por Setor"}
+          {/* Sector selector (only when tab=sector) */}
+          {tab === "sector" && (
+            <div className="px-4 py-3 border-b">
+              <Select value={selectedSectorId} onValueChange={setSelectedSectorId}>
+                <SelectTrigger className="w-[220px]" data-testid="select-sector">
+                  <SelectValue placeholder="Selecione o setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os setores</SelectItem>
+                  {sectors.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">
+                {tab === "global" ? "Ranking Global" : "Ranking por Setor"}
+              </h2>
               {selectedLevel !== "all" && (
-                <Badge variant="secondary" className="text-xs">{LEVEL_LABELS[selectedLevel]}</Badge>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  {LEVEL_LABELS[selectedLevel]}
+                </span>
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+            </div>
+            {leaderboard.length > 0 && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {leaderboard.length} participante{leaderboard.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {/* Rows */}
+          <div className="p-3 space-y-1.5">
             {isLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-2 p-1">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <div className="space-y-1 flex-1">
+                  <div key={i} className="flex items-center gap-3 p-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-9 w-9 rounded-full" />
+                    <div className="space-y-1.5 flex-1">
                       <Skeleton className="h-4 w-32" />
                       <Skeleton className="h-3 w-20" />
                     </div>
-                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-8 w-20" />
                   </div>
                 ))}
               </div>
             ) : leaderboard.length === 0 ? (
-              <p className="text-muted-foreground text-sm text-center py-8">
+              <p className="text-muted-foreground text-sm text-center py-10">
                 Nenhum resultado neste período.
               </p>
             ) : (
-              <div className="space-y-2">
-                {leaderboard.map((entry, index) => (
+              leaderboard.map((entry, index) => {
+                const rank = index + 1;
+                const isMe = entry.userId === user.id;
+                const maxWpm = leaderboard[0]?.wpm ?? 1;
+                const barPct = Math.round((entry.wpm / maxWpm) * 100);
+
+                const rankBg: Record<number, string> = {
+                  1: "border-yellow-500/30 bg-yellow-500/5",
+                  2: "border-slate-400/30 bg-slate-400/5",
+                  3: "border-amber-700/30 bg-amber-700/5",
+                };
+                const rankBarColor: Record<number, string> = {
+                  1: "bg-yellow-500",
+                  2: "bg-slate-400",
+                  3: "bg-amber-600",
+                };
+
+                return (
                   <div
                     key={entry.userId}
-                    className={`flex items-center gap-3 p-3 rounded-md ${
-                      entry.userId === user.id ? "bg-primary/5 border border-primary/20" : "border"
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                      isMe
+                        ? "border-primary/30 bg-primary/5"
+                        : rank <= 3
+                        ? rankBg[rank]
+                        : "border-border hover:bg-muted/30"
                     }`}
                     data-testid={`leaderboard-entry-${index}`}
                   >
-                    <div className="flex items-center justify-center w-8">
-                      {getRankIcon(index + 1)}
+                    {/* Rank */}
+                    <div className="w-7 shrink-0 flex items-center justify-center">
+                      {getRankIcon(rank)}
                     </div>
-                    <Avatar className="h-9 w-9">
-                      {entry.userPhoto && <AvatarImage src={entry.userPhoto} alt={entry.userName} />}
-                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+
+                    {/* Avatar */}
+                    <Avatar className="h-9 w-9 shrink-0">
+                      {entry.userPhoto && (
+                        <AvatarImage src={entry.userPhoto} alt={entry.userName} />
+                      )}
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xs font-bold">
                         {getInitials(entry.userName)}
                       </AvatarFallback>
                     </Avatar>
+
+                    {/* Info + bar */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">
-                        {entry.userName}
-                        {entry.userId === user.id && (
-                          <span className="text-xs text-primary ml-2">(você)</span>
-                        )}
-                      </p>
                       <div className="flex items-center gap-1.5">
+                        <p className="font-semibold text-sm truncate leading-tight">
+                          {entry.userName}
+                        </p>
+                        {isMe && (
+                          <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full shrink-0">
+                            você
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
                         {entry.sectorName && (
-                          <span className="text-xs text-muted-foreground truncate">{entry.sectorName}</span>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {entry.sectorName}
+                          </span>
                         )}
                         {selectedLevel === "all" && (
-                          <Badge variant="outline" className="text-xs px-1 py-0 h-4">
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
                             {LEVEL_LABELS[entry.level as Level] ?? entry.level}
-                          </Badge>
+                          </span>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <p className="font-bold text-sm flex items-center gap-1">
-                          <Zap className="h-3 w-3 text-primary" />
-                          {entry.wpm} PPM
-                        </p>
+                      {/* Relative WPM bar */}
+                      <div className="mt-1.5 h-1 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${
+                            rank <= 3 ? (rankBarColor[rank] ?? "bg-primary/60") : "bg-primary/40"
+                          }`}
+                          style={{ width: `${barPct}%` }}
+                        />
                       </div>
-                      <Badge variant="secondary" className="text-xs">
-                        <Target className="h-3 w-3 mr-1" />
-                        {Number(entry.accuracy).toFixed(0)}%
-                      </Badge>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="shrink-0 text-right">
+                      <div className="flex items-end gap-0.5 justify-end">
+                        <Zap className="h-3 w-3 text-primary mb-0.5" />
+                        <span className="text-xl font-black tabular-nums leading-none">
+                          {entry.wpm}
+                        </span>
+                        <span className="text-xs text-muted-foreground mb-0.5 ml-0.5">PPM</span>
+                      </div>
+                      <div className="flex items-center gap-0.5 justify-end mt-0.5">
+                        <Target className="h-2.5 w-2.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">
+                          {Number(entry.accuracy).toFixed(0)}%
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </>
   );

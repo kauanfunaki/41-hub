@@ -84,24 +84,25 @@ export function NotificationBell() {
 
   return (
     <div className="relative" id="notification-dropdown">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="relative"
-        onClick={() => setOpen((v) => !v)}
-        data-testid="button-notification-bell"
-      >
-        <Bell className="h-5 w-5" />
+      <div className="relative inline-flex">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setOpen((v) => !v)}
+          data-testid="button-notification-bell"
+        >
+          <Bell className="h-5 w-5" />
+        </Button>
         {unreadCount > 0 && (
           <Badge
             variant="destructive"
-            className="absolute -top-1 -right-1 h-5 min-w-[1.25rem] px-1 text-xs flex items-center justify-center"
+            className="absolute -top-1 -right-1 h-5 min-w-[1.25rem] px-1 text-xs flex items-center justify-center pointer-events-none"
             data-testid="badge-notification-count"
           >
             {unreadCount > 99 ? "99+" : unreadCount}
           </Badge>
         )}
-      </Button>
+      </div>
 
       {open && (
         <div

@@ -8,17 +8,16 @@ import {
   ThumbsDown,
   Pencil,
   Eye,
-  Loader2,
   Calendar,
   User,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useState } from "react";
 
 interface KbArticleFull {
   id: string;
@@ -37,26 +36,18 @@ interface KbArticleFull {
 /** Very lightweight markdown → HTML renderer (no external deps) */
 function renderMarkdown(md: string): string {
   return md
-    // Headings
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
     .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    // Bold / italic
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/_(.+?)_/g, "<em>$1</em>")
-    // Inline code
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    // Unordered lists
     .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
     .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
-    // Ordered lists
     .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
-    // Horizontal rules
     .replace(/^---$/gm, "<hr />")
-    // Paragraphs (double newline)
     .replace(/\n{2,}/g, "</p><p>")
-    // Single newlines → <br>
     .replace(/\n/g, "<br />");
 }
 
@@ -65,6 +56,7 @@ export default function KbArticle() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [feedbackGiven, setFeedbackGiven] = useState<boolean | null>(null);
 
   const { data: article, isLoading, isError } = useQuery<KbArticleFull>({
     queryKey: [`/api/kb/${id}`],
@@ -80,8 +72,10 @@ export default function KbArticle() {
     mutationFn: (helpful: boolean) =>
       apiRequest("POST", `/api/kb/${id}/feedback`, { helpful }),
     onSuccess: (_, helpful) => {
+      setFeedbackGiven(helpful);
       toast({
-        title: helpful ? "Obrigado pelo feedback positivo!" : "Feedback registrado",
+        title: helpful ? "Obrigado pelo feedback!" : "Feedback registrado",
+        description: helpful ? "Fico feliz que o artigo ajudou." : "Vamos trabalhar para melhorar.",
       });
       queryClient.invalidateQueries({ queryKey: [`/api/kb/${id}`] });
     },
@@ -91,14 +85,19 @@ export default function KbArticle() {
 
   if (isLoading) {
     return (
-      <PageContainer className="flex flex-col gap-6 py-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-6 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <div className="space-y-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-4 w-full" />
-          ))}
+      <PageContainer className="flex flex-col gap-6 py-6 max-w-3xl">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-5 w-40" />
+        </div>
+        <div className="rounded-xl border bg-card p-6 space-y-4">
+          <Skeleton className="h-7 w-3/4" />
+          <Skeleton className="h-4 w-1/3" />
+          <div className="space-y-2 pt-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className={`h-4 ${i % 3 === 2 ? "w-3/4" : "w-full"}`} />
+            ))}
+          </div>
         </div>
       </PageContainer>
     );
@@ -106,22 +105,27 @@ export default function KbArticle() {
 
   if (isError || !article) {
     return (
-      <div className="flex flex-col items-center gap-4 p-12 text-muted-foreground">
-        <BookOpen className="h-12 w-12 opacity-30" />
-        <p className="text-lg font-medium">Artigo não encontrado</p>
+      <PageContainer className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+          <BookOpen className="h-8 w-8 opacity-40" />
+        </div>
+        <div className="text-center">
+          <p className="font-medium text-foreground text-lg">Artigo não encontrado</p>
+          <p className="text-sm mt-1">O artigo que você procura não existe ou foi removido.</p>
+        </div>
         <Button variant="outline" onClick={() => setLocation("/kb")}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Voltar à base de conhecimento
         </Button>
-      </div>
+      </PageContainer>
     );
   }
 
   const html = renderMarkdown(article.body);
 
   return (
-    <PageContainer className="flex flex-col gap-6 py-6">
-      {/* Back + admin edit */}
+    <PageContainer className="flex flex-col gap-4 py-6 max-w-3xl">
+      {/* Breadcrumb nav */}
       <div className="flex items-center justify-between gap-3">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/kb")}>
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -134,95 +138,123 @@ export default function KbArticle() {
             onClick={() => setLocation("/admin/kb")}
           >
             <Pencil className="h-4 w-4 mr-2" />
-            Editar no Admin
+            Editar
           </Button>
         )}
       </div>
 
-      {/* Article card */}
-      <Card>
-        <CardContent className="p-6 space-y-5">
-          {/* Header */}
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <h1 className="text-2xl font-semibold leading-tight">{article.title}</h1>
-              {!article.isPublished && (
-                <Badge variant="outline" className="shrink-0">Rascunho</Badge>
-              )}
-            </div>
+      {/* Article */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {/* Category accent stripe */}
+        <div className="h-[3px] bg-chart-1" />
 
-            {article.categoryName && (
-              <Badge variant="secondary">{article.categoryName}</Badge>
-            )}
+        {/* Header */}
+        <div className="p-6 border-b space-y-3">
+          {article.categoryName && (
+            <span className="inline-flex text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-chart-1/10 text-chart-1 border border-chart-1/20">
+              {article.categoryName}
+            </span>
+          )}
 
-            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground border-t pt-3">
-              {article.authorName && (
-                <span className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  {article.authorName}
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                Atualizado em{" "}
-                {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(
-                  new Date(article.updatedAt)
-                )}
+          <div className="flex items-start gap-3">
+            <h1 className="text-xl font-bold leading-snug flex-1">
+              {article.title}
+            </h1>
+            {!article.isPublished && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted border border-border text-muted-foreground shrink-0 mt-1">
+                Rascunho
               </span>
-              {article.viewCount !== undefined && (
-                <span className="flex items-center gap-1">
-                  <Eye className="h-3 w-3" />
-                  {article.viewCount} visualizações
-                </span>
-              )}
-            </div>
+            )}
           </div>
 
-          {/* Body — rendered markdown */}
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            {article.authorName && (
+              <span className="flex items-center gap-1.5">
+                <User className="h-3 w-3" />
+                {article.authorName}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <Calendar className="h-3 w-3" />
+              Atualizado em{" "}
+              {new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(
+                new Date(article.updatedAt)
+              )}
+            </span>
+            {article.viewCount !== undefined && (
+              <span className="flex items-center gap-1.5">
+                <Eye className="h-3 w-3" />
+                {article.viewCount} {article.viewCount === 1 ? "visualização" : "visualizações"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6">
           <div
-            className="prose prose-sm dark:prose-invert max-w-none text-foreground
-              [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:mb-3 [&_h1]:mt-5
-              [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4
-              [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-3
-              [&_p]:mb-3 [&_p]:leading-relaxed
-              [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3
-              [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3
-              [&_li]:mb-1
-              [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono
+            className="
+              prose prose-sm dark:prose-invert max-w-none text-foreground
+              [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:leading-tight
+              [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5
+              [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-4
+              [&_p]:mb-4 [&_p]:leading-relaxed [&_p]:text-foreground/90
+              [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4 [&_ul]:space-y-1
+              [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-4
+              [&_li]:leading-relaxed
+              [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-xs [&_code]:font-mono [&_code]:border [&_code]:border-border
               [&_strong]:font-semibold
               [&_em]:italic
-              [&_hr]:border-border [&_hr]:my-4"
+              [&_hr]:border-border [&_hr]:my-5
+            "
             dangerouslySetInnerHTML={{ __html: `<p>${html}</p>` }}
           />
+        </div>
 
-          {/* Feedback */}
-          <div className="border-t pt-4 flex flex-col gap-3">
-            <p className="text-sm font-medium">Este artigo foi útil?</p>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => feedbackMutation.mutate(true)}
-                disabled={feedbackMutation.isPending}
-                className="gap-2"
-              >
-                <ThumbsUp className="h-4 w-4" />
-                Sim{article.helpfulCount ? ` (${article.helpfulCount})` : ""}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => feedbackMutation.mutate(false)}
-                disabled={feedbackMutation.isPending}
-                className="gap-2"
-              >
-                <ThumbsDown className="h-4 w-4" />
-                Não{article.notHelpfulCount ? ` (${article.notHelpfulCount})` : ""}
-              </Button>
+        {/* Feedback */}
+        <div className="border-t p-6">
+          {feedbackGiven !== null ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              {feedbackGiven
+                ? "Obrigado! Fico feliz que o artigo foi útil."
+                : "Obrigado pelo feedback. Vamos melhorar."}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          ) : (
+            <div className="flex items-center gap-4 flex-wrap">
+              <p className="text-sm font-medium">Este artigo foi útil?</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => feedbackMutation.mutate(true)}
+                  disabled={feedbackMutation.isPending}
+                  className="gap-2"
+                >
+                  <ThumbsUp className="h-4 w-4" />
+                  Sim
+                  {article.helpfulCount ? (
+                    <span className="text-muted-foreground">({article.helpfulCount})</span>
+                  ) : null}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => feedbackMutation.mutate(false)}
+                  disabled={feedbackMutation.isPending}
+                  className="gap-2"
+                >
+                  <ThumbsDown className="h-4 w-4" />
+                  Não
+                  {article.notHelpfulCount ? (
+                    <span className="text-muted-foreground">({article.notHelpfulCount})</span>
+                  ) : null}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </PageContainer>
   );
 }

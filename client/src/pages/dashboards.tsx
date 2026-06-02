@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { BarChart3 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchInput } from "@/components/search-input";
 import { ResourceGrid } from "@/components/resource-grid";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -66,21 +65,19 @@ export default function Dashboards() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <CardTitle className="text-base font-medium">
-              {filteredResources.length} dashboard{filteredResources.length !== 1 ? "s" : ""} disponível{filteredResources.length !== 1 ? "eis" : ""}
-            </CardTitle>
-            <SearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Buscar dashboards..."
-              className="sm:w-64"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border-b">
+          <p className="text-sm font-medium text-muted-foreground">
+            {filteredResources.length} {filteredResources.length !== 1 ? "dashboards disponíveis" : "dashboard disponível"}
+          </p>
+          <SearchInput
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Buscar dashboards..."
+            className="sm:w-64"
+          />
+        </div>
+        <div className="p-4">
           <ResourceGrid
             resources={filteredResources}
             isLoading={isLoading}
@@ -94,8 +91,8 @@ export default function Dashboards() {
                 : "Nenhum dashboard disponível"
             }
           />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

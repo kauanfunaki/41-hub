@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,7 +18,6 @@ import {
   Plus,
   Search,
   Clock,
-  User,
 } from "lucide-react";
 import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
 
@@ -42,21 +40,26 @@ const priorityLabels: Record<string, string> = {
 };
 
 const priorityColors: Record<string, string> = {
-  BAIXA: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  MEDIA: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  ALTA: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  URGENTE: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  BAIXA: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20",
+  MEDIA: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+  ALTA: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20",
+  URGENTE: "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20",
+};
+
+const priorityStripe: Record<string, string> = {
+  BAIXA: "bg-blue-400",
+  MEDIA: "bg-amber-500",
+  ALTA: "bg-orange-500",
+  URGENTE: "bg-red-500",
 };
 
 const statusColors: Record<string, string> = {
-  ABERTO: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  EM_ANDAMENTO: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  AGUARDANDO_USUARIO:
-    "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  RESOLVIDO: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-  AGUARDANDO_APROVACAO:
-    "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  CANCELADO: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200",
+  ABERTO: "bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20",
+  EM_ANDAMENTO: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20",
+  AGUARDANDO_USUARIO: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+  RESOLVIDO: "bg-muted text-muted-foreground border border-border",
+  AGUARDANDO_APROVACAO: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border border-violet-500/20",
+  CANCELADO: "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20",
 };
 
 // ── SLA helper ───────────────────────────────────────────────────────────────
@@ -113,17 +116,21 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
   const sla = getSlaStatus(ticket.currentCycle);
   return (
     <Link href={`/tickets/${ticket.id}`}>
-      <Card
-        className="hover-elevate cursor-pointer"
+      <div
+        className="flex items-stretch rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer overflow-hidden group"
         data-testid={`ticket-${ticket.id}`}
       >
-        <CardContent className="flex items-center gap-4 p-4">
+        {/* Priority stripe */}
+        <div className={`w-1 shrink-0 ${priorityStripe[ticket.priority] ?? "bg-muted"}`} />
+
+        {/* Content */}
+        <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-medium truncate">{ticket.title}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-              <span>
+            <p className="font-semibold text-sm leading-tight truncate">
+              {ticket.title}
+            </p>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5 flex-wrap">
+              <span className="font-medium text-foreground/60">
                 {ticket.categoryBranch}/{ticket.categoryName}
               </span>
               <span>·</span>
@@ -134,40 +141,39 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
               <span>{formatDate(ticket.createdAt as unknown as string)}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
             {sla.color && (
-              <Badge
-                variant="secondary"
-                className={sla.color}
+              <span
+                className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${sla.color}`}
                 data-testid={`sla-badge-${ticket.id}`}
               >
-                <Clock className="h-3 w-3 mr-1" />
+                <Clock className="h-3 w-3" />
                 {sla.label}
-              </Badge>
+              </span>
             )}
-            <Badge variant="secondary" className={priorityColors[ticket.priority]}>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${priorityColors[ticket.priority]}`}>
               {priorityLabels[ticket.priority]}
-            </Badge>
-            <Badge variant="secondary" className={statusColors[ticket.status]}>
+            </span>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColors[ticket.status]}`}>
               {statusLabels[ticket.status]}
-            </Badge>
+            </span>
             {ticket.assignees && ticket.assignees.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap justify-end">
-                <User className="h-3 w-3 text-muted-foreground shrink-0" />
+              <div className="flex items-center gap-1">
                 {ticket.assignees.map((a) => (
-                  <Badge
+                  <div
                     key={a.userId}
-                    variant="outline"
-                    className="text-xs px-1.5 py-0 h-5 font-normal"
+                    className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0"
+                    title={a.userName}
                   >
-                    {a.userName.split(" ")[0]}
-                  </Badge>
+                    {a.userName.split(" ").map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase()}
+                  </div>
                 ))}
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </Link>
   );
 }

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Folder } from "lucide-react";
+import { Save, Folder, ArrowLeft, Activity } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -200,12 +201,22 @@ export default function AdminOpsWatchers() {
   });
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">Config. Ops Center</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Configure as pastas de entrada/saída dos watchers e os setores que têm acesso a cada um.
-        </p>
+    <div className="flex flex-col gap-6 p-6">
+      <div className="flex items-center gap-3">
+        <Link href="/admin">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-1/10">
+          <Activity className="h-5 w-5 text-chart-1" />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Config. Ops Center</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure as pastas de entrada/saída dos watchers e os setores que têm acesso a cada um.
+          </p>
+        </div>
       </div>
 
 

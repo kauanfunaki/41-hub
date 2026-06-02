@@ -2,11 +2,17 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { PageContainer } from "@/components/page-container";
-import { BookOpen, Search, Eye, ThumbsUp, ChevronRight, Loader2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  BookOpen,
+  Search,
+  Eye,
+  ThumbsUp,
+  ChevronRight,
+  Loader2,
+  Settings2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -15,7 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
 import type { TicketCategory } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 interface KbArticleItem {
   id: string;
@@ -27,6 +35,16 @@ interface KbArticleItem {
   helpfulCount?: number;
   isPublished: boolean;
   updatedAt: string;
+}
+
+function readingTime(body: string): string {
+  const words = body.split(/\s+/).length;
+  const minutes = Math.max(1, Math.round(words / 200));
+  return `${minutes} min`;
+}
+
+function stripMarkdown(text: string): string {
+  return text.replace(/[#*`_\[\]]/g, "").slice(0, 140);
 }
 
 export default function Kb() {
@@ -57,25 +75,30 @@ export default function Kb() {
 
   return (
     <PageContainer className="flex flex-col gap-6 py-6">
-      <div className="flex items-center justify-between gap-3">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-1/10">
             <BookOpen className="h-5 w-5 text-chart-1" />
           </div>
           <div>
             <h1 className="text-xl font-semibold">Base de Conhecimento</h1>
-            <p className="text-sm text-muted-foreground">
-              Artigos e guias para suporte
-            </p>
+            <p className="text-sm text-muted-foreground">Artigos e guias para suporte</p>
           </div>
         </div>
         {user?.isAdmin && (
-          <Button variant="outline" size="sm" onClick={() => setLocation("/admin/kb")}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLocation("/admin/kb")}
+          >
+            <Settings2 className="h-4 w-4 mr-2" />
             Gerenciar artigos
           </Button>
         )}
       </div>
 
+      {/* Search + filter */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -101,41 +124,62 @@ export default function Kb() {
         )}
       </div>
 
+      {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border bg-card p-4 flex gap-4">
+              <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : articles.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-            <BookOpen className="h-10 w-10 opacity-30" />
-            <p className="text-sm">Nenhum artigo encontrado</p>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+            <BookOpen className="h-8 w-8 opacity-40" />
+          </div>
+          <div className="text-center">
+            <p className="font-medium text-foreground">Nenhum artigo encontrado</p>
+            <p className="text-sm mt-1">
+              {searchQuery ? "Tente uma busca diferente." : "Nenhum artigo publicado ainda."}
+            </p>
+          </div>
+        </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {articles.map((article) => (
-            <Card
+            <button
               key={article.id}
-              className="hover-elevate cursor-pointer transition-all"
+              className="w-full text-left rounded-xl border bg-card hover:bg-accent transition-colors overflow-hidden group"
               onClick={() => setLocation(`/kb/articles/${article.id}`)}
             >
-              <CardContent className="flex items-start gap-4 p-4">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
+              <div className="flex items-start gap-4 p-4">
+                {/* Icon */}
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chart-1/10 mt-0.5">
                   <BookOpen className="h-4 w-4 text-chart-1" />
                 </div>
+
+                {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{article.title}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                    {article.body.replace(/[#*`_\[\]]/g, "").slice(0, 120)}
-                    {article.body.length > 120 ? "…" : ""}
+                  <p className="font-semibold text-sm leading-snug">{article.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                    {stripMarkdown(article.body)}
+                    {article.body.length > 140 ? "…" : ""}
                   </p>
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  <div className="flex items-center gap-3 mt-2.5 flex-wrap">
                     {article.categoryName && (
-                      <Badge variant="secondary" className="text-xs">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-chart-1/10 text-chart-1 border border-chart-1/20">
                         {article.categoryName}
-                      </Badge>
+                      </span>
                     )}
+                    <span className="text-xs text-muted-foreground">
+                      {readingTime(article.body)} de leitura
+                    </span>
                     {article.viewCount !== undefined && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Eye className="h-3 w-3" />
@@ -150,9 +194,11 @@ export default function Kb() {
                     )}
                   </div>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-              </CardContent>
-            </Card>
+
+                {/* Arrow */}
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </button>
           ))}
         </div>
       )}

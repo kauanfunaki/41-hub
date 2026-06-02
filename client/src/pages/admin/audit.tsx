@@ -3,16 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   FileText,
-  User,
   Calendar,
   Filter,
   Download,
   Loader2,
+  Search,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,8 +29,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SearchInput } from "@/components/search-input";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { AuditLog } from "@shared/schema";
 
 interface AuditLogWithActor extends AuditLog {
@@ -60,13 +58,60 @@ const actionLabels: Record<string, string> = {
   api_token_revoke: "Revogação de Token",
 };
 
-const getActionBadgeVariant = (action: string) => {
-  if (action.includes("delete") || action.includes("remove") || action.includes("revoke"))
-    return "destructive";
-  if (action.includes("create") || action.includes("add")) return "default";
-  if (action.includes("update") || action.includes("health")) return "secondary";
-  return "outline";
-};
+function getActionStyle(action: string): string {
+  if (action.includes("_success") || action === "login") {
+    return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20";
+  }
+  if (action.includes("_failed")) {
+    return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20";
+  }
+  if (
+    action.includes("delete") ||
+    action.includes("remove") ||
+    action.includes("revoke")
+  ) {
+    return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20";
+  }
+  if (action.includes("create") || action.includes("add")) {
+    return "bg-primary/10 text-primary border-primary/20";
+  }
+  if (
+    action.includes("update") ||
+    action.includes("changed") ||
+    action.includes("health")
+  ) {
+    return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
+  }
+  return "bg-muted text-muted-foreground border-border";
+}
+
+function ActionBadge({ action }: { action: string }) {
+  const label = actionLabels[action] || action;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border whitespace-nowrap",
+        getActionStyle(action),
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function UserAvatar({ name }: { name: string }) {
+  const initials = name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0] || "")
+    .join("")
+    .toUpperCase() || "?";
+  return (
+    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0 select-none">
+      {initials}
+    </div>
+  );
+}
 
 async function downloadExport(url: string, filename: string, toast: any) {
   try {
@@ -89,7 +134,11 @@ async function downloadExport(url: string, filename: string, toast: any) {
     URL.revokeObjectURL(a.href);
     toast({ title: "Exportado com sucesso" });
   } catch (err: any) {
-    toast({ title: "Erro ao exportar", description: err?.message, variant: "destructive" });
+    toast({
+      title: "Erro ao exportar",
+      description: err?.message,
+      variant: "destructive",
+    });
   }
 }
 
@@ -100,13 +149,16 @@ export default function AdminAudit() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
-  const [exportLoading, setExportLoading] = useState<"csv" | "json" | null>(null);
+  const [exportLoading, setExportLoading] = useState<"csv" | "json" | null>(
+    null,
+  );
 
   const queryUrl = `/api/admin/audit?limit=100&page=${page}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}${actionFilter !== "all" ? `&action=${actionFilter}` : ""}`;
 
   const { data: logs = [], isLoading } = useQuery<AuditLogWithActor[]>({
     queryKey: [queryUrl],
-    queryFn: () => fetch(queryUrl, { credentials: "include" }).then((r) => r.json()),
+    queryFn: () =>
+      fetch(queryUrl, { credentials: "include" }).then((r) => r.json()),
   });
 
   const filteredLogs = logs.filter((log) => {
@@ -137,6 +189,7 @@ export default function AdminAudit() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/admin">
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -154,10 +207,11 @@ export default function AdminAudit() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-4 pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-            {/* Date filters */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {/* Toolbar */}
+        <div className="border-b p-4 space-y-3">
+          {/* Row 1: date + export */}
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -166,7 +220,10 @@ export default function AdminAudit() {
                 <Input
                   type="date"
                   value={from}
-                  onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+                  onChange={(e) => {
+                    setFrom(e.target.value);
+                    setPage(1);
+                  }}
                   className="w-36 [color-scheme:light] dark:[color-scheme:dark]"
                   data-testid="input-audit-from"
                 />
@@ -176,15 +233,17 @@ export default function AdminAudit() {
                 <Input
                   type="date"
                   value={to}
-                  onChange={(e) => { setTo(e.target.value); setPage(1); }}
+                  onChange={(e) => {
+                    setTo(e.target.value);
+                    setPage(1);
+                  }}
                   className="w-36 [color-scheme:light] dark:[color-scheme:dark]"
                   data-testid="input-audit-to"
                 />
               </div>
             </div>
 
-            {/* Export buttons */}
-            <div className="flex gap-2 ml-auto">
+            <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -216,21 +275,36 @@ export default function AdminAudit() {
             </div>
           </div>
 
-          {/* Search + action filter */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <CardTitle className="text-base font-medium self-center">
-              {filteredLogs.length} registro{filteredLogs.length !== 1 ? "s" : ""}
-            </CardTitle>
-            <div className="flex gap-2 ml-auto">
-              <SearchInput
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Buscar logs..."
-                className="sm:w-56"
-              />
-              <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(1); }}>
-                <SelectTrigger className="w-[180px]" data-testid="select-action-filter">
-                  <Filter className="h-4 w-4 mr-2" />
+          {/* Row 2: count + search + filter */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-muted-foreground tabular-nums shrink-0">
+              {filteredLogs.length}{" "}
+              {filteredLogs.length !== 1 ? "registros" : "registro"}
+            </span>
+
+            <div className="flex gap-2 ml-auto flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar logs..."
+                  className="pl-8 h-9 w-52 text-sm"
+                />
+              </div>
+
+              <Select
+                value={actionFilter}
+                onValueChange={(v) => {
+                  setActionFilter(v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger
+                  className="w-[180px] h-9"
+                  data-testid="select-action-filter"
+                >
+                  <Filter className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
                   <SelectValue placeholder="Filtrar ação" />
                 </SelectTrigger>
                 <SelectContent>
@@ -244,80 +318,96 @@ export default function AdminAudit() {
               </Select>
             </div>
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : filteredLogs.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {searchQuery || actionFilter !== "all" || from || to
-                ? "Nenhum log encontrado para os filtros selecionados"
-                : "Nenhum log registrado"}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data/Hora</TableHead>
-                    <TableHead>Usuário</TableHead>
-                    <TableHead>Ação</TableHead>
-                    <TableHead>Alvo</TableHead>
-                    <TableHead>IP</TableHead>
+        {/* Table */}
+        {isLoading ? (
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground text-sm">
+            {searchQuery || actionFilter !== "all" || from || to
+              ? "Nenhum log encontrado para os filtros selecionados"
+              : "Nenhum log registrado"}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Data/Hora
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Usuário
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Ação
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Alvo
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    IP
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredLogs.map((log) => (
+                  <TableRow
+                    key={log.id}
+                    className="hover:bg-muted/40 transition-colors"
+                    data-testid={`row-log-${log.id}`}
+                  >
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        {formatDate(log.createdAt)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <UserAvatar name={log.actorName || "Sistema"} />
+                        <div>
+                          <p className="text-sm font-medium leading-tight">
+                            {log.actorName || "Sistema"}
+                          </p>
+                          {log.actorEmail && (
+                            <p className="text-xs text-muted-foreground">
+                              {log.actorEmail}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <ActionBadge action={log.action} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {log.targetType && log.targetId ? (
+                        <span className="text-sm font-mono">
+                          {log.targetType}:{" "}
+                          <span className="text-xs">{log.targetId.slice(0, 8)}…</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {log.ip || "—"}
+                      </span>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLogs.map((log) => (
-                    <TableRow key={log.id} data-testid={`row-log-${log.id}`}>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {formatDate(log.createdAt)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="h-3.5 w-3.5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{log.actorName || "Sistema"}</p>
-                            {log.actorEmail && (
-                              <p className="text-xs text-muted-foreground">
-                                {log.actorEmail}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getActionBadgeVariant(log.action)}>
-                          {actionLabels[log.action] || log.action}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {log.targetType && log.targetId ? (
-                          <span className="text-sm">
-                            {log.targetType}: {log.targetId.slice(0, 8)}...
-                          </span>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground font-mono text-xs">
-                        {log.ip || "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
 
       {/* Pagination */}
       <div className="flex items-center justify-center gap-3">
@@ -329,7 +419,9 @@ export default function AdminAudit() {
         >
           Anterior
         </Button>
-        <span className="text-sm text-muted-foreground">Página {page}</span>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          Página {page}
+        </span>
         <Button
           variant="outline"
           size="sm"

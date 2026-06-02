@@ -186,19 +186,30 @@ function CopyFolderButton({ label, path }: { label: string; path: string }) {
 // ── Summary Card ─────────────────────────────────────────────────────────────
 
 function SummaryCard({
-  title, value, sub, icon: Icon, color,
-}: { title: string; value: string | number; sub?: string; icon: React.ElementType; color: string }) {
+  title, value, sub, icon: Icon, stripe, iconBg, iconColor,
+}: {
+  title: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  stripe: string;
+  iconBg: string;
+  iconColor: string;
+}) {
   return (
-    <Card>
-      <div className="flex flex-row items-center justify-between p-4 pb-2">
-        <span className="text-sm font-medium text-muted-foreground">{title}</span>
-        <Icon className={`h-4 w-4 ${color}`} />
+    <div className="rounded-xl border bg-card overflow-hidden">
+      <div className={`h-[3px] w-full ${stripe}`} />
+      <div className="p-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-3xl font-bold tabular-nums tracking-tight leading-none">{value}</p>
+          <p className="text-sm text-muted-foreground mt-2">{title}</p>
+          {sub && <p className="text-xs text-muted-foreground/70 mt-0.5">{sub}</p>}
+        </div>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 mt-0.5 ${iconBg}`}>
+          <Icon className={`h-4 w-4 ${iconColor}`} />
+        </div>
       </div>
-      <div className="px-4 pb-4">
-        <div className="text-2xl font-bold">{value}</div>
-        {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-      </div>
-    </Card>
+    </div>
   );
 }
 
@@ -218,19 +229,29 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
     unknown: { text: "Sem heartbeat", cls: "text-muted-foreground" },
   };
 
+  const healthPct = total > 0 ? Math.round((success / total) * 100) : 0;
+
   return (
     <Card
-      className="cursor-pointer select-none transition-colors hover:bg-muted/30"
+      className="cursor-pointer select-none transition-colors hover:bg-muted/30 overflow-hidden"
       onClick={() => setExpanded((v) => !v)}
     >
+      {/* Health stripe */}
+      <div
+        className={`h-[3px] w-full transition-all ${
+          procStatus === "running"
+            ? error > 0 ? "bg-amber-500" : "bg-green-500"
+            : procStatus === "offline" ? "bg-red-500" : "bg-muted"
+        }`}
+      />
+
       {/* ── Collapsed header (always visible) ── */}
       <CardHeader className="py-3 px-4">
         <div className="flex items-center gap-2">
           {watcherStatusDot(watcher.lastHeartbeatAt)}
           <span className="text-sm font-semibold leading-tight flex-1 truncate">{watcher.name}</span>
-          {/* Total shown only when collapsed — positioned between name and client badge */}
           {!expanded && total > 0 && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 tabular-nums">
               <Activity className="h-3 w-3" /> {total} hoje
             </span>
           )}
@@ -242,10 +263,10 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
           />
         </div>
 
-        {/* Status label only */}
         <span className={`text-xs font-medium mt-0.5 block ${procLabel[procStatus].cls}`}>
           {procLabel[procStatus].text}
         </span>
+
       </CardHeader>
 
       {/* ── Expanded details ── */}
@@ -309,11 +330,15 @@ export default function OpsCenter() {
   const summaryQuery = useQuery<OpsSummary>({
     queryKey: ["/api/ops/summary"],
     refetchInterval: REFETCH_INTERVAL,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const watchersQuery = useQuery<OpsWatcher[]>({
     queryKey: ["/api/ops/watchers"],
     refetchInterval: REFETCH_INTERVAL,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const eventsParams = new URLSearchParams();
@@ -395,13 +420,13 @@ export default function OpsCenter() {
           ))
         ) : (
           <>
-            <SummaryCard title="Total hoje"     value={summary?.total ?? 0}  icon={Activity}      color="text-primary" />
-            <SummaryCard title="Processados"    value={summary?.success ?? 0} sub="com sucesso"   icon={CheckCircle2}  color="text-green-500" />
-            <SummaryCard title="Erros"          value={summary?.error ?? 0}  sub="requerem atenção" icon={XCircle}    color="text-red-500" />
+            <SummaryCard title="Total hoje"     value={summary?.total ?? 0}  icon={Activity}      stripe="bg-primary"     iconBg="bg-primary/10"     iconColor="text-primary" />
+            <SummaryCard title="Processados"    value={summary?.success ?? 0} sub="com sucesso"   icon={CheckCircle2}  stripe="bg-green-500"   iconBg="bg-green-500/10"   iconColor="text-green-600 dark:text-green-400" />
+            <SummaryCard title="Erros"          value={summary?.error ?? 0}  sub="requerem atenção" icon={XCircle}    stripe="bg-red-500"     iconBg="bg-red-500/10"     iconColor="text-red-600 dark:text-red-400" />
             <SummaryCard title="Taxa de sucesso"
               value={summary?.successRate != null ? `${summary.successRate}%` : "—"}
               sub={summary?.warning ? `${summary.warning} avisos` : undefined}
-              icon={AlertTriangle} color="text-amber-500"
+              icon={AlertTriangle} stripe="bg-amber-500" iconBg="bg-amber-500/10" iconColor="text-amber-600 dark:text-amber-400"
             />
           </>
         )}
