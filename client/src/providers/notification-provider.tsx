@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { playNotify } from "@/lib/sound";
+import { initPushNotifications } from "@/lib/push-notifications";
 import type { Notification } from "@shared/schema";
 
 /**
@@ -22,6 +23,12 @@ export function NotificationProvider() {
   const lastSeenIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const shownIdsRef = useRef(new Set<string>());
+
+  // Inicializa Web Push quando o usuário está autenticado
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    initPushNotifications();
+  }, [isAuthenticated]);
 
   const { data: recent = [] } = useQuery<Notification[]>({
     queryKey: ["/api/notifications", "provider-poll"],

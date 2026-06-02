@@ -16,8 +16,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationProvider } from "@/providers/notification-provider";
-import { ThemeLogo } from "@/components/theme-logo";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoginLoadingScreen } from "@/components/login-loading-screen";
 import { primeAudio } from "@/lib/sound";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -150,7 +149,7 @@ function AuthenticatedLayout() {
 }
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isAuthenticating } = useAuth();
 
   // Unlock audio on first user gesture (works for any page, auth or not)
   useEffect(() => {
@@ -159,18 +158,8 @@ function AppContent() {
     return () => document.removeEventListener("pointerdown", onFirstGesture);
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <ThemeLogo className="h-12 w-auto" />
-          <div className="flex flex-col items-center gap-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-24" />
-          </div>
-        </div>
-      </div>
-    );
+  if (isLoading || isAuthenticating) {
+    return <LoginLoadingScreen />;
   }
 
   if (!isAuthenticated) {

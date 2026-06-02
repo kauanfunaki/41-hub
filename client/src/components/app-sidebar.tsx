@@ -241,21 +241,6 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {/* Analytics — menu principal */}
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.startsWith("/analytics")}
-                    data-testid="nav-analytics"
-                  >
-                    <Link href="/analytics">
-                      <LineChart className="h-4 w-4" />
-                      <span>Analytics</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -303,6 +288,22 @@ export function AppSidebar() {
                     <Link href="/admin/reports">
                       <BarChart2 className="h-4 w-4" />
                       <span>Relatórios</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {/* Analytics — admin only */}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location.startsWith("/analytics")}
+                    data-testid="nav-analytics"
+                  >
+                    <Link href="/analytics">
+                      <LineChart className="h-4 w-4" />
+                      <span>Analytics</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

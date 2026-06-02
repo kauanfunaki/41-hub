@@ -8,11 +8,21 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
+import webpush from "web-push";
 import { storage } from "./storage";
 import { pool } from "./db";
 import type { UserWithRoles } from "@shared/schema";
 import { emitEvent } from "./lib/webhooks";
 import { isEntraConfigured, getMsalClient } from "./lib/entra";
+
+// ── Web Push (VAPID) setup ──────────────────────────────────────────────────
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_EMAIL || "mailto:admin@41tech.com.br",
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 const SALT_ROUNDS = 12;
 const DEFAULT_PASSWORD = "41Tech@2026";
@@ -78,9 +88,10 @@ const ticketAttachmentStorage = multer.diskStorage({
   },
 });
 
+const TICKET_MAX_FILE_MB = 100;
 const ticketUpload = multer({
   storage: ticketAttachmentStorage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: TICKET_MAX_FILE_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "application/pdf", "video/mp4"];
     if (allowedTypes.includes(file.mimetype)) {
@@ -1987,31 +1998,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/tickets/:id/attachments", requireAuth, requireTicketAccess, ticketUpload.single("file"), async (req, res) => {
-    try {
-      const isUser = !req.user!.isAdmin && !req.user!.roles?.some(r => r.roleName === "Coordenador");
-      if (isUser) {
-        return res.status(403).json({ error: "Usuários não podem enviar anexos" });
-      }
-
-      const ticket = await storage.getTicketDetail(req.params.id, req.user!);
-      if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
-
-      if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
-
-      const attachment = await storage.addTicketAttachment(req.params.id, req.user!, {
-        originalName: req.file.originalname,
-        storageName: req.file.filename,
-        mimeType: req.file.mimetype,
-        sizeBytes: req.file.size,
-        attachmentKey: (req.body?.attachmentKey as string) || undefined,
+  app.post("/api/tickets/:id/attachments", requireAuth, requireTicketAccess,
+    // Intercepta erros do multer (ex: LIMIT_FILE_SIZE) antes do handler assíncrono
+    (req: Request, res: Response, next: NextFunction) => {
+      ticketUpload.single("file")(req, res, (err: any) => {
+        if (err) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(413).json({ error: `O arquivo excede o limite de ${TICKET_MAX_FILE_MB} MB` });
+          }
+          return res.status(400).json({ error: err.message || "Erro no upload" });
+        }
+        next();
       });
-      res.status(201).json(attachment);
-    } catch (error: any) {
-      console.error("Error uploading attachment:", error);
-      res.status(400).json({ error: error.message || "Failed to upload attachment" });
+    },
+    async (req, res) => {
+      try {
+        const isUser = !req.user!.isAdmin && !req.user!.roles?.some(r => r.roleName === "Coordenador");
+        if (isUser) {
+          return res.status(403).json({ error: "Usuários não podem enviar anexos" });
+        }
+
+        const ticket = await storage.getTicketDetail(req.params.id, req.user!);
+        if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
+
+        if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
+
+        const attachment = await storage.addTicketAttachment(req.params.id, req.user!, {
+          originalName: req.file.originalname,
+          storageName: req.file.filename,
+          mimeType: req.file.mimetype,
+          sizeBytes: req.file.size,
+          attachmentKey: (req.body?.attachmentKey as string) || undefined,
+        });
+        res.status(201).json(attachment);
+      } catch (error: any) {
+        console.error("Error uploading attachment:", error);
+        res.status(400).json({ error: error.message || "Failed to upload attachment" });
+      }
     }
-  });
+  );
 
   app.get("/api/tickets/:id/attachments/:attachmentId/download", requireAuth, requireTicketAccess, async (req, res) => {
     try {
@@ -2586,6 +2611,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error marking all notifications read:", error);
       res.status(500).json({ error: "Failed to mark all notifications read" });
+    }
+  });
+
+  // ── Web Push routes ──────────────────────────────────────────────────────
+
+  // Retorna a chave pública VAPID para o frontend se inscrever
+  app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
+    const key = process.env.VAPID_PUBLIC_KEY;
+    if (!key) return res.status(503).json({ error: "Push not configured" });
+    res.json({ publicKey: key });
+  });
+
+  // Salva a subscription do browser do usuário
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    const { endpoint, keys } = req.body ?? {};
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ error: "Invalid subscription payload" });
+    }
+    try {
+      await storage.savePushSubscription({
+        userId: req.user!.id,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving push subscription:", error);
+      res.status(500).json({ error: "Failed to save subscription" });
+    }
+  });
+
+  // Remove subscription (usuário desativou notificações)
+  app.delete("/api/push/unsubscribe", requireAuth, async (req, res) => {
+    const { endpoint } = req.body ?? {};
+    if (!endpoint) return res.status(400).json({ error: "endpoint required" });
+    try {
+      await storage.deletePushSubscription(endpoint);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting push subscription:", error);
+      res.status(500).json({ error: "Failed to delete subscription" });
     }
   });
 

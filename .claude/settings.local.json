@@ -30,7 +30,16 @@
       "Bash(ls -la \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\\\\\\\\client\\\\\\\\src\\\\\\\\pages\")",
       "Bash(ls -la \"C:\\\\\\\\Users\\\\\\\\kauan.brasileiro\\\\\\\\Documents\\\\\\\\1. Apps\\\\\\\\41-Tech-Hub\\\\\\\\docs\")",
       "mcp__obsidian__obsidian_write_note",
-      "mcp__obsidian__obsidian_list_notes"
+      "mcp__obsidian__obsidian_list_notes",
+      "Bash(npm install *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\kauan.brasileiro\\\\Documents\\\\1. Apps\\\\41-Tech-Hub\\\\client\\\\src\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Head -50)",
+      "WebFetch(domain:uiverse.io)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__get_page_text",
+      "mcp__Claude_in_Chrome__javascript_tool"
     ]
   }
 }
