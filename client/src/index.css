@@ -13,7 +13,7 @@
 
 /* Cor das bolinhas do loading — azul (primary) no light, branco no dark */
 :root {
-  --loading-ball-color: hsl(var(--primary));
+  --loading-ball-color: #243EA5;
 }
 .dark {
   --loading-ball-color: #ffffff;
