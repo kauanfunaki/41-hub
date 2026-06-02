@@ -152,9 +152,17 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
               {statusLabels[ticket.status]}
             </Badge>
             {ticket.assignees && ticket.assignees.length > 0 && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <User className="h-3 w-3" />
-                <span>{ticket.assignees.length}</span>
+              <div className="flex items-center gap-1 flex-wrap justify-end">
+                <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                {ticket.assignees.map((a) => (
+                  <Badge
+                    key={a.userId}
+                    variant="outline"
+                    className="text-xs px-1.5 py-0 h-5 font-normal"
+                  >
+                    {a.userName.split(" ")[0]}
+                  </Badge>
+                ))}
               </div>
             )}
           </div>

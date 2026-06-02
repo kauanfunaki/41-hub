@@ -454,7 +454,7 @@ export default function TicketsDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "attachments"] });
       toast({ title: "Anexo enviado" });
     },
-    onError: (e: any) => toast({ title: "Erro no upload", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Falha no envio do anexo", description: e.message || "Ocorreu um erro ao enviar o arquivo.", variant: "destructive" }),
   });
 
   const { data: checklist = [] } = useQuery<ChecklistItem[]>({
@@ -702,7 +702,17 @@ export default function TicketsDetail() {
                     input.accept = ".jpg,.jpeg,.png,.pdf,.mp4";
                     input.onchange = (e) => {
                       const file = (e.target as HTMLInputElement).files?.[0];
-                      if (file) uploadMutation.mutate(file);
+                      if (!file) return;
+                      const MAX_MB = 100;
+                      if (file.size > MAX_MB * 1024 * 1024) {
+                        toast({
+                          title: "Arquivo muito grande",
+                          description: `O arquivo excede o limite de ${MAX_MB} MB. Escolha um arquivo menor.`,
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      uploadMutation.mutate(file);
                     };
                     input.click();
                   }}

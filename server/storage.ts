@@ -72,7 +72,9 @@ import {
   type InsertTypingText,
   type TypingSession,
   type TypingScore,
+  pushSubscriptions,
 } from "@shared/schema";
+import webpush from "web-push";
 import { computeSlaDueDates, addBusinessMinutes, businessMinutesBetween } from "./lib/sla";
 
 // ── Schema-mismatch resilience ─────────────────────────────────────────────
@@ -302,6 +304,10 @@ export interface IStorage {
   countUnreadNotifications(userId: string): Promise<number>;
   markNotificationRead(userId: string, notificationId: string): Promise<boolean>;
   markAllNotificationsRead(userId: string): Promise<void>;
+
+  // Push subscriptions
+  savePushSubscription(data: { userId: string; endpoint: string; p256dh: string; auth: string }): Promise<void>;
+  deletePushSubscription(endpoint: string): Promise<void>;
 
   // Notification helpers
   getTicketAssigneeIds(ticketId: string): Promise<string[]>;
@@ -1797,7 +1803,44 @@ export class DatabaseStorage implements IStorage {
       data: payload.data || {},
       isRead: false,
     }));
-    await db.insert(notifications).values(values);
+    const inserted = await db.insert(notifications).values(values).returning({ id: notifications.id, userId: notifications.recipientUserId });
+
+    // Disparar Web Push em background (não bloqueia a resposta HTTP)
+    setImmediate(async () => {
+      try {
+        for (const notif of inserted) {
+          const subs = await db.select().from(pushSubscriptions)
+            .where(eq(pushSubscriptions.userId, notif.userId));
+          for (const sub of subs) {
+            try {
+              await webpush.sendNotification(
+                { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                JSON.stringify({ id: notif.id, title: payload.title, message: payload.message, linkUrl: payload.linkUrl })
+              );
+            } catch (pushErr: any) {
+              // 410 Gone = subscription expirada, limpar do banco
+              if (pushErr.statusCode === 410) {
+                await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, sub.endpoint));
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[push] Error sending web push:", err);
+      }
+    });
+  }
+
+  // ── Push subscription methods ─────────────────────────────────────────────
+
+  async savePushSubscription(data: { userId: string; endpoint: string; p256dh: string; auth: string }): Promise<void> {
+    await db.insert(pushSubscriptions)
+      .values({ userId: data.userId, endpoint: data.endpoint, p256dh: data.p256dh, auth: data.auth })
+      .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { userId: data.userId, p256dh: data.p256dh, auth: data.auth } });
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
   }
 
   async listUserNotifications(userId: string, opts: { limit?: number; offset?: number }): Promise<Notification[]> {
