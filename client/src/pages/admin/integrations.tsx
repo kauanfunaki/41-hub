@@ -1,5 +1,6 @@
 import { useState, useContext, createContext, useRef } from "react";
 import { PageContainer } from "@/components/page-container";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Puzzle,
@@ -15,7 +16,9 @@ import {
   Play,
   Loader2,
   X,
+  ArrowLeft,
 } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -550,11 +553,16 @@ export default function AdminIntegrations() {
     <PageContainer className="flex flex-col gap-6 py-6">
       {/* Header */}
       <div className="flex items-center gap-3">
+        <Link href="/admin">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10">
           <Puzzle className="h-5 w-5 text-violet-500" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold">Integrações</h1>
+          <h1 className="text-xl font-semibold text-foreground">Integrações</h1>
           <p className="text-sm text-muted-foreground">
             API REST, Tokens e Webhooks para integrações externas
           </p>
@@ -629,11 +637,14 @@ export default function AdminIntegrations() {
               ))}
             </div>
           ) : activeTokens.length === 0 ? (
-            <Card>
-              <CardContent className="py-10 text-center text-muted-foreground text-sm">
-                Nenhum token ativo. Crie um para começar a integrar.
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border bg-card">
+              <EmptyState
+                icon={Key}
+                title="Nenhum token ativo"
+                description="Crie um token para integrar sistemas externos."
+                action={<Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Novo token</Button>}
+              />
+            </div>
           ) : (
             <div className="space-y-2">
               {activeTokens.map((token) => (

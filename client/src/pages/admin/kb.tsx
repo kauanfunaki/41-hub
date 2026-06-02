@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Plus, Pencil, Trash2, Eye, ThumbsUp, ThumbsDown, Loader2, BookOpen, Search } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -221,9 +222,12 @@ export default function AdminKb() {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : articles.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground" data-testid="text-no-articles">
-              Nenhum artigo encontrado
-            </div>
+            <EmptyState
+              icon={BookOpen}
+              title="Nenhum artigo encontrado"
+              description={searchQuery || filterCategory !== "all" ? "Tente outros filtros." : "Crie artigos para a base de conhecimento."}
+              action={!searchQuery && filterCategory === "all" ? <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Novo Artigo</Button> : undefined}
+            />
           ) : (
             <Table>
               <TableHeader>

@@ -7,17 +7,19 @@ import {
   Bell,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   Activity,
   Star,
+  Clock,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RecentAccessSection } from "@/components/recent-access-section";
 import { ResourceCard } from "@/components/resource-card";
+import { SectionDivider } from "@/components/section-divider";
+import { SeverityBadge, SEVERITY_CONFIG } from "@/components/severity-badge";
+import type { AlertSeverity } from "@/components/severity-badge";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import type { ResourceWithHealth } from "@shared/schema";
 
 interface TicketStats {
@@ -30,34 +32,75 @@ interface AlertItem {
   id: string;
   title: string;
   message: string;
-  severity: "info" | "warning" | "critical";
+  severity: AlertSeverity;
   isRead: boolean;
   createdAt: string;
 }
 
-const severityBadge: Record<string, "default" | "secondary" | "destructive"> = {
-  info: "secondary",
-  warning: "default",
-  critical: "destructive",
-};
+// ── KPI Card ──────────────────────────────────────────────────────────────────
 
-const severityLabel: Record<string, string> = {
-  info: "Informação",
-  warning: "Atenção",
-  critical: "Crítico",
-};
+function KpiCard({
+  label,
+  value,
+  icon: Icon,
+  stripe,
+  iconBg,
+  iconColor,
+  onClick,
+  warning,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ComponentType<{ className?: string }>;
+  stripe: string;
+  iconBg: string;
+  iconColor: string;
+  onClick?: () => void;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card overflow-hidden",
+        onClick && "cursor-pointer hover:bg-accent transition-colors",
+        warning && "border-amber-500/30 bg-amber-500/5",
+      )}
+      onClick={onClick}
+    >
+      <div className={cn("h-[3px] w-full", stripe)} />
+      <div className="p-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-3xl font-bold tabular-nums tracking-tight leading-none">
+            {value}
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">{label}</p>
+        </div>
+        <div
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-lg shrink-0 mt-0.5",
+            iconBg,
+          )}
+        >
+          <Icon className={cn("h-4 w-4", iconColor)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
-  const { data: resources = [], isLoading: resourcesLoading } = useQuery<ResourceWithHealth[]>({
-    queryKey: ["/api/resources"],
-  });
+  const { data: resources = [], isLoading: resourcesLoading } = useQuery<
+    ResourceWithHealth[]
+  >({ queryKey: ["/api/resources"] });
 
-  const { data: recentResources = [], isLoading: recentLoading } = useQuery<ResourceWithHealth[]>({
-    queryKey: ["/api/resources/recent"],
-  });
+  const { data: recentResources = [], isLoading: recentLoading } = useQuery<
+    ResourceWithHealth[]
+  >({ queryKey: ["/api/resources/recent"] });
 
   const { data: ticketStats } = useQuery<{ tickets: TicketStats }>({
     queryKey: ["/api/admin/analytics/stats"],
@@ -67,13 +110,21 @@ export default function Home() {
   const { data: alertsRaw } = useQuery<AlertItem[] | { error: string }>({
     queryKey: ["/api/alerts?active=true"],
     queryFn: () =>
-      fetch("/api/alerts?active=true", { credentials: "include" }).then((r) => r.json()),
+      fetch("/api/alerts?active=true", { credentials: "include" }).then((r) =>
+        r.json(),
+      ),
     retry: false,
   });
   const alerts: AlertItem[] = Array.isArray(alertsRaw) ? alertsRaw : [];
 
   const toggleFavoriteMutation = useMutation({
-    mutationFn: async ({ resourceId, isFavorite }: { resourceId: string; isFavorite: boolean }) => {
+    mutationFn: async ({
+      resourceId,
+      isFavorite,
+    }: {
+      resourceId: string;
+      isFavorite: boolean;
+    }) => {
       if (isFavorite) {
         return apiRequest("POST", `/api/favorites/${resourceId}`);
       } else {
@@ -88,8 +139,12 @@ export default function Home() {
 
   const safeResources = Array.isArray(resources) ? resources : [];
   const favoriteResources = safeResources.filter((r) => r.isFavorite);
-  const resourcesDown = safeResources.filter((r) => r.healthStatus === "DOWN").length;
-  const resourcesDegraded = safeResources.filter((r) => r.healthStatus === "DEGRADED").length;
+  const resourcesDown = safeResources.filter(
+    (r) => r.healthStatus === "DOWN",
+  ).length;
+  const resourcesDegraded = safeResources.filter(
+    (r) => r.healthStatus === "DEGRADED",
+  ).length;
   const activeAlerts = alerts.filter((a) => !a.isRead);
   const criticalAlerts = activeAlerts.filter((a) => a.severity === "critical");
 
@@ -102,197 +157,199 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-8 p-6">
+      {/* Welcome */}
+      <div>
         <h1 className="text-2xl font-semibold text-foreground">
-          Olá, {user?.name?.split(" ")[0] || "Usuário"}
+          Olá, {user?.name?.split(" ")[0] || "Usuário"} 👋
         </h1>
-        <p className="text-muted-foreground">Bem-vindo ao portal corporativo 41 Tech</p>
+        <p className="text-muted-foreground text-sm mt-1">
+          Bem-vindo ao portal corporativo 41 Tech
+        </p>
       </div>
 
       {/* Critical alerts banner */}
       {criticalAlerts.length > 0 && (
         <div
-          className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 cursor-pointer"
+          className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/5 p-4 cursor-pointer hover:bg-red-500/8 transition-colors"
           onClick={() => setLocation("/alerts")}
         >
-          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10 shrink-0">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-destructive">
-              {criticalAlerts.length} alerta{criticalAlerts.length !== 1 ? "s" : ""} crítico
+            <p className="font-semibold text-sm text-red-700 dark:text-red-400">
+              {criticalAlerts.length} alerta
+              {criticalAlerts.length !== 1 ? "s" : ""} crítico
               {criticalAlerts.length !== 1 ? "s" : ""} ativo
               {criticalAlerts.length !== 1 ? "s" : ""}
             </p>
-            <p className="text-sm text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
               {criticalAlerts[0].title}
             </p>
           </div>
-          <Badge variant="destructive" className="shrink-0">Ver alertas</Badge>
+          <SeverityBadge severity="critical" />
         </div>
       )}
 
-      {/* Metrics cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card
-          className="hover-elevate cursor-pointer"
-          onClick={() => setLocation("/apps")}
-        >
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-              <LayoutGrid className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-xl font-semibold">
-                {safeResources.filter((r) => r.type === "APP").length}
-              </p>
-              <p className="text-xs text-muted-foreground">Aplicações</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="hover-elevate cursor-pointer"
-          onClick={() => setLocation("/dashboards")}
-        >
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-2/10 shrink-0">
-              <BarChart3 className="h-5 w-5 text-chart-2" />
-            </div>
-            <div>
-              <p className="text-xl font-semibold">
-                {safeResources.filter((r) => r.type === "DASHBOARD").length}
-              </p>
-              <p className="text-xs text-muted-foreground">Dashboards</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="hover-elevate cursor-pointer"
-          onClick={() => setLocation("/alerts")}
-        >
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 shrink-0">
-              <Bell className="h-5 w-5 text-amber-500" />
-            </div>
-            <div>
-              <p className="text-xl font-semibold">{activeAlerts.length}</p>
-              <p className="text-xs text-muted-foreground">Alertas ativos</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {resourcesDown + resourcesDegraded > 0 ? (
-          <Card className="border-amber-500/20 bg-amber-500/5">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 shrink-0">
-                <Activity className="h-5 w-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold">{resourcesDown + resourcesDegraded}</p>
-                <p className="text-xs text-muted-foreground">Recursos c/ problema</p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10 shrink-0">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold">{safeResources.length}</p>
-                <p className="text-xs text-muted-foreground">Recursos OK</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Admin ticket stats */}
-      {user?.isAdmin && ticketStats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Card className="hover-elevate cursor-pointer" onClick={() => setLocation("/tickets")}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 shrink-0">
-                <Ticket className="h-5 w-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold">{ticketStats.tickets?.open ?? "—"}</p>
-                <p className="text-xs text-muted-foreground">Chamados abertos</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="hover-elevate cursor-pointer" onClick={() => setLocation("/tickets")}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10 shrink-0">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold">{ticketStats.tickets?.resolved ?? "—"}</p>
-                <p className="text-xs text-muted-foreground">Resolvidos</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="hover-elevate cursor-pointer" onClick={() => setLocation("/tickets")}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10 shrink-0">
-                <Clock className="h-5 w-5 text-slate-500" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold">{ticketStats.tickets?.total ?? "—"}</p>
-                <p className="text-xs text-muted-foreground">Total de chamados</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Active alerts list */}
-      {activeAlerts.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              Alertas recentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {activeAlerts.slice(0, 3).map((alert) => (
-              <div
-                key={alert.id}
-                className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => setLocation("/alerts")}
-              >
-                <Badge variant={severityBadge[alert.severity] ?? "secondary"} className="shrink-0 mt-0.5 text-xs">
-                  {severityLabel[alert.severity] ?? alert.severity}
-                </Badge>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{alert.title}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-1">{alert.message}</p>
+      {/* ── Recursos KPIs ─────────────────────────────────────────── */}
+      <section className="space-y-3">
+        <SectionDivider icon={Activity} label="Visão Geral" />
+        {resourcesLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-card overflow-hidden">
+                <div className="h-[3px] bg-muted w-full" />
+                <div className="p-4 space-y-2">
+                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-3 w-24" />
                 </div>
               </div>
             ))}
-            {activeAlerts.length > 3 && (
-              <p
-                className="text-xs text-muted-foreground text-center cursor-pointer hover:underline"
-                onClick={() => setLocation("/alerts")}
-              >
-                Ver mais {activeAlerts.length - 3} alertas
-              </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <KpiCard
+              label="Aplicações"
+              value={safeResources.filter((r) => r.type === "APP").length}
+              icon={LayoutGrid}
+              stripe="bg-primary"
+              iconBg="bg-primary/10"
+              iconColor="text-primary"
+              onClick={() => setLocation("/apps")}
+            />
+            <KpiCard
+              label="Dashboards"
+              value={safeResources.filter((r) => r.type === "DASHBOARD").length}
+              icon={BarChart3}
+              stripe="bg-chart-2"
+              iconBg="bg-chart-2/10"
+              iconColor="text-chart-2"
+              onClick={() => setLocation("/dashboards")}
+            />
+            <KpiCard
+              label="Alertas ativos"
+              value={activeAlerts.length}
+              icon={Bell}
+              stripe="bg-amber-500"
+              iconBg="bg-amber-500/10"
+              iconColor="text-amber-500"
+              onClick={() => setLocation("/alerts")}
+            />
+            {resourcesDown + resourcesDegraded > 0 ? (
+              <KpiCard
+                label="Recursos c/ problema"
+                value={resourcesDown + resourcesDegraded}
+                icon={Activity}
+                stripe="bg-amber-500"
+                iconBg="bg-amber-500/10"
+                iconColor="text-amber-500"
+                warning
+              />
+            ) : (
+              <KpiCard
+                label="Recursos OK"
+                value={safeResources.length}
+                icon={CheckCircle2}
+                stripe="bg-green-500"
+                iconBg="bg-green-500/10"
+                iconColor="text-green-600 dark:text-green-400"
+              />
             )}
-          </CardContent>
-        </Card>
+          </div>
+        )}
+      </section>
+
+      {/* ── Admin: Chamados ───────────────────────────────────────── */}
+      {user?.isAdmin && ticketStats && (
+        <section className="space-y-3">
+          <SectionDivider icon={Ticket} label="Chamados" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <KpiCard
+              label="Chamados abertos"
+              value={ticketStats.tickets?.open ?? "—"}
+              icon={Ticket}
+              stripe="bg-blue-500"
+              iconBg="bg-blue-500/10"
+              iconColor="text-blue-500"
+              onClick={() => setLocation("/tickets")}
+            />
+            <KpiCard
+              label="Resolvidos"
+              value={ticketStats.tickets?.resolved ?? "—"}
+              icon={CheckCircle2}
+              stripe="bg-green-500"
+              iconBg="bg-green-500/10"
+              iconColor="text-green-600 dark:text-green-400"
+              onClick={() => setLocation("/tickets")}
+            />
+            <KpiCard
+              label="Total de chamados"
+              value={ticketStats.tickets?.total ?? "—"}
+              icon={Clock}
+              stripe="bg-muted-foreground/30"
+              iconBg="bg-muted"
+              iconColor="text-muted-foreground"
+              onClick={() => setLocation("/tickets")}
+            />
+          </div>
+        </section>
       )}
 
-      {/* Favoritos */}
+      {/* ── Alertas Ativos ────────────────────────────────────────── */}
+      {activeAlerts.length > 0 && (
+        <section className="space-y-3">
+          <SectionDivider
+            icon={Bell}
+            label={`Alertas Ativos (${activeAlerts.length})`}
+          />
+          <div className="space-y-2">
+            {activeAlerts.slice(0, 3).map((alert) => {
+              const cfg =
+                SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.info;
+              const SevIcon = cfg.icon;
+              return (
+                <div
+                  key={alert.id}
+                  className="flex items-stretch rounded-xl border bg-card overflow-hidden cursor-pointer hover:bg-accent transition-colors"
+                  onClick={() => setLocation("/alerts")}
+                >
+                  <div className={`w-1 shrink-0 ${cfg.stripe}`} />
+                  <div className="flex items-center gap-3 p-3 flex-1 min-w-0">
+                    <div
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 ${cfg.iconBg}`}
+                    >
+                      <SevIcon className={`h-4 w-4 ${cfg.iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <SeverityBadge severity={alert.severity} />
+                      </div>
+                      <p className="text-sm font-semibold truncate leading-tight">
+                        {alert.title}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {activeAlerts.length > 3 && (
+              <button
+                className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-2 hover:underline transition-colors"
+                onClick={() => setLocation("/alerts")}
+              >
+                Ver mais {activeAlerts.length - 3} alerta
+                {activeAlerts.length - 3 !== 1 ? "s" : ""}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── Favoritos ─────────────────────────────────────────────── */}
       {favoriteResources.length > 0 && (
-        <div>
-          <h2 className="text-base font-medium mb-3 flex items-center gap-2">
-            <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-            Favoritos
-          </h2>
+        <section className="space-y-3">
+          <SectionDivider icon={Star} label="Favoritos" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {favoriteResources.map((resource) => (
               <ResourceCard
@@ -304,10 +361,10 @@ export default function Home() {
               />
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Acessados recentemente */}
+      {/* ── Recentes ──────────────────────────────────────────────── */}
       <RecentAccessSection
         resources={recentResources}
         isLoading={recentLoading}

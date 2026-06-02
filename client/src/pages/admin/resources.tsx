@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SearchInput } from "@/components/search-input";
+import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -285,9 +286,12 @@ export default function AdminResources() {
               ))}
             </div>
           ) : filteredResources.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {searchQuery ? "Nenhum recurso encontrado" : "Nenhum recurso cadastrado"}
-            </div>
+            <EmptyState
+              icon={Layout}
+              title={searchQuery ? "Nenhum recurso encontrado" : "Nenhum recurso cadastrado"}
+              description={searchQuery ? "Tente outro termo de busca." : "Adicione aplicações e dashboards ao Hub."}
+              action={!searchQuery ? <Button onClick={handleOpenCreate}><Plus className="h-4 w-4 mr-2" />Novo Recurso</Button> : undefined}
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

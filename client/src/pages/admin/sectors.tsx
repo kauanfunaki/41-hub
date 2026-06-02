@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { EmptyState } from "@/components/empty-state";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Sector } from "@shared/schema";
 
@@ -165,9 +166,12 @@ export default function AdminSectors() {
               ))}
             </div>
           ) : sectors.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum setor cadastrado
-            </div>
+            <EmptyState
+              icon={Building2}
+              title="Nenhum setor cadastrado"
+              description="Crie um setor para organizar usuários e recursos."
+              action={<Button onClick={handleOpenCreate}><Plus className="h-4 w-4 mr-2" />Novo Setor</Button>}
+            />
           ) : (
             <Table>
               <TableHeader>

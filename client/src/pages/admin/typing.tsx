@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -163,11 +164,14 @@ export default function AdminTyping() {
           ))}
         </div>
       ) : texts.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Nenhum texto cadastrado. Clique em "Novo Texto" para adicionar.
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border bg-card">
+          <EmptyState
+            icon={Keyboard}
+            title="Nenhum texto cadastrado"
+            description="Adicione textos para o teste de digitação."
+            action={<Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Novo Texto</Button>}
+          />
+        </div>
       ) : (
         <div className="space-y-3">
           {texts.map((t) => (

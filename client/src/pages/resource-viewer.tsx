@@ -5,7 +5,7 @@ import { ArrowLeft, ExternalLink, Star, AlertCircle, Monitor, Layout, AlertTrian
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/empty-state";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
@@ -132,57 +132,34 @@ export default function ResourceViewer() {
 
   if (error || !resource) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6">
-        <Card className="max-w-md w-full">
-          <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <AlertCircle className="h-6 w-6 text-destructive" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Recurso não encontrado</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                O recurso solicitado não existe ou você não tem permissão para acessá-lo.
-              </p>
-            </div>
-            <Button onClick={() => setLocation("/")} data-testid="button-go-home">
-              Voltar para o início
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="rounded-xl border bg-card max-w-md w-full">
+          <EmptyState
+            icon={AlertCircle}
+            title="Recurso não encontrado"
+            description="O recurso solicitado não existe ou você não tem permissão para acessá-lo."
+            action={<Button onClick={() => setLocation("/")} data-testid="button-go-home">Voltar para o início</Button>}
+          />
+        </div>
       </div>
     );
   }
 
   const renderNewTabOnlyMessage = () => (
-    <div className="flex flex-col items-center justify-center h-full p-6">
-      <Card className="max-w-lg w-full">
-        <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-          <div
-            className={cn(
-              "flex h-16 w-16 items-center justify-center rounded-lg",
-              resource.type === "APP"
-                ? "bg-primary/10 text-primary"
-                : "bg-chart-2/10 text-chart-2"
-            )}
-          >
-            <ExternalLink className="h-8 w-8" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">{resource.name}</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Este recurso foi aberto em uma nova aba
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => openInNewTab(resource.url!)}
-            data-testid="button-open-external"
-          >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Abrir novamente
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="flex items-center justify-center h-full p-6">
+      <div className="rounded-xl border bg-card max-w-lg w-full">
+        <EmptyState
+          icon={ExternalLink}
+          title={resource.name}
+          description="Este recurso foi aberto em uma nova aba"
+          action={
+            <Button variant="outline" onClick={() => openInNewTab(resource.url!)} data-testid="button-open-external">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Abrir novamente
+            </Button>
+          }
+        />
+      </div>
     </div>
   );
 
@@ -193,39 +170,21 @@ export default function ResourceViewer() {
     if (hasIssue && !isAdmin) {
       const isDown = health === "DOWN";
       return (
-        <div className="flex flex-col items-center justify-center h-full p-6">
-          <Card className="max-w-md w-full">
-            <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-full",
-                isDown ? "bg-destructive/10" : "bg-amber-500/10"
-              )}>
-                {isDown ? (
-                  <AlertTriangle className="h-6 w-6 text-destructive" />
-                ) : (
-                  <Wrench className="h-6 w-6 text-amber-500" />
-                )}
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">
-                  {isDown ? "Recurso fora do ar" : "Recurso em manutenção"}
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {resource.healthMessage
-                    ? resource.healthMessage
-                    : isDown
-                    ? "Este recurso está temporariamente fora do ar. Por favor, tente novamente mais tarde."
-                    : "Este recurso está em manutenção no momento."}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setLocation("/alerts")}
-              >
-                Ver alertas
-              </Button>
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center h-full p-6">
+          <div className="rounded-xl border bg-card max-w-md w-full">
+            <EmptyState
+              icon={isDown ? AlertTriangle : Wrench}
+              title={isDown ? "Recurso fora do ar" : "Recurso em manutenção"}
+              description={
+                resource.healthMessage
+                  ? resource.healthMessage
+                  : isDown
+                  ? "Este recurso está temporariamente fora do ar. Tente novamente mais tarde."
+                  : "Este recurso está em manutenção no momento."
+              }
+              action={<Button variant="outline" onClick={() => setLocation("/alerts")}>Ver alertas</Button>}
+            />
+          </div>
         </div>
       );
     }
@@ -235,22 +194,15 @@ export default function ResourceViewer() {
       if (resource.url) {
         return renderNewTabOnlyMessage();
       }
-      // NEW_TAB_ONLY without URL - show not configured message
       return (
-        <div className="flex flex-col items-center justify-center h-full p-6">
-          <Card className="max-w-md w-full">
-            <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <AlertCircle className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">Recurso não configurado</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Este recurso está configurado para abrir em nova aba, mas a URL não foi definida.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center h-full p-6">
+          <div className="rounded-xl border bg-card max-w-md w-full">
+            <EmptyState
+              icon={AlertCircle}
+              title="Recurso não configurado"
+              description="Este recurso está configurado para abrir em nova aba, mas a URL não foi definida."
+            />
+          </div>
         </div>
       );
     }
@@ -269,101 +221,61 @@ export default function ResourceViewer() {
 
     if (resource.embedMode === "POWERBI") {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-6">
-          <Card className="max-w-lg w-full">
-            <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-chart-2/10">
-                <svg className="h-8 w-8 text-chart-2" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zm-7-2h-2V9h2v8zm-4 0H6v-5h2v5zm8 0h-2V7h2v10z"/>
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">Dashboard Power BI</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {resource.name}
-                </p>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                A integração completa do Power BI será configurada quando as credenciais estiverem disponíveis.
-              </p>
-              {resource.url && openBehavior !== "HUB_ONLY" && (
-                <Button
-                  variant="outline"
-                  onClick={() => openInNewTab(resource.url!)}
-                  data-testid="button-open-powerbi"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir no Power BI
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center h-full p-6">
+          <div className="rounded-xl border bg-card max-w-lg w-full">
+            <EmptyState
+              icon={Layout}
+              title={resource.name}
+              description="A integração completa do Power BI será configurada quando as credenciais estiverem disponíveis."
+              action={
+                resource.url && openBehavior !== "HUB_ONLY" ? (
+                  <Button variant="outline" onClick={() => openInNewTab(resource.url!)} data-testid="button-open-powerbi">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Abrir no Power BI
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
         </div>
       );
     }
 
     if (resource.embedMode === "LINK" && resource.url) {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-6">
-          <Card className="max-w-lg w-full">
-            <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-              <div
-                className={cn(
-                  "flex h-16 w-16 items-center justify-center rounded-lg",
-                  resource.type === "APP"
-                    ? "bg-primary/10 text-primary"
-                    : "bg-chart-2/10 text-chart-2"
-                )}
-              >
-                {resource.type === "APP" ? (
-                  <Monitor className="h-8 w-8" />
+        <div className="flex items-center justify-center h-full p-6">
+          <div className="rounded-xl border bg-card max-w-lg w-full">
+            <EmptyState
+              icon={resource.type === "APP" ? Monitor : Layout}
+              title={resource.name}
+              description={resource.sectorName ?? undefined}
+              action={
+                openBehavior !== "HUB_ONLY" ? (
+                  <Button onClick={() => openInNewTab(resource.url!)} data-testid="button-open-external">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Abrir em nova aba
+                  </Button>
                 ) : (
-                  <Layout className="h-8 w-8" />
-                )}
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">{resource.name}</h2>
-                {resource.sectorName && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {resource.sectorName}
+                  <p className="text-xs text-muted-foreground">
+                    Este recurso pode ser acessado apenas através do Hub
                   </p>
-                )}
-              </div>
-              {openBehavior !== "HUB_ONLY" && (
-                <Button
-                  onClick={() => openInNewTab(resource.url!)}
-                  data-testid="button-open-external"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir em nova aba
-                </Button>
-              )}
-              {openBehavior === "HUB_ONLY" && (
-                <p className="text-xs text-muted-foreground">
-                  Este recurso pode ser acessado apenas através do Hub
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                )
+              }
+            />
+          </div>
         </div>
       );
     }
 
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6">
-        <Card className="max-w-md w-full">
-          <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <AlertCircle className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Recurso não configurado</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Este recurso ainda não foi configurado corretamente.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="rounded-xl border bg-card max-w-md w-full">
+          <EmptyState
+            icon={AlertCircle}
+            title="Recurso não configurado"
+            description="Este recurso ainda não foi configurado corretamente."
+          />
+        </div>
       </div>
     );
   };

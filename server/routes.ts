@@ -796,6 +796,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const updateMeSchema = z.object({
         themePref: z.enum(["light", "dark"]).optional(),
         whatsapp: z.string().min(8).max(20).nullable().optional(),
+        tutorialCompleted: z.boolean().optional(),
       });
 
       const parsed = updateMeSchema.safeParse(req.body);
@@ -809,6 +810,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (parsed.data.whatsapp !== undefined) {
         updates.whatsapp = parsed.data.whatsapp;
+      }
+      if (parsed.data.tutorialCompleted !== undefined) {
+        updates.tutorialCompleted = parsed.data.tutorialCompleted;
       }
 
       if (Object.keys(updates).length === 0) {

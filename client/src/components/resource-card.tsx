@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { Star, ExternalLink, Monitor, BarChart3, AlertTriangle, Wrench } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Star, ExternalLink, AlertTriangle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,7 +28,7 @@ interface ResourceCardProps {
 }
 
 const getIcon = (iconName: string) => {
-  const icons = LucideIcons as Record<string, React.ComponentType<{ className?: string }>>;
+  const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>;
   const Icon = icons[iconName] || LucideIcons.Layout;
   return Icon;
 };
@@ -93,15 +91,15 @@ export function ResourceCard({
 
   return (
     <>
-    <Card
+    <div
       className={cn(
-        "group relative hover-elevate cursor-pointer transition-all duration-200",
+        "rounded-xl border bg-card group relative cursor-pointer hover:bg-accent transition-colors",
         hasIssue && "border-amber-500/30"
       )}
       onClick={handleClick}
       data-testid={`card-resource-${resource.id}`}
     >
-      <CardContent className="p-4">
+      <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div
@@ -110,11 +108,7 @@ export function ResourceCard({
                 isApp ? "bg-primary/10 text-primary" : "bg-chart-2/10 text-chart-2"
               )}
             >
-              {isApp ? (
-                <Monitor className="h-6 w-6" />
-              ) : (
-                <BarChart3 className="h-6 w-6" />
-              )}
+              <Icon className="h-6 w-6" />
             </div>
 
             <div className="flex flex-col gap-1 min-w-0">
@@ -149,29 +143,32 @@ export function ResourceCard({
               )}
 
               {hasIssue && (
-                <Badge
-                  variant={resource.healthStatus === "DOWN" ? "destructive" : "outline"}
-                  className="text-xs w-fit mt-0.5"
+                <span
+                  className={cn(
+                    "inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border w-fit mt-0.5",
+                    displayHealth === "DOWN"
+                      ? "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
+                      : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                  )}
                 >
                   {getStatusLabel(displayHealth)}
-                </Badge>
+                </span>
               )}
 
               {resource.tags && resource.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {resource.tags.slice(0, 3).map((tag) => (
-                    <Badge
+                    <span
                       key={tag}
-                      variant="secondary"
-                      className="text-xs px-1.5 py-0"
+                      className="inline-flex items-center text-xs px-1.5 py-0.5 rounded-md bg-secondary text-secondary-foreground"
                     >
                       {tag}
-                    </Badge>
+                    </span>
                   ))}
                   {resource.tags.length > 3 && (
-                    <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                    <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded-md bg-secondary text-secondary-foreground">
                       +{resource.tags.length - 3}
-                    </Badge>
+                    </span>
                   )}
                 </div>
               )}
@@ -212,8 +209,8 @@ export function ResourceCard({
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
 
     <Dialog open={showHealthModal} onOpenChange={setShowHealthModal}>
       <DialogContent>
