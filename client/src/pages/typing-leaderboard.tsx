@@ -155,7 +155,7 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
         style={{
           background: cfg.cardGradient,
           border: `1px solid ${cfg.borderColor}`,
-          boxShadow: `0 0 24px ${cfg.glowColor}, 0 4px 16px rgba(0,0,0,0.2)`,
+          boxShadow: `0 0 24px ${cfg.glowColor}, 0 4px 12px rgba(0,0,0,0.08)`,
         }}
       >
         {/* Shimmer sutil no 1º lugar */}
@@ -163,7 +163,7 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)",
+              background: "linear-gradient(105deg, transparent 40%, rgba(245,158,11,0.12) 50%, transparent 60%)",
               animation: "podiumShimmer 3s ease-in-out infinite",
             }}
           />
@@ -260,43 +260,30 @@ function PodiumSection({
   sorted.forEach((e) => { byRank[e.rank] = e; });
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: "linear-gradient(160deg, rgba(15,15,20,0.95) 0%, rgba(20,18,14,0.98) 100%)",
-        border: "1px solid rgba(245,158,11,0.15)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-      }}
-    >
+    <div className="rounded-2xl overflow-hidden bg-card border border-border shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Trophy className="h-5 w-5 text-yellow-500" />
           <div>
-            <p className="text-xs font-semibold tracking-widest uppercase text-yellow-500/70">
+            <p className="text-xs font-semibold tracking-widest uppercase text-yellow-500/80">
               Pódio do mês
             </p>
             <p className="text-base font-bold text-foreground">{monthLabel}</p>
           </div>
         </div>
 
-        {/* Seletor de dificuldade */}
-        <div
-          className="flex gap-1 p-1 rounded-xl"
-          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >
+        {/* Seletor de dificuldade — theme-aware */}
+        <div className="flex gap-1 p-1 rounded-xl bg-muted border border-border">
           {(["easy", "medium", "hard"] as const).map((lv) => (
             <button
               key={lv}
               onClick={() => setPodiumLevel(lv)}
-              className="px-3 py-1 rounded-lg text-xs font-semibold transition-all duration-200"
-              style={{
-                background: podiumLevel === lv
-                  ? "rgba(245,158,11,0.25)"
-                  : "transparent",
-                color: podiumLevel === lv ? "#F59E0B" : "rgba(255,255,255,0.45)",
-                border: podiumLevel === lv ? "1px solid rgba(245,158,11,0.4)" : "1px solid transparent",
-              }}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all duration-200 border ${
+                podiumLevel === lv
+                  ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/40"
+                  : "text-muted-foreground hover:text-foreground border-transparent"
+              }`}
             >
               {LEVEL_LABELS[lv]}
             </button>

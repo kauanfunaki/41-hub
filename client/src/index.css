@@ -11,6 +11,14 @@
   scrollbar-width: none;    /* Firefox */
 }
 
+/* Cor das bolinhas do loading — azul (primary) no light, branco no dark */
+:root {
+  --loading-ball-color: hsl(var(--primary));
+}
+.dark {
+  --loading-ball-color: #ffffff;
+}
+
 /* Login loading animation */
 @keyframes circle7124 {
   0% {
