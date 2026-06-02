@@ -30,7 +30,7 @@ export function LoginLoadingScreen() {
               height: 20,
               position: "absolute",
               borderRadius: "50%",
-              backgroundColor: "#ffffff",
+              backgroundColor: "var(--loading-ball-color)",
               left: i === 2 ? "auto" : i === 0 ? "15%" : "45%",
               right: i === 2 ? "15%" : "auto",
               transformOrigin: "50%",
