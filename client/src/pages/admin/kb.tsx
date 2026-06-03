@@ -15,12 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -299,69 +300,104 @@ export default function AdminKb() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingArticle ? "Editar Artigo" : "Novo Artigo"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="kb-title">Título</Label>
-              <Input
-                id="kb-title"
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="Título do artigo"
-                data-testid="input-article-title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="kb-category">Categoria</Label>
-              <Select value={formCategoryId || "none"} onValueChange={(v) => setFormCategoryId(v === "none" ? "" : v)}>
-                <SelectTrigger data-testid="select-article-category">
-                  <SelectValue placeholder="Selecione a categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem categoria</SelectItem>
-                  {leafCategories.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="kb-body">Conteúdo</Label>
-              <Textarea
-                id="kb-body"
-                value={formBody}
-                onChange={(e) => setFormBody(e.target.value)}
-                placeholder="Conteúdo do artigo..."
-                rows={12}
-                data-testid="input-article-body"
-              />
-            </div>
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-xl p-0" data-testid="sheet-article-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <div className="flex items-center gap-3">
-              <Switch
-                checked={formPublished}
-                onCheckedChange={setFormPublished}
-                data-testid="switch-article-published"
-              />
-              <Label>Publicado</Label>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1 shrink-0">
+                <BookOpen className="h-5 w-5" />
+              </div>
+              <div>
+                <SheetTitle>{editingArticle ? "Editar Artigo" : "Novo Artigo"}</SheetTitle>
+                <SheetDescription>
+                  {editingArticle ? "Altere o artigo da base de conhecimento" : "Adicione um artigo à base de conhecimento"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {/* Identidade */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identidade</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="kb-title">Título</Label>
+                  <Input
+                    id="kb-title"
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="Título do artigo"
+                    data-testid="input-article-title"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="kb-category">Categoria</Label>
+                  <Select value={formCategoryId || "none"} onValueChange={(v) => setFormCategoryId(v === "none" ? "" : v)}>
+                    <SelectTrigger data-testid="select-article-category">
+                      <SelectValue placeholder="Selecione a categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem categoria</SelectItem>
+                      {leafCategories.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Conteúdo */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conteúdo</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="kb-body">Texto do artigo</Label>
+                  <Textarea
+                    id="kb-body"
+                    value={formBody}
+                    onChange={(e) => setFormBody(e.target.value)}
+                    placeholder="Conteúdo do artigo..."
+                    rows={12}
+                    data-testid="input-article-body"
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Publicação */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Publicação</Label>
+                <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Artigo publicado</p>
+                    <p className="text-xs text-muted-foreground">Visível na base de conhecimento dos usuários</p>
+                  </div>
+                  <Switch
+                    checked={formPublished}
+                    onCheckedChange={setFormPublished}
+                    data-testid="switch-article-published"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
+              <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={isPending || !formTitle.trim() || !formBody.trim()}
+                data-testid="button-save-article"
+              >
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                {editingArticle ? "Salvar alterações" : "Criar artigo"}
+              </Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isPending || !formTitle.trim() || !formBody.trim()}
-              data-testid="button-save-article"
-            >
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {editingArticle ? "Salvar" : "Criar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
