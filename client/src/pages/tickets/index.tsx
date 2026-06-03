@@ -100,14 +100,23 @@ function getSlaStatus(
   };
 }
 
+function toSentenceCase(str: string): string {
+  if (!str) return str;
+  if (str === str.toUpperCase() && str.length > 3) {
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  }
+  return str;
+}
+
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
+  return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(dateStr));
 }
 
 // ── Ticket card ──────────────────────────────────────────────────────────────
@@ -127,7 +136,7 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
         <div className="flex flex-1 items-center gap-4 p-4 min-w-0">
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm leading-tight truncate">
-              {ticket.title}
+              {toSentenceCase(ticket.title)}
             </p>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5 flex-wrap">
               <span className="font-medium text-foreground/60">

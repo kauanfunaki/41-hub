@@ -10,6 +10,8 @@ import {
   Activity,
   Star,
   Clock,
+  ArrowRight,
+  Rss,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RecentAccessSection } from "@/components/recent-access-section";
@@ -26,6 +28,23 @@ interface TicketStats {
   open: string;
   resolved: string;
   total: string;
+}
+
+interface MyTicket {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  categoryName?: string | null;
+  createdAt: string;
+  slaStatus?: string;
+}
+
+interface OpsStats {
+  totalToday: number;
+  successToday: number;
+  errorsToday: number;
+  successRate: number;
 }
 
 interface AlertItem {
@@ -106,6 +125,24 @@ export default function Home() {
     queryKey: ["/api/admin/analytics/stats"],
     enabled: user?.isAdmin === true,
   });
+
+  const { data: myTicketsRaw } = useQuery<MyTicket[] | unknown>({
+    queryKey: ["/api/tickets?limit=5"],
+    queryFn: () => fetch("/api/tickets?limit=5", { credentials: "include" }).then(r => r.json()),
+    retry: false,
+  });
+  const myTickets: MyTicket[] = Array.isArray(myTicketsRaw) ? myTicketsRaw.filter((t: MyTicket) =>
+    ["ABERTO", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"].includes(t.status)
+  ).slice(0, 4) : [];
+
+  const { data: opsStatsRaw } = useQuery<OpsStats | unknown>({
+    queryKey: ["/api/ops/stats"],
+    queryFn: () => fetch("/api/ops/stats", { credentials: "include" }).then(r => r.json()),
+    enabled: user?.isAdmin === true,
+    retry: false,
+  });
+  const opsStats = opsStatsRaw && typeof opsStatsRaw === "object" && "totalToday" in (opsStatsRaw as object)
+    ? (opsStatsRaw as OpsStats) : null;
 
   const { data: alertsRaw } = useQuery<AlertItem[] | { error: string }>({
     queryKey: ["/api/alerts?active=true"],
@@ -292,6 +329,87 @@ export default function Home() {
               iconColor="text-muted-foreground"
               onClick={() => setLocation("/tickets")}
             />
+          </div>
+        </section>
+      )}
+
+      {/* ── Meus Chamados Ativos ─────────────────────────────────── */}
+      {myTickets.length > 0 && (
+        <section className="space-y-3">
+          <SectionDivider icon={Ticket} label={`Meus Chamados Ativos (${myTickets.length})`} />
+          <div className="space-y-2">
+            {myTickets.map((ticket) => {
+              const priorityColor: Record<string, string> = {
+                URGENTE: "bg-red-500", ALTA: "bg-amber-500",
+                MEDIA: "bg-blue-500", BAIXA: "bg-slate-400",
+              };
+              const statusLabel: Record<string, string> = {
+                ABERTO: "Aberto", EM_ANDAMENTO: "Em andamento",
+                AGUARDANDO_USUARIO: "Aguard. usuário", AGUARDANDO_APROVACAO: "Aguard. aprovação",
+              };
+              return (
+                <div
+                  key={ticket.id}
+                  className="flex items-stretch rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer overflow-hidden"
+                  onClick={() => setLocation(`/tickets/${ticket.id}`)}
+                >
+                  <div className={cn("w-1 shrink-0", priorityColor[ticket.priority] ?? "bg-muted")} />
+                  <div className="flex flex-1 items-center gap-3 px-4 py-3 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-tight truncate">
+                        {ticket.title?.charAt(0).toUpperCase()}
+                        {ticket.title?.slice(1).toLowerCase()}
+                      </p>
+                      {ticket.categoryName && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{ticket.categoryName}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {statusLabel[ticket.status] ?? ticket.status}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  </div>
+                </div>
+              );
+            })}
+            <button
+              className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-2 hover:underline transition-colors"
+              onClick={() => setLocation("/tickets")}
+            >
+              Ver todos os chamados →
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* ── Ops Center (admin) ────────────────────────────────────── */}
+      {user?.isAdmin && opsStats && (
+        <section className="space-y-3">
+          <SectionDivider icon={Rss} label="Ops Center — Hoje" />
+          <div
+            className="grid grid-cols-3 gap-3 cursor-pointer"
+            onClick={() => setLocation("/ops")}
+          >
+            <div className="rounded-xl border bg-card p-4 text-center hover:bg-accent transition-colors">
+              <p className="text-2xl font-bold tabular-nums">{opsStats.totalToday}</p>
+              <p className="text-xs text-muted-foreground mt-1">Processados</p>
+            </div>
+            <div className={cn("rounded-xl border bg-card p-4 text-center hover:bg-accent transition-colors",
+              opsStats.errorsToday > 0 && "border-amber-500/30 bg-amber-500/5")}>
+              <p className={cn("text-2xl font-bold tabular-nums",
+                opsStats.errorsToday > 0 ? "text-amber-500" : "text-green-500")}>
+                {opsStats.errorsToday}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Erros</p>
+            </div>
+            <div className="rounded-xl border bg-card p-4 text-center hover:bg-accent transition-colors">
+              <p className={cn("text-2xl font-bold tabular-nums",
+                opsStats.successRate >= 95 ? "text-green-500" :
+                opsStats.successRate >= 80 ? "text-amber-500" : "text-red-500")}>
+                {opsStats.successRate?.toFixed(1)}%
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Taxa de sucesso</p>
+            </div>
           </div>
         </section>
       )}

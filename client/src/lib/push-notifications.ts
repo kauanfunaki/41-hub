@@ -3,6 +3,11 @@
  * Só funciona em HTTPS (produção) ou localhost (dev).
  */
 
+import { playNotify } from "./sound";
+
+// Flag para registrar o listener de mensagens do SW apenas uma vez por sessão
+let swSoundListenerAdded = false;
+
 async function getVapidPublicKey(): Promise<string | null> {
   try {
     const res = await fetch("/api/push/vapid-public-key", { credentials: "include" });
@@ -31,6 +36,17 @@ export async function initPushNotifications(): Promise<void> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     console.info("[push] Web Push não suportado neste browser.");
     return;
+  }
+
+  // Listener para mensagens do SW → toca som mesmo com a aba em segundo plano.
+  // Registrado uma única vez — não é throttlado pelo browser como setInterval.
+  if (!swSoundListenerAdded) {
+    swSoundListenerAdded = true;
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "hub-notify-sound") {
+        playNotify();
+      }
+    });
   }
 
   try {

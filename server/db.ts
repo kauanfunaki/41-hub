@@ -12,4 +12,10 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+// Garante que todas as conexões usem o horário de Brasília.
+// Isso corrige a exibição de timestamps no banco e nas queries brutas.
+pool.on("connect", (client) => {
+  client.query("SET timezone = 'America/Sao_Paulo'");
+});
+
 export const db = drizzle(pool, { schema });

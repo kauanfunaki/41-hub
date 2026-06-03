@@ -26,6 +26,7 @@ function formatDate(d: string | null) {
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
   }).format(new Date(d));
 }
 
@@ -41,6 +42,16 @@ export default function Alerts() {
     retry: false,
   });
   const alerts: AlertItem[] = Array.isArray(alertsRaw) ? alertsRaw : [];
+
+  const { data: historyRaw } = useQuery<AlertItem[] | unknown>({
+    queryKey: ["/api/alerts/history"],
+    queryFn: () =>
+      fetch("/api/alerts?active=false", { credentials: "include" }).then((r) =>
+        r.json(),
+      ),
+    retry: false,
+  });
+  const history: AlertItem[] = Array.isArray(historyRaw) ? (historyRaw as AlertItem[]).slice(0, 5) : [];
 
   const readMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/alerts/${id}/read`),
@@ -163,6 +174,42 @@ export default function Alerts() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Histórico de alertas encerrados */}
+      {history.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Histórico recente
+            </span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          <div className="space-y-2 opacity-60">
+            {history.map((alert) => {
+              const cfg = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.info;
+              const SevIcon = cfg.icon;
+              return (
+                <div
+                  key={alert.id}
+                  className="flex items-stretch rounded-xl border bg-card overflow-hidden"
+                >
+                  <div className={`w-1 shrink-0 ${cfg.stripe}`} />
+                  <div className="flex items-center gap-3 p-3 flex-1 min-w-0">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 ${cfg.iconBg}`}>
+                      <SevIcon className={`h-4 w-4 ${cfg.iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{alert.title}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(alert.createdAt)}</p>
+                    </div>
+                    <SeverityBadge severity={alert.severity} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </PageContainer>

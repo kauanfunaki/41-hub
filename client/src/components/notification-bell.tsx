@@ -73,13 +73,19 @@ export function NotificationBell() {
   }
 
   function formatTime(dateStr: string) {
+    // Compara sempre em UTC para o diff relativo estar correto
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const diffMin = Math.floor(diffMs / 60_000);
     if (diffMin < 1) return "agora";
     if (diffMin < 60) return `${diffMin}min`;
     const diffH = Math.floor(diffMin / 60);
     if (diffH < 24) return `${diffH}h`;
-    return `${Math.floor(diffH / 24)}d`;
+    // Para datas antigas, exibe horário de Brasília
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit", month: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date(dateStr));
   }
 
   return (

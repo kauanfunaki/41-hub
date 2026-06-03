@@ -71,7 +71,7 @@ const upload = multer({
   },
 });
 
-const ticketUploadDir = path.join(process.cwd(), "uploads", "tickets");
+const ticketUploadDir = path.join(uploadDir, "tickets");
 if (!fs.existsSync(ticketUploadDir)) {
   fs.mkdirSync(ticketUploadDir, { recursive: true });
 }
@@ -1424,6 +1424,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const userId = req.params.id;
+
+      if (userId === req.user!.id) {
+        return res.status(400).json({ error: "Você não pode excluir sua própria conta" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+
+      if (user.isActive) {
+        return res.status(400).json({ error: "Apenas usuários inativos podem ser excluídos definitivamente" });
+      }
+
+      await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "user_deleted",
+        targetType: "user",
+        targetId: userId,
+        ip: req.ip || req.socket.remoteAddress,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ error: "Falha ao excluir usuário" });
+    }
+  });
+
   // --- Resources ---
   app.get("/api/admin/resources", requireAuth, requireAdmin, async (req, res) => {
     try {
@@ -1994,8 +2028,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const ticket = await storage.getTicketDetail(req.params.id, req.user!);
       if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
-      const attachments = await storage.listTicketAttachments(req.params.id, req.user!);
-      res.json(attachments);
+      const result = await pool.query(
+        `SELECT ta.*, u.name as "uploadedByName"
+         FROM ticket_attachments ta
+         LEFT JOIN users u ON u.id = ta.uploaded_by
+         WHERE ta.ticket_id = $1
+         ORDER BY ta.created_at ASC`,
+        [req.params.id]
+      );
+      res.json(result.rows);
     } catch (error) {
       console.error("Error fetching attachments:", error);
       res.status(500).json({ error: "Failed to fetch attachments" });
@@ -2066,6 +2107,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error downloading attachment:", error);
       res.status(500).json({ error: "Failed to download attachment" });
+    }
+  });
+
+  app.delete("/api/tickets/:id/attachments/:attachmentId", requireAuth, requireTicketAccess, async (req, res) => {
+    try {
+      const isUser = !req.user!.isAdmin && !req.user!.roles?.some((r: any) => r.roleName === "Coordenador");
+      if (isUser) return res.status(403).json({ error: "Sem permissão para remover anexos" });
+
+      const attachments = await storage.listTicketAttachments(req.params.id, req.user!);
+      const attachment = attachments.find(a => a.id === req.params.attachmentId);
+      if (!attachment) return res.status(404).json({ error: "Anexo não encontrado" });
+
+      // Remove do disco
+      const filePath = path.join(ticketUploadDir, attachment.storageName);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+      // Remove do banco
+      await pool.query("DELETE FROM ticket_attachments WHERE id = $1", [req.params.attachmentId]);
+
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "ticket_attachment_deleted",
+        targetType: "ticket",
+        targetId: req.params.id,
+        ip: req.ip || req.socket.remoteAddress,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting attachment:", error);
+      res.status(500).json({ error: "Failed to delete attachment" });
     }
   });
 
@@ -3147,16 +3219,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const result = await pool.query(
-        `SELECT t.id as "ticketId", t.created_at as "createdAt", t.closed_at as "closedAt",
+        `SELECT t.id as "ticketId", t.title, t.created_at as "createdAt", t.closed_at as "closedAt",
                 t.status, t.priority,
                 tc.branch as "branch",
                 tc.name as "category",
                 u.name as "requesterName",
-                s.name as "requesterSector"
+                s.name as "requesterSector",
+                st.name as "targetSector",
+                COALESCE(
+                  (SELECT string_agg(au.name, '; ') FROM ticket_assignees ta JOIN users au ON au.id = ta.user_id WHERE ta.ticket_id = t.id),
+                  ''
+                ) as "assignees",
+                COALESCE(sc.resolution_breached, false) as "slaBreached",
+                sc.resolution_due_at as "resolutionDueAt"
          FROM tickets t
          LEFT JOIN ticket_categories tc ON t.category_id = tc.id
          LEFT JOIN users u ON t.created_by = u.id
          LEFT JOIN sectors s ON t.requester_sector_id = s.id
+         LEFT JOIN sectors st ON t.target_sector_id = st.id
+         LEFT JOIN LATERAL (
+           SELECT * FROM ticket_sla_cycles WHERE ticket_id = t.id ORDER BY cycle_number DESC LIMIT 1
+         ) sc ON true
          WHERE 1=1 ${whereClause}
          ORDER BY t.created_at DESC`,
         params
@@ -3164,6 +3247,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const rows = result.rows.map((r: any) => ({
         ticketId: r.ticketId,
+        title: r.title || "",
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
         closedAt: r.closedAt ? new Date(r.closedAt).toISOString() : "",
         status: r.status,
@@ -3172,10 +3256,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         category: r.category || "",
         requesterName: r.requesterName || "",
         requesterSector: r.requesterSector || "",
+        targetSector: r.targetSector || "",
+        assignees: r.assignees || "",
+        slaBreached: r.slaBreached ? "Sim" : "Não",
+        resolutionDueAt: r.resolutionDueAt ? new Date(r.resolutionDueAt).toISOString() : "",
       }));
 
       if (format === "csv") {
-        const headers = ["ticketId", "createdAt", "closedAt", "status", "priority", "branch", "category", "requesterName", "requesterSector"];
+        const headers = ["ticketId", "title", "createdAt", "closedAt", "status", "priority", "branch", "category", "requesterName", "requesterSector", "targetSector", "assignees", "slaBreached", "resolutionDueAt"];
         const csv = toCsv(headers, rows);
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", 'attachment; filename="tickets_report.csv"');
@@ -3204,7 +3292,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const where = includeInactive ? "" : "WHERE is_active = true";
       const result = await pool.query(
         `SELECT r.id as "resourceId", r.name, r.type, r.url, r.is_active as "isActive",
-                s.name as "sectorName", r.created_at as "createdAt"
+                r.embed_mode as "embedMode", r.open_behavior as "openBehavior",
+                r.tags, r.icon,
+                s.name as "sectorName",
+                r.health_status_override as "healthStatus",
+                r.created_at as "createdAt"
          FROM resources r
          LEFT JOIN sectors s ON r.sector_id = s.id
          ${where}
@@ -3216,12 +3308,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         type: r.type,
         url: r.url || "",
         sectorName: r.sectorName || "",
+        embedMode: r.embedMode || "",
+        openBehavior: r.openBehavior || "",
+        tags: Array.isArray(r.tags) ? r.tags.join(", ") : (r.tags || ""),
+        icon: r.icon || "",
+        healthStatus: r.healthStatus || "UP",
         isActive: r.isActive ? "Sim" : "Não",
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
       }));
 
       if (format === "csv") {
-        const headers = ["resourceId", "name", "type", "url", "sectorName", "isActive", "createdAt"];
+        const headers = ["resourceId", "name", "type", "url", "sectorName", "embedMode", "openBehavior", "tags", "icon", "healthStatus", "isActive", "createdAt"];
         const csv = toCsv(headers, rows);
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", 'attachment; filename="resources_report.csv"');
@@ -3419,13 +3516,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Side-effects after response — failures logged but do not affect client
       const sideEffects: Promise<any>[] = [];
       if (parsed.data.isActive) {
+        // Usa storage.createNotifications() para garantir o disparo do Web Push
         sideEffects.push(
-          pool.query(
-            `INSERT INTO notifications (id, recipient_user_id, type, title, message, link_url, created_at)
-             SELECT gen_random_uuid(), u.id, 'alert', $1, $2, '/alerts', NOW()
-             FROM users u WHERE u.is_active = true AND u.id != $3`,
-            [parsed.data.title, parsed.data.message, req.user!.id]
-          )
+          (async () => {
+            const rows = await pool.query<{ id: string }>(
+              `SELECT id FROM users WHERE is_active = true AND id != $1`,
+              [req.user!.id]
+            );
+            const recipients = rows.rows.map((r) => r.id);
+            if (recipients.length > 0) {
+              await storage.createNotifications(recipients, {
+                type: "alert",
+                title: parsed.data.title,
+                message: parsed.data.message,
+                linkUrl: "/alerts",
+              });
+            }
+          })()
         );
       }
       sideEffects.push(
@@ -3614,6 +3721,111 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching ticket trend:", error);
       res.status(500).json({ error: "Failed to fetch ticket trend" });
+    }
+  });
+
+  app.get("/api/admin/analytics/tickets-detail", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { from, to, sectorId, priority, assigneeId } = req.query as Record<string, string | undefined>;
+      const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
+      const limit = Math.min(100, Math.max(10, parseInt((req.query.limit as string) || "25", 10)));
+      const offset = (page - 1) * limit;
+
+      const conditions: string[] = ["1=1"];
+      const params: any[] = [];
+      const p = () => { params.push(null); return `$${params.length}`; };
+      const add = (val: any, expr: string) => { params[params.length] = val; conditions.push(expr.replace("?", `$${params.length}`) ); };
+
+      // rebuild cleanly
+      const conds: string[] = ["1=1"];
+      const vals: any[] = [];
+      if (from)       { vals.push(from);       conds.push(`t.created_at >= $${vals.length}::date`); }
+      if (to)         { vals.push(to);         conds.push(`t.created_at <= ($${vals.length}::date + interval '1 day')`); }
+      if (sectorId)   { vals.push(sectorId);   conds.push(`t.target_sector_id = $${vals.length}`); }
+      if (priority)   { vals.push(priority);   conds.push(`t.priority = $${vals.length}`); }
+      if (assigneeId) { vals.push(assigneeId); conds.push(`EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id = t.id AND ta.user_id = $${vals.length})`); }
+
+      const whereClause = conds.join(" AND ");
+
+      const [rows, countRow, summary, byCategory] = await Promise.all([
+        pool.query(
+          `SELECT
+             t.id, t.title, t.status, t.priority, t.created_at as "createdAt", t.closed_at as "closedAt",
+             s.name as "targetSector",
+             rs.name as "requesterSector",
+             tc.name as "category",
+             COALESCE(
+               ROUND(EXTRACT(EPOCH FROM (COALESCE(t.closed_at, NOW()) - t.created_at)) / 60)::int,
+               NULL
+             ) as "resolutionMinutes",
+             COALESCE(
+               (SELECT string_agg(u.name, ', ') FROM ticket_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.ticket_id = t.id),
+               '—'
+             ) as assignees,
+             sc.first_response_breached as "firstResponseBreached",
+             sc.resolution_breached as "resolutionBreached",
+             sc.first_response_due_at as "firstResponseDueAt",
+             sc.resolution_due_at as "resolutionDueAt",
+             sc.first_response_at as "firstResponseAt",
+             sc.resolved_at as "slaResolvedAt"
+           FROM tickets t
+           LEFT JOIN sectors s ON s.id = t.target_sector_id
+           LEFT JOIN sectors rs ON rs.id = t.requester_sector_id
+           LEFT JOIN ticket_categories tc ON tc.id = t.category_id
+           LEFT JOIN LATERAL (
+             SELECT * FROM ticket_sla_cycles WHERE ticket_id = t.id ORDER BY cycle_number DESC LIMIT 1
+           ) sc ON true
+           WHERE ${whereClause}
+           ORDER BY t.created_at DESC
+           LIMIT ${limit} OFFSET ${offset}`,
+          vals
+        ),
+        pool.query(
+          `SELECT COUNT(*) as total FROM tickets t WHERE ${whereClause}`,
+          vals
+        ),
+        pool.query(
+          `SELECT
+             COUNT(*) as total,
+             COUNT(*) FILTER (WHERE sc.resolution_breached = true) as breached,
+             ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(t.closed_at, NOW()) - t.created_at)) / 60))::int as "avgResolutionMinutes"
+           FROM tickets t
+           LEFT JOIN LATERAL (
+             SELECT * FROM ticket_sla_cycles WHERE ticket_id = t.id ORDER BY cycle_number DESC LIMIT 1
+           ) sc ON true
+           WHERE ${whereClause}`,
+          vals
+        ),
+        pool.query(
+          `SELECT
+             tc.name as category,
+             COUNT(*) as total,
+             COUNT(*) FILTER (WHERE sc.resolution_breached = true) as breached,
+             ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(t.closed_at, NOW()) - t.created_at)) / 60))::int as "avgResolutionMinutes"
+           FROM tickets t
+           LEFT JOIN ticket_categories tc ON tc.id = t.category_id
+           LEFT JOIN LATERAL (
+             SELECT * FROM ticket_sla_cycles WHERE ticket_id = t.id ORDER BY cycle_number DESC LIMIT 1
+           ) sc ON true
+           WHERE ${whereClause}
+           GROUP BY tc.name
+           ORDER BY total DESC
+           LIMIT 15`,
+          vals
+        ),
+      ]);
+
+      res.json({
+        tickets: rows.rows,
+        total: parseInt(countRow.rows[0].total, 10),
+        page,
+        limit,
+        summary: summary.rows[0],
+        byCategory: byCategory.rows,
+      });
+    } catch (error: any) {
+      console.error("Error fetching tickets detail:", error);
+      res.status(500).json({ error: "Failed to fetch tickets detail" });
     }
   });
 
@@ -3832,7 +4044,136 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/admin/reports/ops-watchers", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const format = (req.query.format as string) || "json";
+      if (format !== "csv" && format !== "json") return res.status(400).json({ error: "Formato inválido." });
+      const from = req.query.from as string | undefined;
+      const to   = req.query.to   as string | undefined;
+      const watcherSlug = req.query.watcherSlug as string | undefined;
+      const params: any[] = [];
+      let where = "WHERE 1=1";
+      if (from)        { params.push(from);        where += ` AND e.processed_at >= $${params.length}::date`; }
+      if (to)          { params.push(to);          where += ` AND e.processed_at <= ($${params.length}::date + interval '1 day')`; }
+      if (watcherSlug) { params.push(watcherSlug); where += ` AND e.watcher_slug = $${params.length}`; }
+
+      const result = await pool.query(
+        `SELECT e.id, e.watcher_slug as "watcherSlug", w.name as "watcherName",
+                e.filename, e.filename_renamed as "filenameRenamed",
+                e.status, e.client, e.error_message as "errorMessage",
+                e.n8n_execution_id as "n8nExecutionId",
+                e.processed_at as "processedAt"
+         FROM ops_events e
+         LEFT JOIN ops_watchers w ON w.slug = e.watcher_slug
+         ${where}
+         ORDER BY e.processed_at DESC
+         LIMIT 20000`,
+        params
+      );
+      const rows = result.rows.map((r: any) => ({
+        id: r.id,
+        watcherSlug: r.watcherSlug,
+        watcherName: r.watcherName || "",
+        filename: r.filename,
+        filenameRenamed: r.filenameRenamed || "",
+        status: r.status,
+        client: r.client || "",
+        errorMessage: r.errorMessage || "",
+        n8nExecutionId: r.n8nExecutionId || "",
+        processedAt: r.processedAt ? new Date(r.processedAt).toISOString() : "",
+      }));
+
+      if (format === "csv") {
+        const headers = ["id","watcherSlug","watcherName","filename","filenameRenamed","status","client","errorMessage","n8nExecutionId","processedAt"];
+        const csv = toCsv(headers, rows);
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", 'attachment; filename="ops_watchers_report.csv"');
+        return res.send(csv);
+      }
+      res.json(rows);
+    } catch (error: any) {
+      if (error?.code === "42P01") return res.status(503).json({ error: "Tabela ops_events não encontrada — execute as migrations" });
+      console.error("Error generating ops-watchers report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
+  app.get("/api/admin/reports/kb", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const format = (req.query.format as string) || "json";
+      if (format !== "csv" && format !== "json") return res.status(400).json({ error: "Formato inválido." });
+
+      const result = await pool.query(
+        `SELECT a.id, a.title, a.is_published as "isPublished",
+                a.created_at as "createdAt", a.updated_at as "updatedAt",
+                u.name as "createdBy",
+                COUNT(DISTINCT v.id) as "totalViews",
+                COUNT(DISTINCT f.id) as "totalFeedback",
+                COUNT(DISTINCT f.id) FILTER (WHERE f.helpful = true)  as "helpfulCount",
+                COUNT(DISTINCT f.id) FILTER (WHERE f.helpful = false) as "notHelpfulCount"
+         FROM kb_articles a
+         LEFT JOIN users u ON u.id = a.created_by
+         LEFT JOIN kb_article_views v ON v.article_id = a.id
+         LEFT JOIN kb_article_feedback f ON f.article_id = a.id
+         GROUP BY a.id, a.title, a.is_published, a.created_at, a.updated_at, u.name
+         ORDER BY "totalViews" DESC`
+      );
+      const rows = result.rows.map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        isPublished: r.isPublished ? "Sim" : "Não",
+        createdBy: r.createdBy || "",
+        totalViews: r.totalViews || 0,
+        totalFeedback: r.totalFeedback || 0,
+        helpfulCount: r.helpfulCount || 0,
+        notHelpfulCount: r.notHelpfulCount || 0,
+        helpfulRate: r.totalFeedback > 0 ? `${Math.round((r.helpfulCount / r.totalFeedback) * 100)}%` : "—",
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
+        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : "",
+      }));
+
+      if (format === "csv") {
+        const headers = ["id","title","isPublished","createdBy","totalViews","totalFeedback","helpfulCount","notHelpfulCount","helpfulRate","createdAt","updatedAt"];
+        const csv = toCsv(headers, rows);
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", 'attachment; filename="kb_report.csv"');
+        return res.send(csv);
+      }
+      res.json(rows);
+    } catch (error: any) {
+      if (error?.code === "42P01") return res.status(503).json({ error: "Tabela kb_articles não encontrada — execute as migrations" });
+      console.error("Error generating kb report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
   // ==================== 41 OPS CENTER ====================
+
+  app.get("/api/ops/stats", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          COUNT(*) as total_today,
+          COUNT(*) FILTER (WHERE status = 'SUCCESS') as success_today,
+          COUNT(*) FILTER (WHERE status = 'ERROR') as errors_today
+        FROM ops_events
+        WHERE processed_at >= CURRENT_DATE
+      `);
+      const row = result.rows[0];
+      const total = parseInt(row.total_today, 10);
+      const success = parseInt(row.success_today, 10);
+      const errors = parseInt(row.errors_today, 10);
+      res.json({
+        totalToday: total,
+        successToday: success,
+        errorsToday: errors,
+        successRate: total > 0 ? parseFloat(((success / total) * 100).toFixed(1)) : 100,
+      });
+    } catch (error: any) {
+      if (error?.code === "42P01") return res.json({ totalToday: 0, successToday: 0, errorsToday: 0, successRate: 100 });
+      res.status(500).json({ error: "Failed to fetch ops stats" });
+    }
+  });
 
   // POST /api/ops/events — called by n8n after each file processing (token auth)
   app.post("/api/ops/events", requireOpsToken, async (req, res) => {

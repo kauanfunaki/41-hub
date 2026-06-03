@@ -10,7 +10,9 @@ import {
   Keyboard,
   CalendarDays,
   X,
+  BarChart2,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -179,7 +181,19 @@ export default function Analytics() {
 
       {/* Chamados KPIs */}
       <section>
-        <SectionDivider icon={Ticket} label="Chamados" />
+        <div className="flex items-center gap-2 mb-4">
+          <Ticket className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest whitespace-nowrap">
+            Chamados
+          </span>
+          <div className="flex-1 h-px bg-border" />
+          <Link href="/admin/analytics/tickets">
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0">
+              <BarChart2 className="h-3.5 w-3.5" />
+              Ver detalhamento
+            </Button>
+          </Link>
+        </div>
         {statsLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (

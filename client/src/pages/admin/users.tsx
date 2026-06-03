@@ -84,6 +84,7 @@ export default function AdminUsers() {
   const [providerFilter, setProviderFilter] = useState<"all" | "microsoft" | "local">("all");
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
   const [deactivateUserId, setDeactivateUserId] = useState<string | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [passwordUser, setPasswordUser] = useState<UserWithRoles | null>(null);
@@ -208,6 +209,21 @@ export default function AdminUsers() {
     },
     onError: () => {
       toast({ title: "Erro ao definir senha", variant: "destructive" });
+    },
+  });
+
+  const deletePermanentlyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/admin/users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({ title: "Usuário excluído permanentemente" });
+      setDeleteUserId(null);
+    },
+    onError: () => {
+      toast({ title: "Erro ao excluir usuário", variant: "destructive" });
     },
   });
 
@@ -523,14 +539,15 @@ export default function AdminUsers() {
                               </Button>
                             </>
                           )}
-                          {user.id !== currentUser?.id && user.isActive && (
+                          {/* Usuários ativos: desativar só via Switch — sem botão lixeira */}
+                          {!user.isActive && user.id !== currentUser?.id && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => setDeactivateUserId(user.id)}
-                              title="Desativar usuário"
-                              data-testid={`button-deactivate-${user.id}`}
+                              onClick={() => setDeleteUserId(user.id)}
+                              title="Excluir definitivamente"
+                              data-testid={`button-delete-permanent-${user.id}`}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -831,6 +848,43 @@ export default function AdminUsers() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete permanently confirmation */}
+      <AlertDialog open={deleteUserId !== null} onOpenChange={(o) => !o && setDeleteUserId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" />
+              Excluir usuário permanentemente?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Esta ação é <strong>irreversível</strong> e remove o usuário do banco de dados.</p>
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive space-y-1">
+                  <p className="font-semibold">O que será excluído:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-destructive/80">
+                    <li>Perfil e credenciais de acesso</li>
+                    <li>Vínculos de setor e papel</li>
+                    <li>Histórico de sessões</li>
+                  </ul>
+                  <p className="font-semibold mt-1.5">Chamados e comentários são mantidos</p>
+                </div>
+                <p className="text-xs text-muted-foreground">Só é possível excluir usuários <strong>inativos</strong>. Para excluir, desative o usuário primeiro.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteUserId) deletePermanentlyMutation.mutate(deleteUserId); }}
+              data-testid="button-confirm-delete-permanent"
+            >
+              Excluir definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Deactivate confirmation */}
       <AlertDialog open={deactivateUserId !== null} onOpenChange={(o) => !o && setDeactivateUserId(null)}>

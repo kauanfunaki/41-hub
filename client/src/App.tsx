@@ -52,6 +52,7 @@ import Alerts from "@/pages/alerts";
 import AdminAlerts from "@/pages/admin-alerts";
 import Analytics from "@/pages/analytics";
 import AdminIntegrations from "@/pages/admin/integrations";
+import AdminTicketsAnalytics from "@/pages/admin/tickets-analytics";
 import Kb from "@/pages/kb";
 import KbArticle from "@/pages/kb-article";
 import OpsCenter from "@/pages/ops";
@@ -111,6 +112,7 @@ function Router() {
       <Route path="/alerts" component={Alerts} />
       <Route path="/admin/alerts" component={AdminAlerts} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/admin/analytics/tickets" component={AdminTicketsAnalytics} />
       <Route path="/kb" component={Kb} />
       <Route path="/kb/articles/:id" component={KbArticle} />
       <Route path="/ops" component={OpsCenter} />
@@ -138,7 +140,7 @@ function AuthenticatedLayout() {
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <SearchTriggerButton />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-3">
               <NotificationBell />
               <ThemeToggle />
             </div>
