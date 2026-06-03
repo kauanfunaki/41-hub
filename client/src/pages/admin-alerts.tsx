@@ -14,22 +14,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -196,76 +190,129 @@ export default function AdminAlerts() {
         </TabsContent>
       </Tabs>
 
-      {/* Create / Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar alerta" : "Novo alerta"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Título</Label>
-              <Input
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="Ex: Manutenção programada"
-                maxLength={200}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Mensagem</Label>
-              <Textarea
-                value={form.message}
-                onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
-                placeholder="Descreva o alerta com detalhes..."
-                rows={3}
-                maxLength={2000}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Severidade</Label>
-                <Select
-                  value={form.severity}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, severity: v as AlertSeverity }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="info">Informação</SelectItem>
-                    <SelectItem value="warning">Atenção</SelectItem>
-                    <SelectItem value="critical">Crítico</SelectItem>
-                  </SelectContent>
-                </Select>
+      {/* Create / Edit sheet */}
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-lg p-0" data-testid="sheet-alert-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              {(() => {
+                const cfg = SEVERITY_CONFIG[form.severity] ?? SEVERITY_CONFIG.info;
+                const SevIcon = cfg.icon;
+                return (
+                  <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg shrink-0", cfg.iconBg)}>
+                    <SevIcon className={cn("h-5 w-5", cfg.iconColor)} />
+                  </div>
+                );
+              })()}
+              <div>
+                <SheetTitle>{editing ? "Editar alerta" : "Novo alerta"}</SheetTitle>
+                <SheetDescription>
+                  {editing ? "Altere o alerta publicado" : "Publique um alerta para todos os usuários"}
+                </SheetDescription>
               </div>
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <div className="flex items-center gap-2 pt-2">
+            </div>
+          </SheetHeader>
+
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {/* Severidade */}
+              <div className="space-y-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Severidade</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { value: "info" as AlertSeverity, label: "Informação" },
+                    { value: "warning" as AlertSeverity, label: "Atenção" },
+                    { value: "critical" as AlertSeverity, label: "Crítico" },
+                  ]).map((opt) => {
+                    const cfg = SEVERITY_CONFIG[opt.value];
+                    const SevIcon = cfg.icon;
+                    const selected = form.severity === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, severity: opt.value }))}
+                        data-testid={`severity-btn-${opt.value}`}
+                        className={cn(
+                          "rounded-xl border-2 p-3 flex flex-col items-center gap-2 transition-all",
+                          selected
+                            ? cn(cfg.iconBg, cfg.iconColor, "border-current")
+                            : "border-border text-muted-foreground hover:border-muted-foreground/60"
+                        )}
+                      >
+                        <SevIcon className="h-5 w-5" />
+                        <span className="text-xs font-medium">{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Conteúdo */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conteúdo</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="alert-title">Título</Label>
+                  <Input
+                    id="alert-title"
+                    value={form.title}
+                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                    placeholder="Ex: Manutenção programada"
+                    maxLength={200}
+                    data-testid="input-alert-title"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="alert-message">Mensagem</Label>
+                  <Textarea
+                    id="alert-message"
+                    value={form.message}
+                    onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                    placeholder="Descreva o alerta com detalhes..."
+                    rows={4}
+                    maxLength={2000}
+                    data-testid="input-alert-message"
+                  />
+                  <p className="text-xs text-muted-foreground">{form.message.length}/2000 caracteres</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Publicação */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Publicação</Label>
+                <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Alerta ativo</p>
+                    <p className="text-xs text-muted-foreground">Visível e notificado aos usuários</p>
+                  </div>
                   <Switch
                     checked={form.isActive}
                     onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
+                    data-testid="switch-alert-active"
                   />
-                  <span className="text-sm">{form.isActive ? "Ativo" : "Inativo"}</span>
                 </div>
               </div>
             </div>
+
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                data-testid="button-save-alert"
+              >
+                {editing ? "Salvar alterações" : "Publicar alerta"}
+              </Button>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={createMutation.isPending || updateMutation.isPending}
-            >
-              {editing ? "Salvar" : "Publicar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </PageContainer>
   );
 }

@@ -19,6 +19,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -50,6 +58,7 @@ import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import type { UserWithRoles, Sector } from "@shared/schema";
 
 interface AdminSettingsData {
@@ -641,129 +650,164 @@ export default function AdminUsers() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editingUser ? "Editar Usuário" : "Novo Usuário"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingUser
-                ? "Altere as informações do usuário"
-                : "Adicione um novo usuário ao sistema"}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-lg p-0" data-testid="sheet-user-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2 shrink-0">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <SheetTitle>
+                  {editingUser ? "Editar Usuário" : "Novo Usuário"}
+                </SheetTitle>
+                <SheetDescription>
+                  {editingUser
+                    ? "Altere as informações do usuário"
+                    : "Adicione um novo usuário ao sistema"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+              {/* Autenticação — só na criação */}
               {!editingUser && (
+                <>
+                  <div className="space-y-3">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Autenticação</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFormAuthProvider("local")}
+                        data-testid="auth-btn-local"
+                        className={cn(
+                          "rounded-xl border-2 p-4 flex flex-col items-center gap-2 transition-all",
+                          formAuthProvider === "local"
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border text-muted-foreground hover:border-muted-foreground/60"
+                        )}
+                      >
+                        <KeyRound className="h-6 w-6" />
+                        <span className="text-sm font-medium">Local</span>
+                        <span className="text-[10px] leading-tight text-center opacity-80">E-mail / senha</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormAuthProvider("entra")}
+                        data-testid="auth-btn-entra"
+                        className={cn(
+                          "rounded-xl border-2 p-4 flex flex-col items-center gap-2 transition-all",
+                          formAuthProvider === "entra"
+                            ? "border-chart-2 bg-chart-2/5 text-chart-2"
+                            : "border-border text-muted-foreground hover:border-muted-foreground/60"
+                        )}
+                      >
+                        <Building2 className="h-6 w-6" />
+                        <span className="text-sm font-medium">Microsoft</span>
+                        <span className="text-[10px] leading-tight text-center opacity-80">Entra ID</span>
+                      </button>
+                    </div>
+                    {formAuthProvider === "local" && (
+                      <p className="text-xs text-muted-foreground">
+                        O usuário receberá a senha padrão e precisará trocá-la no primeiro acesso.
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+                </>
+              )}
+
+              {/* Identidade */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identidade</Label>
                 <div className="space-y-2">
-                  <Label>Tipo de Autenticação</Label>
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="usuario@41tech.com.br"
+                    disabled={!!editingUser}
+                    data-testid="input-user-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome</Label>
+                  <Input
+                    id="name"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Nome completo"
+                    data-testid="input-user-name"
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Acesso */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Acesso</Label>
+                <div className="space-y-2">
+                  <Label>Setores</Label>
+                  <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                    {sectors.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhum setor cadastrado</p>
+                    ) : (
+                      sectors.map((sector) => (
+                        <div key={sector.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`sector-${sector.id}`}
+                            checked={formSectorIds.includes(sector.id)}
+                            onCheckedChange={() => handleToggleSector(sector.id)}
+                            data-testid={`checkbox-sector-${sector.id}`}
+                          />
+                          <label
+                            htmlFor={`sector-${sector.id}`}
+                            className="text-sm cursor-pointer flex-1"
+                          >
+                            {sector.name}
+                          </label>
+                          {formSectorIds.includes(sector.id) && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selecione um ou mais setores para o usuário
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">Papel</Label>
                   <Select
-                    value={formAuthProvider}
-                    onValueChange={(v) => setFormAuthProvider(v as "entra" | "local")}
+                    value={formRoleName}
+                    onValueChange={(v) => setFormRoleName(v as typeof formRoleName)}
                   >
-                    <SelectTrigger data-testid="select-auth-provider">
+                    <SelectTrigger data-testid="select-role">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="local">
-                        <div className="flex items-center gap-2">
-                          <KeyRound className="h-4 w-4" />
-                          <span>Usuário Local (e-mail/senha)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="entra">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          <span>Microsoft Entra ID</span>
-                        </div>
-                      </SelectItem>
+                      <SelectItem value="Usuario">Usuário</SelectItem>
+                      <SelectItem value="Coordenador">Coordenador</SelectItem>
+                      <SelectItem value="Admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
-                  {formAuthProvider === "local" && (
-                    <p className="text-xs text-muted-foreground">
-                      O usuário receberá a senha padrão e precisará trocá-la no primeiro acesso.
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    O papel será aplicado a todos os setores selecionados
+                  </p>
                 </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  placeholder="usuario@41tech.com.br"
-                  disabled={!!editingUser}
-                  data-testid="input-user-email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
-                <Input
-                  id="name"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Nome completo"
-                  data-testid="input-user-name"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Setores</Label>
-                <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
-                  {sectors.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nenhum setor cadastrado</p>
-                  ) : (
-                    sectors.map((sector) => (
-                      <div key={sector.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`sector-${sector.id}`}
-                          checked={formSectorIds.includes(sector.id)}
-                          onCheckedChange={() => handleToggleSector(sector.id)}
-                          data-testid={`checkbox-sector-${sector.id}`}
-                        />
-                        <label
-                          htmlFor={`sector-${sector.id}`}
-                          className="text-sm cursor-pointer flex-1"
-                        >
-                          {sector.name}
-                        </label>
-                        {formSectorIds.includes(sector.id) && (
-                          <Check className="h-4 w-4 text-primary" />
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Selecione um ou mais setores para o usuário
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Papel (aplicado a todos os setores)</Label>
-                <Select
-                  value={formRoleName}
-                  onValueChange={(v) => setFormRoleName(v as typeof formRoleName)}
-                >
-                  <SelectTrigger data-testid="select-role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Usuario">Usuário</SelectItem>
-                    <SelectItem value="Coordenador">Coordenador</SelectItem>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  O papel será aplicado a todos os setores selecionados
-                </p>
               </div>
             </div>
-            <DialogFooter>
+
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleCloseDialog}>
                 Cancelar
               </Button>
@@ -777,12 +821,12 @@ export default function AdminUsers() {
                 }
                 data-testid="button-save-user"
               >
-                {editingUser ? "Salvar" : "Criar"}
+                {editingUser ? "Salvar alterações" : "Criar usuário"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="max-w-md">

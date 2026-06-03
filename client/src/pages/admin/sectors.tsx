@@ -7,13 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -216,32 +215,44 @@ export default function AdminSectors() {
         </CardContent>
       </Card>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingSector ? "Editar Setor" : "Novo Setor"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingSector
-                ? "Altere o nome do setor"
-                : "Crie um novo setor para a organização"}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome do Setor</Label>
-                <Input
-                  id="name"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Tecnologia"
-                  data-testid="input-sector-name"
-                />
+      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-lg p-0" data-testid="sheet-sector-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <SheetTitle>
+                  {editingSector ? "Editar Setor" : "Novo Setor"}
+                </SheetTitle>
+                <SheetDescription>
+                  {editingSector
+                    ? "Altere o nome do setor"
+                    : "Crie um novo setor para a organização"}
+                </SheetDescription>
               </div>
             </div>
-            <DialogFooter>
+          </SheetHeader>
+
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identidade</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome do Setor</Label>
+                  <Input
+                    id="name"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Ex: Tecnologia"
+                    data-testid="input-sector-name"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -254,12 +265,12 @@ export default function AdminSectors() {
                 disabled={!formName.trim() || createMutation.isPending || updateMutation.isPending}
                 data-testid="button-save-sector"
               >
-                {editingSector ? "Salvar" : "Criar"}
+                {editingSector ? "Salvar alterações" : "Criar setor"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <AlertDialogContent>

@@ -11,12 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -210,70 +211,100 @@ export default function AdminTyping() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Texto" : "Novo Texto"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Texto</Label>
-              <Textarea
-                value={formContent}
-                onChange={(e) => setFormContent(e.target.value)}
-                rows={5}
-                className="font-mono text-sm"
-                data-testid="input-text-content"
-              />
-              <p className="text-xs text-muted-foreground mt-1">{formContent.length} caracteres</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label>Dificuldade</Label>
-                <Select value={formDifficulty} onValueChange={setFormDifficulty}>
-                  <SelectTrigger data-testid="select-difficulty">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 - Fácil</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="3">3 - Médio</SelectItem>
-                    <SelectItem value="4">4</SelectItem>
-                    <SelectItem value="5">5 - Difícil</SelectItem>
-                  </SelectContent>
-                </Select>
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-lg p-0" data-testid="sheet-text-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                <Keyboard className="h-5 w-5" />
               </div>
-              <div className="flex-1">
-                <Label>Idioma</Label>
-                <Select value={formLanguage} onValueChange={setFormLanguage}>
-                  <SelectTrigger data-testid="select-language">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pt">Português</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div>
+                <SheetTitle>{editing ? "Editar Texto" : "Novo Texto"}</SheetTitle>
+                <SheetDescription>
+                  {editing ? "Altere o texto do teste de digitação" : "Adicione um texto para o teste de digitação"}
+                </SheetDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={formActive}
-                onCheckedChange={setFormActive}
-                data-testid="switch-text-active"
-              />
-              <Label>Ativo</Label>
+          </SheetHeader>
+
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {/* Conteúdo */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conteúdo</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="text-content">Texto</Label>
+                  <Textarea
+                    id="text-content"
+                    value={formContent}
+                    onChange={(e) => setFormContent(e.target.value)}
+                    rows={6}
+                    className="font-mono text-sm"
+                    placeholder="Digite o texto que será usado no teste..."
+                    data-testid="input-text-content"
+                  />
+                  <p className="text-xs text-muted-foreground">{formContent.length} caracteres · mínimo de 10</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Classificação */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Classificação</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Dificuldade</Label>
+                    <Select value={formDifficulty} onValueChange={setFormDifficulty}>
+                      <SelectTrigger data-testid="select-difficulty">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 - Fácil</SelectItem>
+                        <SelectItem value="2">2</SelectItem>
+                        <SelectItem value="3">3 - Médio</SelectItem>
+                        <SelectItem value="4">4</SelectItem>
+                        <SelectItem value="5">5 - Difícil</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Idioma</Label>
+                    <Select value={formLanguage} onValueChange={setFormLanguage}>
+                      <SelectTrigger data-testid="select-language">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pt">Português</SelectItem>
+                        <SelectItem value="en">English</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Texto ativo</p>
+                    <p className="text-xs text-muted-foreground">Disponível para os testes de digitação</p>
+                  </div>
+                  <Switch
+                    checked={formActive}
+                    onCheckedChange={setFormActive}
+                    data-testid="switch-text-active"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
+              <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
+              <Button onClick={handleSave} disabled={isSaving} data-testid="button-save-text">
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                {editing ? "Salvar alterações" : "Criar texto"}
+              </Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={isSaving} data-testid="button-save-text">
-              {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

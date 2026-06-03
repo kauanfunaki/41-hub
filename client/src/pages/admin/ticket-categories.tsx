@@ -19,12 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -477,18 +477,34 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editing
-                ? "Editar Categoria"
-                : dialogMode === "branch"
-                ? "Nova Branch"
-                : "Nova Subcategoria"}
-            </DialogTitle>
-          </DialogHeader>
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-2xl p-0" data-testid="sheet-category-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                <FolderTree className="h-5 w-5" />
+              </div>
+              <div>
+                <SheetTitle>
+                  {editing
+                    ? "Editar Categoria"
+                    : dialogMode === "branch"
+                    ? "Nova Branch"
+                    : "Nova Subcategoria"}
+                </SheetTitle>
+                <SheetDescription>
+                  {editing
+                    ? "Altere as informações da categoria"
+                    : dialogMode === "branch"
+                    ? "Crie uma nova branch principal de chamados"
+                    : "Crie uma subcategoria com formulário e regras"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
 
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5">
           {isSubcategory ? (
             <Tabs defaultValue="general" className="w-full">
               <TabsList className="grid w-full grid-cols-4">
@@ -864,19 +880,21 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
               </div>
             </div>
           )}
+            </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={!name || saveMutation.isPending || (dialogMode === "subcategory" && !editing && parentId === "none")}
-              data-testid="button-save-category"
-            >
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={!name || saveMutation.isPending || (dialogMode === "subcategory" && !editing && parentId === "none")}
+                data-testid="button-save-category"
+              >
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (editing ? "Salvar alterações" : "Criar")}
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
