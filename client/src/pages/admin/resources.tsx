@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Pencil, Trash2, Layout, Monitor, BarChart3, Activity } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Layout, Monitor, BarChart3, Activity, Link2, Tag } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,14 +10,20 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +56,11 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { Resource, Sector } from "@shared/schema";
+
+const getIcon = (iconName: string) => {
+  const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>;
+  return icons[iconName] || LucideIcons.Layout;
+};
 
 type ResourceType = "APP" | "DASHBOARD";
 type EmbedMode = "LINK" | "IFRAME" | "POWERBI";
@@ -361,34 +373,37 @@ export default function AdminResources() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={(resource as any).healthStatusOverride || "UP"}
-                          onValueChange={(v) => healthMutation.mutate({ id: resource.id, healthStatus: v })}
-                        >
-                          <SelectTrigger className="h-7 w-32 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="UP">
-                              <span className="flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
-                                OK
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="DEGRADED">
-                              <span className="flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-amber-500 inline-block" />
-                                Manutenção
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="DOWN">
-                              <span className="flex items-center gap-1.5">
-                                <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
-                                Fora do ar
-                              </span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {(() => {
+                          const health = (resource as any).healthStatusOverride || "UP";
+                          const cfg: Record<string, { dot: string; label: string; badge: string }> = {
+                            UP:      { dot: "bg-green-500", label: "OK",        badge: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" },
+                            DEGRADED:{ dot: "bg-amber-500", label: "Manutenção",badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+                            DOWN:    { dot: "bg-red-500",   label: "Fora do ar",badge: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" },
+                          };
+                          const c = cfg[health] ?? cfg.UP;
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className={cn("inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity", c.badge)}>
+                                  <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", c.dot)} />
+                                  {c.label}
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {Object.entries(cfg).map(([val, item]) => (
+                                  <DropdownMenuItem
+                                    key={val}
+                                    onClick={() => healthMutation.mutate({ id: resource.id, healthStatus: val })}
+                                    className="flex items-center gap-2 text-xs"
+                                  >
+                                    <span className={cn("h-2 w-2 rounded-full shrink-0", item.dot)} />
+                                    {item.label}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -419,21 +434,70 @@ export default function AdminResources() {
         </CardContent>
       </Card>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editingResource ? "Editar Recurso" : "Novo Recurso"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingResource
-                ? "Altere as informações do recurso"
-                : "Adicione uma nova aplicação ou dashboard"}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <SheetContent className="flex flex-col sm:max-w-lg p-0" data-testid="sheet-resource-form">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-lg shrink-0",
+                formData.type === "APP" ? "bg-primary/10 text-primary" : "bg-chart-2/10 text-chart-2"
+              )}>
+                {(() => { const Icon = getIcon(formData.icon); return <Icon className="h-5 w-5" />; })()}
+              </div>
+              <div>
+                <SheetTitle>
+                  {editingResource ? "Editar Recurso" : "Novo Recurso"}
+                </SheetTitle>
+                <SheetDescription>
+                  {editingResource ? "Altere as informações do recurso" : "Adicione uma nova aplicação ou dashboard"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+              {/* Tipo */}
+              <div className="space-y-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tipo</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: "APP" })}
+                    data-testid="type-btn-app"
+                    className={cn(
+                      "rounded-xl border-2 p-4 flex flex-col items-center gap-2 transition-all",
+                      formData.type === "APP"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/60"
+                    )}
+                  >
+                    <Monitor className="h-6 w-6" />
+                    <span className="text-sm font-medium">Aplicação</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: "DASHBOARD" })}
+                    data-testid="type-btn-dashboard"
+                    className={cn(
+                      "rounded-xl border-2 p-4 flex flex-col items-center gap-2 transition-all",
+                      formData.type === "DASHBOARD"
+                        ? "border-chart-2 bg-chart-2/5 text-chart-2"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/60"
+                    )}
+                  >
+                    <BarChart3 className="h-6 w-6" />
+                    <span className="text-sm font-medium">Dashboard</span>
+                  </button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Identidade */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identidade</Label>
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome</Label>
                   <Input
@@ -445,31 +509,93 @@ export default function AdminResources() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="type">Tipo</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(v) => setFormData({ ...formData, type: v as ResourceType })}
-                  >
-                    <SelectTrigger data-testid="select-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="APP">Aplicação</SelectItem>
-                      <SelectItem value="DASHBOARD">Dashboard</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="icon">Ícone</Label>
+                  <div className="flex gap-2 items-center">
+                    <div className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+                      formData.type === "APP" ? "bg-primary/10 text-primary border-primary/20" : "bg-chart-2/10 text-chart-2 border-chart-2/20"
+                    )}>
+                      {(() => { const Icon = getIcon(formData.icon); return <Icon className="h-4 w-4" />; })()}
+                    </div>
+                    <Input
+                      id="icon"
+                      value={formData.icon}
+                      onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                      placeholder="Layout"
+                      data-testid="input-resource-icon"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Nome do ícone Lucide (ex: Monitor, FileText, Globe)</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <Separator />
+
+              {/* Acesso */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Acesso</Label>
                 <div className="space-y-2">
-                  <Label htmlFor="sector">Setor</Label>
+                  <Label htmlFor="url" className="flex items-center gap-1.5">
+                    <Link2 className="h-3.5 w-3.5" />
+                    URL
+                  </Label>
+                  <Input
+                    id="url"
+                    value={formData.url}
+                    onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                    placeholder="https://..."
+                    data-testid="input-resource-url"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Modo de Exibição</Label>
+                    <Select
+                      value={formData.embedMode}
+                      onValueChange={(v) => setFormData({ ...formData, embedMode: v as EmbedMode })}
+                    >
+                      <SelectTrigger data-testid="select-embed-mode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="LINK">Link Externo</SelectItem>
+                        <SelectItem value="IFRAME">Iframe</SelectItem>
+                        <SelectItem value="POWERBI">Power BI</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Abertura</Label>
+                    <Select
+                      value={formData.openBehavior}
+                      onValueChange={(v) => setFormData({ ...formData, openBehavior: v as OpenBehavior })}
+                    >
+                      <SelectTrigger data-testid="select-open-behavior">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="HUB_ONLY">Somente no Hub</SelectItem>
+                        <SelectItem value="NEW_TAB_ONLY">Nova Guia</SelectItem>
+                        <SelectItem value="BOTH">Usuário Escolhe</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Organização */}
+              <div className="space-y-4">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Organização</Label>
+                <div className="space-y-2">
+                  <Label>Setor</Label>
                   <Select
                     value={formData.sectorId}
                     onValueChange={(v) => setFormData({ ...formData, sectorId: v })}
                   >
                     <SelectTrigger data-testid="select-sector">
-                      <SelectValue placeholder="Selecione" />
+                      <SelectValue placeholder="Selecione um setor" />
                     </SelectTrigger>
                     <SelectContent>
                       {sectors.map((sector) => (
@@ -481,57 +607,10 @@ export default function AdminResources() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="embedMode">Modo de Exibição</Label>
-                  <Select
-                    value={formData.embedMode}
-                    onValueChange={(v) => setFormData({ ...formData, embedMode: v as EmbedMode })}
-                  >
-                    <SelectTrigger data-testid="select-embed-mode">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="LINK">Link Externo</SelectItem>
-                      <SelectItem value="IFRAME">Iframe</SelectItem>
-                      <SelectItem value="POWERBI">Power BI</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="openBehavior">Comportamento de Abertura</Label>
-                <Select
-                  value={formData.openBehavior}
-                  onValueChange={(v) => setFormData({ ...formData, openBehavior: v as OpenBehavior })}
-                >
-                  <SelectTrigger data-testid="select-open-behavior">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="HUB_ONLY">Somente no Hub</SelectItem>
-                    <SelectItem value="NEW_TAB_ONLY">Somente em Nova Guia</SelectItem>
-                    <SelectItem value="BOTH">Usuário Escolhe</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Define como o recurso pode ser aberto pelos usuários
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="url">URL</Label>
-                <Input
-                  id="url"
-                  value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                  placeholder="https://..."
-                  data-testid="input-resource-url"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tags">Tags (separadas por vírgula)</Label>
+                  <Label htmlFor="tags" className="flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5" />
+                    Tags
+                  </Label>
                   <Input
                     id="tags"
                     value={formData.tags}
@@ -539,30 +618,24 @@ export default function AdminResources() {
                     placeholder="financeiro, relatório"
                     data-testid="input-resource-tags"
                   />
+                  <p className="text-xs text-muted-foreground">Separe as tags por vírgula</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="icon">Ícone (Lucide)</Label>
-                  <Input
-                    id="icon"
-                    value={formData.icon}
-                    onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                    placeholder="Layout"
-                    data-testid="input-resource-icon"
+                <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Recurso ativo</p>
+                    <p className="text-xs text-muted-foreground">Visível para os usuários do Hub</p>
+                  </div>
+                  <Switch
+                    id="isActive"
+                    checked={formData.isActive}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                    data-testid="switch-resource-active"
                   />
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="isActive"
-                  checked={formData.isActive}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-                  data-testid="switch-resource-active"
-                />
-                <Label htmlFor="isActive">Recurso ativo</Label>
-              </div>
             </div>
-            <DialogFooter>
+
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleCloseDialog}>
                 Cancelar
               </Button>
@@ -571,12 +644,12 @@ export default function AdminResources() {
                 disabled={!formData.name.trim() || createMutation.isPending || updateMutation.isPending}
                 data-testid="button-save-resource"
               >
-                {editingResource ? "Salvar" : "Criar"}
+                {editingResource ? "Salvar alterações" : "Criar recurso"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <AlertDialogContent>

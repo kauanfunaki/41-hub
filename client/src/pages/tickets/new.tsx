@@ -20,19 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -53,8 +40,8 @@ import {
   Paperclip,
   AlertTriangle,
   CheckCircle2,
-  ChevronsUpDown,
-  Check,
+  Search,
+  X,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -93,35 +80,50 @@ type RequiredAttachment = {
   required?: boolean;
 };
 
+const STEP_LABELS = ["Categoria", "Detalhes"];
+
+const BRANCH_COLORS = [
+  "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+  "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+];
+const PRIORITY_OPTIONS = [
+  { value: "BAIXA",   label: "Baixa",   color: "border-slate-400 text-slate-600 dark:text-slate-400 bg-slate-500/5 hover:bg-slate-500/10" },
+  { value: "MEDIA",   label: "Média",   color: "border-blue-400 text-blue-600 dark:text-blue-400 bg-blue-500/5 hover:bg-blue-500/10" },
+  { value: "ALTA",    label: "Alta",    color: "border-amber-400 text-amber-600 dark:text-amber-400 bg-amber-500/5 hover:bg-amber-500/10" },
+  { value: "URGENTE", label: "Urgente", color: "border-red-400 text-red-600 dark:text-red-400 bg-red-500/5 hover:bg-red-500/10" },
+];
+
 // ── Step indicator ────────────────────────────────────────────────────────────
 
 function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       {Array.from({ length: total }, (_, i) => {
         const step = i + 1;
         const done = step < current;
         const active = step === current;
         return (
-          <div key={step} className="flex items-center gap-2">
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                done
-                  ? "bg-primary text-primary-foreground"
-                  : active
-                  ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {done ? <CheckCircle2 className="h-4 w-4" /> : step}
+          <div key={step} className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <div className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold transition-colors shrink-0",
+                done    ? "bg-primary text-primary-foreground" :
+                active  ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2" :
+                          "bg-muted text-muted-foreground"
+              )}>
+                {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : step}
+              </div>
+              <span className={cn("text-xs font-medium hidden sm:inline whitespace-nowrap",
+                active ? "text-foreground" : "text-muted-foreground"
+              )}>
+                {STEP_LABELS[i]}
+              </span>
             </div>
-            {step < total && (
-              <div
-                className={`h-0.5 w-8 ${
-                  done ? "bg-primary" : "bg-muted"
-                }`}
-              />
-            )}
+            {step < total && <div className={cn("h-px w-6 mx-1", done ? "bg-primary" : "bg-muted")} />}
           </div>
         );
       })}
@@ -147,7 +149,7 @@ export default function TicketsNew() {
   const [description, setDescription] = useState("");
   const [requesterSectorId, setRequesterSectorId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [categoryComboOpen, setCategoryComboOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
   const [priority, setPriority] = useState("MEDIA");
   const [showTemplateConfirm, setShowTemplateConfirm] = useState(false);
   const pendingTemplate = useRef("");
@@ -273,6 +275,17 @@ export default function TicketsNew() {
     createMutation.mutate();
   };
 
+  // Category search filtering
+  const searchLower = categorySearch.toLowerCase();
+  const filteredBranches = categories
+    .map((root) => {
+      const leaves = root.children && root.children.length > 0
+        ? root.children.filter((c) => c.name.toLowerCase().includes(searchLower) || root.name.toLowerCase().includes(searchLower))
+        : (root.name.toLowerCase().includes(searchLower) ? [root] : []);
+      return { root, leaves };
+    })
+    .filter(({ leaves }) => leaves.length > 0);
+
   const effectiveSectorId =
     requesterSectorId ||
     (availableSectors.length === 1 ? availableSectors[0].id : "");
@@ -292,12 +305,7 @@ export default function TicketsNew() {
       {/* Header */}
       <div className="flex items-center gap-3">
         {step === 2 ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setStep(1)}
-            data-testid="button-back-step"
-          >
+          <Button variant="ghost" size="icon" onClick={() => setStep(1)} data-testid="button-back-step">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         ) : (
@@ -307,379 +315,232 @@ export default function TicketsNew() {
             </Button>
           </Link>
         )}
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+          <FileText className="h-5 w-5 text-primary" />
+        </div>
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-foreground">Novo Chamado</h1>
-          <p className="text-sm text-muted-foreground">
-            Preencha os dados para abrir um chamado de suporte
-          </p>
+          <p className="text-sm text-muted-foreground">Preencha os dados para abrir um chamado de suporte</p>
         </div>
         <StepIndicator current={step} total={2} />
       </div>
 
-      {/* SLA warning */}
-      <div className="flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20 px-4 py-3 text-sm">
-        <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
-        <p className="text-yellow-800 dark:text-yellow-200">
-          <span className="font-semibold">Atenção:</span> informações
-          incompletas ou incorretas podem impactar o SLA do chamado.
-        </p>
-      </div>
-
       {availableSectors.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6">
-            <div
-              className="text-center py-8 text-muted-foreground"
-              data-testid="text-no-sector"
-            >
-              Usuário sem setor vinculado. Não é possível abrir chamados.
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border bg-card p-12 flex flex-col items-center justify-center text-center gap-3" data-testid="text-no-sector">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <AlertTriangle className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <p className="font-medium">Sem setor vinculado</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Sua conta não possui setor vinculado. Fale com um administrador para poder abrir chamados.
+          </p>
+        </div>
       ) : (
         <>
           {/* ── PASSO 1: Categoria ──────────────────────────────────────────── */}
           {step === 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Passo 1 — Selecione a categoria
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Category combobox */}
-                <div className="space-y-2">
-                  <Label htmlFor="categoryId">Categoria</Label>
-                  <Popover open={categoryComboOpen} onOpenChange={setCategoryComboOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={categoryComboOpen}
-                        className="w-full justify-between font-normal"
-                        data-testid="select-category"
-                      >
-                        {categoryId
-                          ? (leafCategories.find((c) => c.id === categoryId)?.displayPath ?? "Categoria selecionada")
-                          : "Buscar categoria..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command>
-                        <CommandInput
-                          placeholder="Digite para filtrar..."
-                          data-testid="input-category-search"
-                        />
-                        <CommandList>
-                          <CommandEmpty>Nenhuma categoria encontrada</CommandEmpty>
-                          <CommandGroup>
-                            {leafCategories.map((cat) => (
-                              <CommandItem
-                                key={cat.id}
-                                value={cat.displayPath}
-                                onSelect={() => {
-                                  handleCategoryChange(cat.id);
-                                  setCategoryComboOpen(false);
-                                }}
-                                data-testid={`category-option-${cat.id}`}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    categoryId === cat.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                {cat.displayPath}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 px-4 py-3 text-sm">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-amber-800 dark:text-amber-200">
+                  <span className="font-semibold">Atenção:</span> informações incompletas ou incorretas podem impactar o SLA do chamado.
+                </p>
+              </div>
 
-                {/* KB suggestions */}
-                {categoryId && kbSuggestions.length > 0 && (
-                  <Card className="border-chart-1/30 bg-chart-1/5">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-3">
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="px-6 py-4 border-b bg-muted/30">
+                  <h2 className="text-sm font-semibold">Selecione a categoria do chamado</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Escolha o tipo de serviço para que o chamado seja direcionado corretamente</p>
+                </div>
+                <div className="p-6 space-y-5">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      placeholder="Buscar categoria..."
+                      className="flex h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      data-testid="input-category-search"
+                    />
+                    {categorySearch && (
+                      <button
+                        type="button"
+                        onClick={() => setCategorySearch("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Card grid grouped by branch */}
+                  {categories.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted mb-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-medium">Nenhuma categoria cadastrada</p>
+                      <p className="text-xs text-muted-foreground mt-1">Fale com um administrador para configurar as categorias.</p>
+                    </div>
+                  ) : filteredBranches.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada para "<span className="font-medium">{categorySearch}</span>"</p>
+                      <button type="button" onClick={() => setCategorySearch("")} className="text-xs text-primary mt-1 hover:underline">Limpar busca</button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {filteredBranches.map(({ root, leaves }, branchIdx) => {
+                        const branchColor = BRANCH_COLORS[branchIdx % BRANCH_COLORS.length];
+                        const initial = root.name.charAt(0).toUpperCase();
+                        return (
+                          <div key={root.id}>
+                            {/* Branch header */}
+                            <div className="flex items-center gap-2.5 mb-3">
+                              <div className={cn("flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold border shrink-0", branchColor)}>
+                                {initial}
+                              </div>
+                              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                {root.name}
+                              </span>
+                              <div className="flex-1 h-px bg-border" />
+                            </div>
+                            {/* Leaf cards */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {leaves.map((cat) => {
+                                const isSelected = categoryId === cat.id;
+                                return (
+                                  <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => handleCategoryChange(cat.id)}
+                                    data-testid={`category-card-${cat.id}`}
+                                    className={cn(
+                                      "rounded-xl border-2 px-3 py-3 text-left transition-all group",
+                                      isSelected
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:border-muted-foreground/40 hover:bg-muted/40"
+                                    )}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className={cn("text-sm font-medium leading-snug", isSelected ? "text-primary" : "")}>
+                                        {cat.name}
+                                      </p>
+                                      {isSelected && (
+                                        <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* KB suggestions */}
+                  {categoryId && kbSuggestions.length > 0 && (
+                    <div className="rounded-xl border border-chart-1/20 bg-chart-1/5 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
                         <BookOpen className="h-4 w-4 text-chart-1" />
-                        <span className="text-sm font-medium">
-                          Artigos que podem ajudar
-                        </span>
-                        <Badge variant="secondary" className="text-xs">
-                          {kbSuggestions.length}
-                        </Badge>
+                        <span className="text-sm font-medium">Artigos que podem ajudar</span>
+                        <Badge variant="secondary" className="text-xs">{kbSuggestions.length}</Badge>
                       </div>
                       <div className="space-y-2">
                         {kbSuggestions.slice(0, 3).map((article) => (
                           <a
                             key={article.id}
                             href={`/kb/articles/${article.id}`}
-                            className="flex items-center justify-between gap-2 rounded-md border bg-card p-3 hover-elevate cursor-pointer"
+                            className="flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2.5 hover:bg-muted/50 transition-colors"
                             data-testid={`kb-suggestion-${article.id}`}
                           >
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {article.title}
-                              </p>
-                              {article.helpfulCount !== undefined &&
-                                article.helpfulCount > 0 && (
-                                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                                    <ThumbsUp className="h-3 w-3" />
-                                    <span>{article.helpfulCount}</span>
-                                  </div>
-                                )}
+                              <p className="text-sm font-medium truncate">{article.title}</p>
+                              {article.helpfulCount !== undefined && article.helpfulCount > 0 && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                  <ThumbsUp className="h-3 w-3" />
+                                  <span>{article.helpfulCount} útil</span>
+                                </div>
+                              )}
                             </div>
-                            <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           </a>
                         ))}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-3">
-                        Verifique se algum desses artigos resolve sua dúvida antes de abrir o chamado.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                      <p className="text-xs text-muted-foreground">Verifique se algum desses artigos resolve sua dúvida antes de abrir o chamado.</p>
+                    </div>
+                  )}
 
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => setStep(2)}
-                    disabled={!canProceedStep1}
-                    data-testid="button-next-step"
-                  >
-                    Próximo
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
+                  <div className="flex justify-end">
+                    <Button onClick={() => setStep(2)} disabled={!canProceedStep1} data-testid="button-next-step">
+                      Próximo
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
-          {/* ── PASSO 2: Formulário ─────────────────────────────────────────── */}
+          {/* ── PASSO 2: Formulário (2 colunas) ────────────────────────────── */}
           {step === 2 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Passo 2 — Detalhes do chamado
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Sector */}
+            <form onSubmit={handleSubmit}>
+              <div className="grid gap-6 lg:grid-cols-[1fr_280px] items-start">
+
+                {/* LEFT — Campos */}
+                <div className="space-y-5">
+
+                  {/* Setor */}
                   {availableSectors.length === 1 ? (
                     <div className="space-y-2">
                       <Label>Setor Solicitante</Label>
-                      <p
-                        className="text-sm font-medium px-3 py-2 border rounded-md bg-muted"
-                        data-testid="text-sector-auto"
-                      >
+                      <p className="text-sm font-medium px-3 py-2 border rounded-md bg-muted" data-testid="text-sector-auto">
                         {availableSectors[0].name}
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-2">
                       <Label htmlFor="requesterSectorId">Setor Solicitante</Label>
-                      <Select
-                        value={requesterSectorId}
-                        onValueChange={setRequesterSectorId}
-                      >
+                      <Select value={requesterSectorId} onValueChange={setRequesterSectorId}>
                         <SelectTrigger data-testid="select-sector">
                           <SelectValue placeholder="Selecione o setor" />
                         </SelectTrigger>
                         <SelectContent>
                           {availableSectors.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {s.name}
-                            </SelectItem>
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                   )}
 
-                  {/* Selected category (read-only summary) */}
+                  {/* Prioridade — cards visuais */}
                   <div className="space-y-2">
-                    <Label>Categoria selecionada</Label>
-                    <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted text-sm">
-                      <span className="font-medium">
-                        {leafCategories.find((c) => c.id === categoryId)?.displayPath ?? selectedCategory?.name}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto h-6 px-2 text-xs"
-                        onClick={() => setStep(1)}
-                      >
-                        Alterar
-                      </Button>
+                    <Label>Prioridade</Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {PRIORITY_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setPriority(opt.value)}
+                          data-testid={`priority-${opt.value.toLowerCase()}`}
+                          className={cn(
+                            "rounded-lg border-2 py-2.5 text-sm font-medium transition-all",
+                            priority === opt.value
+                              ? opt.color.replace("hover:", "") + " border-opacity-100"
+                              : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Priority */}
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Prioridade</Label>
-                    <Select value={priority} onValueChange={setPriority}>
-                      <SelectTrigger data-testid="select-priority">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="BAIXA">Baixa</SelectItem>
-                        <SelectItem value="MEDIA">Média</SelectItem>
-                        <SelectItem value="ALTA">Alta</SelectItem>
-                        <SelectItem value="URGENTE">Urgente</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Dynamic form schema */}
-                  {selectedFormSchema.length > 0 && (
-                    <Card className="border-primary/20 bg-primary/5">
-                      <CardContent className="p-4 space-y-3">
-                        <p className="text-sm font-medium">Dados do serviço</p>
-                        {selectedFormSchema.map((field) => (
-                          <div key={field.key} className="space-y-1">
-                            <Label className="text-sm">
-                              {field.label}
-                              {field.required && (
-                                <span className="text-destructive ml-1">*</span>
-                              )}
-                            </Label>
-                            {field.helpText && (
-                              <p className="text-xs text-muted-foreground">
-                                {field.helpText}
-                              </p>
-                            )}
-                            {field.type === "textarea" ? (
-                              <Textarea
-                                value={requestData[field.key] || ""}
-                                onChange={(e) =>
-                                  setRequestData((prev) => ({
-                                    ...prev,
-                                    [field.key]: e.target.value,
-                                  }))
-                                }
-                                placeholder={field.placeholder}
-                                rows={3}
-                                data-testid={`field-${field.key}`}
-                              />
-                            ) : field.type === "select" && field.options ? (
-                              <Select
-                                value={requestData[field.key] || ""}
-                                onValueChange={(v) =>
-                                  setRequestData((prev) => ({
-                                    ...prev,
-                                    [field.key]: v,
-                                  }))
-                                }
-                              >
-                                <SelectTrigger
-                                  data-testid={`field-${field.key}`}
-                                >
-                                  <SelectValue
-                                    placeholder={
-                                      field.placeholder || "Selecione..."
-                                    }
-                                  />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {field.options.map((opt) => (
-                                    <SelectItem key={opt} value={opt}>
-                                      {opt}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Input
-                                type={
-                                  field.type === "email"
-                                    ? "email"
-                                    : field.type === "number"
-                                    ? "number"
-                                    : "text"
-                                }
-                                value={requestData[field.key] || ""}
-                                onChange={(e) =>
-                                  setRequestData((prev) => ({
-                                    ...prev,
-                                    [field.key]: e.target.value,
-                                  }))
-                                }
-                                placeholder={field.placeholder}
-                                min={field.rules?.min}
-                                max={field.rules?.max}
-                                minLength={field.rules?.minLen}
-                                maxLength={field.rules?.maxLen}
-                                data-testid={`field-${field.key}`}
-                              />
-                            )}
-                            {field.rules && (
-                              <div className="text-[10px] text-muted-foreground flex gap-2 flex-wrap">
-                                {field.rules.minLen && (
-                                  <span>Mín. {field.rules.minLen} chars</span>
-                                )}
-                                {field.rules.maxLen && (
-                                  <span>Máx. {field.rules.maxLen} chars</span>
-                                )}
-                                {field.rules.min !== undefined && (
-                                  <span>Mín. {field.rules.min}</span>
-                                )}
-                                {field.rules.max !== undefined && (
-                                  <span>Máx. {field.rules.max}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Required attachments info */}
-                  {selectedRequiredAttachments.length > 0 && (
-                    <Card className="border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
-                      <CardContent className="p-4 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Paperclip className="h-4 w-4 text-orange-600" />
-                          <p className="text-sm font-medium">
-                            Anexos necessários
-                          </p>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Os anexos abaixo devem ser enviados após a criação do
-                          chamado.
-                        </p>
-                        <div className="space-y-1">
-                          {selectedRequiredAttachments.map((att) => (
-                            <div
-                              key={att.key}
-                              className="flex items-center gap-2 text-sm"
-                              data-testid={`required-att-${att.key}`}
-                            >
-                              <Badge
-                                variant={att.required ? "destructive" : "outline"}
-                                className="text-[10px]"
-                              >
-                                {att.required ? "obrigatório" : "opcional"}
-                              </Badge>
-                              <span>{att.label}</span>
-                              {att.mime && att.mime.length > 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  ({att.mime.join(", ")})
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Title */}
+                  {/* Título */}
                   <div className="space-y-2">
                     <Label htmlFor="title">Título</Label>
                     <Input
@@ -692,18 +553,12 @@ export default function TicketsNew() {
                     />
                   </div>
 
-                  {/* Description */}
+                  {/* Descrição */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="description">Descrição</Label>
                       {categoryTemplate && description.trim() && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleInsertTemplate}
-                          data-testid="button-insert-template"
-                        >
+                        <Button type="button" variant="ghost" size="sm" onClick={handleInsertTemplate} data-testid="button-insert-template">
                           <FileText className="h-3 w-3 mr-1" />
                           Inserir template
                         </Button>
@@ -720,34 +575,166 @@ export default function TicketsNew() {
                     />
                   </div>
 
-                  <div className="flex justify-end gap-3">
-                    <Button
-                      variant="outline"
-                      type="button"
-                      onClick={() => setStep(1)}
-                    >
-                      Voltar
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={
-                        createMutation.isPending || !canSubmit
-                      }
-                      data-testid="button-submit-ticket"
-                    >
-                      {createMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Criando...
-                        </>
-                      ) : (
-                        "Criar Chamado"
-                      )}
-                    </Button>
+                  {/* Campos dinâmicos */}
+                  {selectedFormSchema.length > 0 && (
+                    <div className="rounded-xl border overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-primary/5">
+                        <p className="text-sm font-semibold text-primary">Dados específicos do serviço</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Campos obrigatórios para este tipo de chamado</p>
+                      </div>
+                      <div className="p-4 space-y-4">
+                        {selectedFormSchema.map((field) => (
+                          <div key={field.key} className="space-y-1.5">
+                            <Label className="text-sm">
+                              {field.label}
+                              {field.required && <span className="text-destructive ml-1">*</span>}
+                            </Label>
+                            {field.helpText && <p className="text-xs text-muted-foreground">{field.helpText}</p>}
+                            {field.type === "textarea" ? (
+                              <Textarea
+                                value={requestData[field.key] || ""}
+                                onChange={(e) => setRequestData((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                                placeholder={field.placeholder}
+                                rows={3}
+                                data-testid={`field-${field.key}`}
+                              />
+                            ) : field.type === "select" && field.options ? (
+                              <Select
+                                value={requestData[field.key] || ""}
+                                onValueChange={(v) => setRequestData((prev) => ({ ...prev, [field.key]: v }))}
+                              >
+                                <SelectTrigger data-testid={`field-${field.key}`}>
+                                  <SelectValue placeholder={field.placeholder || "Selecione..."} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {field.options.map((opt) => (
+                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                type={field.type === "email" ? "email" : field.type === "number" ? "number" : "text"}
+                                value={requestData[field.key] || ""}
+                                onChange={(e) => setRequestData((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                                placeholder={field.placeholder}
+                                min={field.rules?.min}
+                                max={field.rules?.max}
+                                minLength={field.rules?.minLen}
+                                maxLength={field.rules?.maxLen}
+                                data-testid={`field-${field.key}`}
+                              />
+                            )}
+                            {field.rules && (
+                              <div className="text-[10px] text-muted-foreground flex gap-2 flex-wrap">
+                                {field.rules.minLen && <span>Mín. {field.rules.minLen} chars</span>}
+                                {field.rules.maxLen && <span>Máx. {field.rules.maxLen} chars</span>}
+                                {field.rules.min !== undefined && <span>Mín. {field.rules.min}</span>}
+                                {field.rules.max !== undefined && <span>Máx. {field.rules.max}</span>}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Anexos necessários */}
+                  {selectedRequiredAttachments.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-3 border-b border-amber-200 dark:border-amber-800">
+                        <Paperclip className="h-4 w-4 text-amber-600 shrink-0" />
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Anexos necessários</p>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <p className="text-xs text-muted-foreground">Envie estes anexos após a criação do chamado.</p>
+                        {selectedRequiredAttachments.map((att) => (
+                          <div key={att.key} className="flex items-center gap-2 text-sm" data-testid={`required-att-${att.key}`}>
+                            <Badge variant={att.required ? "destructive" : "outline"} className="text-[10px] shrink-0">
+                              {att.required ? "obrigatório" : "opcional"}
+                            </Badge>
+                            <span>{att.label}</span>
+                            {att.mime && att.mime.length > 0 && (
+                              <span className="text-xs text-muted-foreground">({att.mime.join(", ")})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT — Painel de resumo sticky */}
+                <div className="hidden lg:block">
+                  <div className="sticky top-6 space-y-4">
+                    <div className="rounded-xl border bg-card overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-muted/30">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resumo</p>
+                      </div>
+                      <div className="p-4 space-y-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Categoria</p>
+                          <p className="font-medium leading-tight">
+                            {leafCategories.find((c) => c.id === categoryId)?.displayPath ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Prioridade</p>
+                          <p className={cn("font-medium", PRIORITY_OPTIONS.find(p => p.value === priority)?.color.split(" ")[1] ?? "")}>
+                            {PRIORITY_OPTIONS.find(p => p.value === priority)?.label ?? "—"}
+                          </p>
+                        </div>
+                        {effectiveSectorId && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Setor</p>
+                            <p className="font-medium">{availableSectors.find(s => s.id === effectiveSectorId)?.name ?? "—"}</p>
+                          </div>
+                        )}
+                        {title && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Título</p>
+                            <p className="font-medium line-clamp-2 leading-tight">{title}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-2.5 text-xs">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-amber-800 dark:text-amber-200 leading-relaxed">
+                        Informações incompletas podem impactar o SLA do chamado.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={createMutation.isPending || !canSubmit}
+                        data-testid="button-submit-ticket"
+                      >
+                        {createMutation.isPending ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</>
+                        ) : (
+                          "Criar Chamado"
+                        )}
+                      </Button>
+                      <Button type="button" variant="outline" className="w-full" onClick={() => setStep(1)}>
+                        ← Alterar categoria
+                      </Button>
+                    </div>
                   </div>
-                </form>
-              </CardContent>
-            </Card>
+                </div>
+              </div>
+
+              {/* Mobile submit */}
+              <div className="flex justify-end gap-3 mt-6 lg:hidden">
+                <Button type="button" variant="outline" onClick={() => setStep(1)}>Voltar</Button>
+                <Button type="submit" disabled={createMutation.isPending || !canSubmit} data-testid="button-submit-ticket-mobile">
+                  {createMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</> : "Criar Chamado"}
+                </Button>
+              </div>
+            </form>
           )}
         </>
       )}

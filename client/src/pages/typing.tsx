@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +42,12 @@ export default function TypingTest() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  const { data: myStats } = useQuery<{ bestWpm: number; bestAccuracy: number; totalSessions: number } | null>({
+    queryKey: ["/api/typing/me"],
+    queryFn: () => fetch("/api/typing/me", { credentials: "include" }).then(r => r.ok ? r.json() : null),
+    retry: false,
+  });
 
   const [state, setState] = useState<SessionState>("idle");
   const [level, setLevel] = useState<Level>("medium");
@@ -358,6 +364,26 @@ export default function TypingTest() {
               Iniciar Teste
             </Button>
           </div>
+
+          {/* Estatísticas pessoais */}
+          {myStats && myStats.totalSessions > 0 && (
+            <div className="border-t px-6 py-4 grid grid-cols-3 divide-x text-center">
+              <div className="px-4">
+                <p className="text-xl font-bold tabular-nums">{myStats.bestWpm ?? "—"}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Melhor WPM</p>
+              </div>
+              <div className="px-4">
+                <p className="text-xl font-bold tabular-nums">
+                  {myStats.bestAccuracy != null ? `${myStats.bestAccuracy}%` : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Melhor precisão</p>
+              </div>
+              <div className="px-4">
+                <p className="text-xl font-bold tabular-nums">{myStats.totalSessions}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Sessões</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

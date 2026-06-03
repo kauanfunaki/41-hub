@@ -67,6 +67,8 @@ import {
   Film,
   File,
   Lock,
+  Trash2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -130,10 +132,11 @@ const statusBadge: Record<string, string> = {
 
 function formatDate(dateStr: string | Date | null | undefined): string {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
+  return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit", month: "2-digit", year: "2-digit",
     hour: "2-digit", minute: "2-digit",
-  });
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(dateStr));
 }
 
 function getInitials(name: string) {
@@ -186,6 +189,7 @@ function getSlaInfo(cycle: TicketSlaCycle | null | undefined) {
 
 type CommentWithAuthor = TicketComment & { authorName?: string; authorEmail?: string };
 type TicketEventWithActor = TicketEvent & { actorName?: string };
+type AttachmentWithUploader = TicketAttachment & { uploadedByName?: string | null };
 
 interface ChecklistItem {
   id: string; ticketId: string; key: string; label: string;
@@ -330,6 +334,8 @@ export default function TicketsDetail() {
 
   const [commentBody, setCommentBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [newDeadline, setNewDeadline] = useState("");
   const [deadlineReason, setDeadlineReason] = useState("");
@@ -355,7 +361,7 @@ export default function TicketsDetail() {
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/events`, { credentials: "include" }); if (!r.ok) return []; return r.json(); },
     enabled: !!ticketId,
   });
-  const { data: attachments = [] } = useQuery<TicketAttachment[]>({
+  const { data: attachments = [] } = useQuery<AttachmentWithUploader[]>({
     queryKey: ["/api/tickets", ticketId, "attachments"],
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/attachments`, { credentials: "include" }); if (!r.ok) throw new Error("Failed"); return r.json(); },
     enabled: !!ticketId,
@@ -406,6 +412,16 @@ export default function TicketsDetail() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "attachments"] }); toast({ title: "Anexo enviado" }); },
     onError: (e: any) => toast({ title: "Falha no envio do anexo", description: e.message || "Ocorreu um erro ao enviar o arquivo.", variant: "destructive" }),
   });
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attachmentId: string) => {
+      const r = await apiRequest("DELETE", `/api/tickets/${ticketId}/attachments/${attachmentId}`);
+      if (!r.ok) { const err = await r.json(); throw new Error(err.error || "Delete failed"); }
+      return r.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "attachments"] }); toast({ title: "Anexo removido" }); },
+    onError: (e: any) => toast({ title: "Erro ao remover anexo", description: e.message, variant: "destructive" }),
+  });
+
   const checklistMutation = useMutation({
     mutationFn: async ({ itemId, isDone }: { itemId: string; isDone: boolean }) => { await apiRequest("PATCH", `/api/tickets/${ticketId}/checklist/${itemId}`, { isDone }); },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "checklist"] }),
@@ -423,10 +439,15 @@ export default function TicketsDetail() {
   });
 
   const canComment = isAdmin || isCoordinator;
+  const isCreator = !!ticket && ticket.createdBy === user?.id;
+  const canUpload = canComment || isCreator;
+
+  const imageAttachments = attachments.filter(a => a.mimeType?.startsWith("image/"));
 
   const timeline = [
     ...comments.map(c => ({ ...c, _kind: "comment" as const, _date: new Date(c.createdAt) })),
     ...slaEvents.map(e => ({ ...e, _kind: "sla_event" as const, _date: new Date(e.createdAt) })),
+    ...imageAttachments.map(a => ({ ...a, _kind: "image_attachment" as const, _date: new Date(a.createdAt) })),
   ].sort((a, b) => a._date.getTime() - b._date.getTime());
 
   if (isLoading) {
@@ -533,7 +554,7 @@ export default function TicketsDetail() {
           <section className="px-6 py-5 border-b">
             <div className="flex items-center justify-between mb-3">
               <SectionLabel>Anexos {attachments.length > 0 && `· ${attachments.length}`}</SectionLabel>
-              {canComment && (
+              {canUpload && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -579,11 +600,25 @@ export default function TicketsDetail() {
                           : `${(a.sizeBytes / 1024).toFixed(0)} KB`} · {formatDate(a.createdAt)}
                       </p>
                     </div>
-                    <a href={`/api/tickets/${ticketId}/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" data-testid={`download-${a.id}`}>
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                    </a>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <a href={`/api/tickets/${ticketId}/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`download-${a.id}`}>
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                      </a>
+                      {canUpload && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => deleteAttachmentMutation.mutate(a.id)}
+                          disabled={deleteAttachmentMutation.isPending}
+                          data-testid={`delete-attachment-${a.id}`}
+                        >
+                          {deleteAttachmentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -609,6 +644,41 @@ export default function TicketsDetail() {
                 {timeline.map((item) => {
                   if (item._kind === "sla_event") {
                     return <SlaEventRow key={`ev-${item.id}`} event={item as TicketEventWithActor} />;
+                  }
+                  if (item._kind === "image_attachment") {
+                    const att = item as AttachmentWithUploader & { _kind: "image_attachment"; _date: Date };
+                    const initials = (att.uploadedByName || "?")
+                      .split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+                    return (
+                      <div key={`img-${att.id}`} className="flex gap-3">
+                        <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 text-primary">
+                          {initials}
+                        </div>
+                        <div className="flex-1 max-w-sm rounded-xl border bg-muted/50 overflow-hidden">
+                          <a
+                            href={`/api/tickets/${ticketId}/attachments/${att.id}/download`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={`/api/tickets/${ticketId}/attachments/${att.id}/download`}
+                              alt={att.originalName}
+                              className="w-full max-h-64 object-contain bg-muted/30 hover:opacity-90 transition-opacity cursor-zoom-in"
+                            />
+                          </a>
+                          <div className="px-3 py-2 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{att.originalName}</p>
+                              {att.uploadedByName && (
+                                <p className="text-[10px] text-muted-foreground">{att.uploadedByName}</p>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{formatDate(att.createdAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
                   }
                   const c = item as CommentWithAuthor & { _kind: "comment"; _date: Date };
                   const initials = (c.authorName || c.authorEmail || "?")
@@ -643,29 +713,109 @@ export default function TicketsDetail() {
             {canComment && (
               <div className="mt-4 pt-4 border-t space-y-3">
                 <Textarea
-                  placeholder="Escreva um comentário..."
+                  placeholder="Escreva um comentário... (Ctrl+V para colar imagem)"
                   value={commentBody}
                   onChange={(e) => setCommentBody(e.target.value)}
                   rows={3}
                   className="resize-none text-sm"
                   data-testid="input-comment"
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    for (const item of Array.from(items)) {
+                      if (item.type.startsWith("image/")) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (!file) return;
+                        setPendingImage(file);
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setPendingImagePreview(ev.target?.result as string);
+                        reader.readAsDataURL(file);
+                        return;
+                      }
+                    }
+                  }}
                 />
+
+                {/* Preview da imagem pendente */}
+                {pendingImagePreview && (
+                  <div className="relative inline-block">
+                    <img
+                      src={pendingImagePreview}
+                      alt="Preview"
+                      className="rounded-lg border max-h-40 max-w-xs object-contain"
+                    />
+                    <button
+                      type="button"
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center"
+                      onClick={() => { setPendingImage(null); setPendingImagePreview(null); }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <p className="text-[10px] text-muted-foreground mt-1 truncate max-w-xs">
+                      {pendingImage?.name}
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between gap-3">
-                  {isAdmin && (
-                    <label className="flex items-center gap-2 text-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-                      <Checkbox checked={isInternal} onCheckedChange={(v) => setIsInternal(v === true)} data-testid="checkbox-internal" />
-                      <Lock className="h-3 w-3" />
-                      Comentário interno
-                    </label>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {isAdmin && (
+                      <label className="flex items-center gap-2 text-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                        <Checkbox checked={isInternal} onCheckedChange={(v) => setIsInternal(v === true)} data-testid="checkbox-internal" />
+                        <Lock className="h-3 w-3" />
+                        Comentário interno
+                      </label>
+                    )}
+                    {/* Botão para anexar imagem */}
+                    <button
+                      type="button"
+                      title="Anexar imagem"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => {
+                        const input = document.createElement("input");
+                        input.type = "file";
+                        input.accept = "image/*";
+                        input.onchange = (e) => {
+                          const file = (e.target as HTMLInputElement).files?.[0];
+                          if (!file) return;
+                          setPendingImage(file);
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setPendingImagePreview(ev.target?.result as string);
+                          reader.readAsDataURL(file);
+                        };
+                        input.click();
+                      }}
+                    >
+                      <Image className="h-4 w-4" />
+                    </button>
+                  </div>
                   <Button
                     size="sm"
-                    onClick={() => commentMutation.mutate()}
-                    disabled={!commentBody.trim() || commentMutation.isPending}
+                    onClick={async () => {
+                      // Se há imagem pendente, faz upload primeiro
+                      if (pendingImage) {
+                        try {
+                          await new Promise<void>((resolve, reject) => {
+                            uploadMutation.mutate(pendingImage, {
+                              onSuccess: () => resolve(),
+                              onError: (e) => reject(e),
+                            });
+                          });
+                          setPendingImage(null);
+                          setPendingImagePreview(null);
+                        } catch {}
+                      }
+                      // Envia o comentário se tiver texto
+                      if (commentBody.trim()) {
+                        commentMutation.mutate();
+                      }
+                    }}
+                    disabled={(!commentBody.trim() && !pendingImage) || commentMutation.isPending || uploadMutation.isPending}
                     className="ml-auto gap-1.5"
                     data-testid="button-send-comment"
                   >
-                    {commentMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    {(commentMutation.isPending || uploadMutation.isPending) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                     Enviar
                   </Button>
                 </div>

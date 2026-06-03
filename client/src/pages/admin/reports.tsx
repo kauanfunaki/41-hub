@@ -11,6 +11,8 @@ import {
   Calendar,
   Loader2,
   ChevronRight,
+  BookOpen,
+  Rss,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -27,7 +29,9 @@ type ReportType =
   | "notifications"
   | "users"
   | "typing"
-  | "audit-logs";
+  | "audit-logs"
+  | "ops-watchers"
+  | "kb";
 
 interface ReportDef {
   key: ReportType;
@@ -89,6 +93,24 @@ const REPORTS: ReportDef[] = [
     icon: Activity,
     color: "text-chart-4",
     bgColor: "bg-chart-4/10",
+    badge: "Novo",
+  },
+  {
+    key: "ops-watchers",
+    label: "Ops Center",
+    description: "Eventos processados pelos watchers BPO/BLD com status e arquivos.",
+    icon: Rss,
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
+    badge: "Novo",
+  },
+  {
+    key: "kb",
+    label: "Base de Conhecimento",
+    description: "Artigos com total de visualizações e feedback dos usuários.",
+    icon: BookOpen,
+    color: "text-sky-500",
+    bgColor: "bg-sky-500/10",
     badge: "Novo",
   },
 ];
@@ -223,6 +245,8 @@ export default function AdminReports() {
   const [typingTo, setTypingTo] = useState("");
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
+  const [opsFrom, setOpsFrom] = useState("");
+  const [opsTo, setOpsTo] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
 
   const handleExport = async (type: ReportType, format: "csv" | "json") => {
@@ -247,6 +271,9 @@ export default function AdminReports() {
       } else if (type === "audit-logs") {
         if (auditFrom) url += `&from=${auditFrom}`;
         if (auditTo) url += `&to=${auditTo}`;
+      } else if (type === "ops-watchers") {
+        if (opsFrom) url += `&from=${opsFrom}`;
+        if (opsTo) url += `&to=${opsTo}`;
       }
       const ext = format === "csv" ? "csv" : "json";
       await downloadReport(url, `${type}_report.${ext}`);
@@ -374,7 +401,8 @@ export default function AdminReports() {
                 selected === "notifications" ||
                 selected === "users" ||
                 selected === "typing" ||
-                selected === "audit-logs") && (
+                selected === "audit-logs" ||
+                selected === "ops-watchers") && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
                     Período
@@ -427,6 +455,16 @@ export default function AdminReports() {
                       onToChange={setAuditTo}
                       fromId="audit-from"
                       toId="audit-to"
+                    />
+                  )}
+                  {selected === "ops-watchers" && (
+                    <DateRangeRow
+                      fromValue={opsFrom}
+                      onFromChange={setOpsFrom}
+                      toValue={opsTo}
+                      onToChange={setOpsTo}
+                      fromId="ops-from"
+                      toId="ops-to"
                     />
                   )}
                 </div>

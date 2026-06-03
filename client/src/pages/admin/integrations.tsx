@@ -1,4 +1,17 @@
-import { useState, useContext, createContext, useRef } from "react";
+import { useState, useContext, createContext, useRef, useEffect } from "react";
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isDesktop;
+}
 import { PageContainer } from "@/components/page-container";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -409,9 +422,10 @@ function CopyButton({ text }: { text: string }) {
 
 function CodeBlock({ code }: { code: string }) {
   return (
-    <div className="relative rounded-md bg-muted p-3 pr-10 text-xs font-mono whitespace-pre-wrap break-all">
-      <CopyButton text={code} />
-      <div className="absolute top-2 right-2" />
+    <div className="relative rounded-md bg-muted px-3 py-2.5 pr-10 text-xs font-mono whitespace-pre-wrap break-all">
+      <div className="absolute top-1.5 right-1.5">
+        <CopyButton text={code} />
+      </div>
       {code}
     </div>
   );
@@ -444,10 +458,10 @@ function EndpointRow({
 }) {
   const explorer = useContext(ExplorerContext);
   return (
-    <div className="space-y-1.5 py-2 border-b last:border-0">
+    <div className="space-y-2 px-4 py-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span
-          className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-mono font-semibold ${METHOD_COLORS[method] ?? ""}`}
+          className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-mono font-bold min-w-[52px] text-center ${METHOD_COLORS[method] ?? ""}`}
         >
           {method}
         </span>
@@ -457,7 +471,7 @@ function EndpointRow({
         </Badge>
         {explorer && (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             className="h-6 text-xs px-2 gap-1 shrink-0"
             onClick={() => explorer.open({ method, path, desc, scope, body })}
@@ -467,7 +481,7 @@ function EndpointRow({
           </Button>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">{desc}</p>
+      <p className="text-sm text-muted-foreground">{desc}</p>
       {queryParams && (
         <p className="text-xs text-muted-foreground">
           <span className="font-medium">Query params:</span> {queryParams}
@@ -499,19 +513,18 @@ function EndpointGroup({
   children: React.ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className={`text-sm flex items-center gap-2 ${color}`}>
-          <span>{title}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="divide-y p-0 px-4">{children}</CardContent>
+    <Card className="overflow-hidden">
+      <div className={`px-4 py-2.5 border-b ${color}`}>
+        <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
+      </div>
+      <div className="divide-y">{children}</div>
     </Card>
   );
 }
 
 export default function AdminIntegrations() {
   const { toast } = useToast();
+  const isDesktop = useIsDesktop();
   const [createOpen, setCreateOpen] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [newTokenScope, setNewTokenScope] = useState("read");
@@ -716,8 +729,10 @@ export default function AdminIntegrations() {
         </TabsContent>
 
         {/* ===== DOCS TAB ===== */}
-        <TabsContent value="docs" className="space-y-6 mt-4">
+        <TabsContent value="docs" className="mt-4">
         <ExplorerContext.Provider value={{ open: setExplorerDef, tokens }}>
+        <div className="grid gap-6 lg:grid-cols-[1fr_360px] items-start">
+        <div className="space-y-4">
           {/* Base URL + Auth */}
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
@@ -743,11 +758,16 @@ export default function AdminIntegrations() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <CodeBlock code={`Authorization: Bearer hub_<token>`} />
-                <div className="flex gap-2 text-xs">
-                  <Badge variant="secondary">read</Badge>
-                  <span className="text-muted-foreground">somente leitura</span>
-                  <Badge variant="secondary" className="ml-2">write</Badge>
-                  <span className="text-muted-foreground">leitura e escrita</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="secondary">read</Badge>
+                    <span className="text-muted-foreground">somente leitura</span>
+                  </div>
+                  <span className="text-muted-foreground">·</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="secondary">write</Badge>
+                    <span className="text-muted-foreground">leitura e escrita</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -914,36 +934,82 @@ X-Hub-Event: ticket_created
               />
             </CardContent>
           </Card>
+        </div>{/* end left col */}
+
+          {/* RIGHT: Sticky explorer (desktop only) */}
+          <div className="hidden lg:block">
+            <div className="sticky top-6">
+              <Card className="overflow-hidden">
+                <div className={`px-4 py-3 border-b flex items-center gap-2 min-h-[48px] ${explorerDef ? "bg-muted/50" : ""}`}>
+                  {explorerDef ? (
+                    <>
+                      <span className={`rounded-md px-2 py-0.5 text-xs font-mono font-bold min-w-[52px] text-center shrink-0 ${METHOD_COLORS[explorerDef.method] ?? ""}`}>
+                        {explorerDef.method}
+                      </span>
+                      <code className="text-xs font-mono text-foreground truncate flex-1">{explorerDef.path}</code>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setExplorerDef(null)}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <Play className="h-4 w-4" />
+                      Explorador de API
+                    </span>
+                  )}
+                </div>
+                <CardContent className="p-4 max-h-[calc(100vh-16rem)] overflow-y-auto">
+                  {explorerDef ? (
+                    <ApiExplorer
+                      def={explorerDef}
+                      tokens={tokens}
+                      onClose={() => setExplorerDef(null)}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                        <Play className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Nenhum endpoint selecionado</p>
+                      <p className="text-xs text-muted-foreground mt-1">Clique em "Testar" em qualquer endpoint</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+        </div>{/* end grid */}
         </ExplorerContext.Provider>
         </TabsContent>
       </Tabs>
 
-      {/* API Explorer Dialog */}
-      <Dialog open={explorerDef !== null} onOpenChange={(o) => !o && setExplorerDef(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Play className="h-4 w-4" />
-              Testar endpoint
-              {explorerDef && (
-                <span className={`rounded px-1.5 py-0.5 text-xs font-mono font-semibold ${METHOD_COLORS[explorerDef.method] ?? ""}`}>
-                  {explorerDef.method}
-                </span>
-              )}
-              {explorerDef && (
-                <code className="text-xs font-mono text-muted-foreground">{explorerDef.path}</code>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          {explorerDef && (
-            <ApiExplorer
-              def={explorerDef}
-              tokens={tokens}
-              onClose={() => setExplorerDef(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* API Explorer Dialog — mobile only */}
+        <Dialog open={explorerDef !== null && !isDesktop} onOpenChange={(o) => !o && setExplorerDef(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Play className="h-4 w-4" />
+                Testar endpoint
+                {explorerDef && (
+                  <span className={`rounded-md px-2 py-0.5 text-xs font-mono font-bold ${METHOD_COLORS[explorerDef.method] ?? ""}`}>
+                    {explorerDef.method}
+                  </span>
+                )}
+                {explorerDef && (
+                  <code className="text-xs font-mono text-muted-foreground">{explorerDef.path}</code>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            {explorerDef && (
+              <ApiExplorer
+                def={explorerDef}
+                tokens={tokens}
+                onClose={() => setExplorerDef(null)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
       {/* Create Token Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

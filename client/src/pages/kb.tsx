@@ -68,10 +68,14 @@ export default function Kb() {
 
   const { data: categories = [] } = useQuery<TicketCategory[]>({
     queryKey: ["/api/admin/tickets/categories"],
-    enabled: user?.isAdmin === true,
   });
 
   const leafCategories = categories.filter((c) => c.parentId !== null);
+
+  const mostRead = [...articles].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0)).slice(0, 3);
+  const remaining = searchQuery || filterCategory !== "all"
+    ? articles
+    : articles.filter(a => !mostRead.slice(0, 3).find(m => m.id === a.id) || mostRead.length < 3);
 
   return (
     <PageContainer className="flex flex-col gap-6 py-6">
@@ -109,10 +113,10 @@ export default function Kb() {
             className="pl-9"
           />
         </div>
-        {user?.isAdmin && leafCategories.length > 0 && (
+        {leafCategories.length > 0 && (
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Filtrar por categoria" />
+              <SelectValue placeholder="Todas as categorias" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as categorias</SelectItem>
@@ -151,55 +155,91 @@ export default function Kb() {
           </div>
         </div>
       ) : (
-        <div className="space-y-2">
-          {articles.map((article) => (
-            <button
-              key={article.id}
-              className="w-full text-left rounded-xl border bg-card hover:bg-accent transition-colors overflow-hidden group"
-              onClick={() => setLocation(`/kb/articles/${article.id}`)}
-            >
-              <div className="flex items-start gap-4 p-4">
-                {/* Icon */}
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chart-1/10 mt-0.5">
-                  <BookOpen className="h-4 w-4 text-chart-1" />
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm leading-snug">{article.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                    {stripMarkdown(article.body)}
-                    {article.body.length > 140 ? "…" : ""}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2.5 flex-wrap">
-                    {article.categoryName && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-chart-1/10 text-chart-1 border border-chart-1/20">
-                        {article.categoryName}
+        <div className="space-y-6">
+          {/* Mais lidos — só quando não está buscando/filtrando */}
+          {!searchQuery && filterCategory === "all" && mostRead.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Eye className="h-3.5 w-3.5" />
+                Mais lidos
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {mostRead.map((article) => (
+                  <button
+                    key={article.id}
+                    className="text-left rounded-xl border bg-card hover:bg-accent transition-colors overflow-hidden group p-4 flex flex-col gap-2"
+                    onClick={() => setLocation(`/kb/articles/${article.id}`)}
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-chart-1/10">
+                      <BookOpen className="h-4 w-4 text-chart-1" />
+                    </div>
+                    <p className="font-semibold text-sm leading-snug line-clamp-2">{article.title}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed flex-1">
+                      {stripMarkdown(article.body)}{article.body.length > 140 ? "…" : ""}
+                    </p>
+                    <div className="flex items-center gap-3 mt-auto pt-1">
+                      {article.categoryName && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-chart-1/10 text-chart-1 border border-chart-1/20">
+                          {article.categoryName}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
+                        <Eye className="h-3 w-3" />{article.viewCount ?? 0}
                       </span>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {readingTime(article.body)} de leitura
-                    </span>
-                    {article.viewCount !== undefined && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Eye className="h-3 w-3" />
-                        {article.viewCount}
-                      </span>
-                    )}
-                    {article.helpfulCount !== undefined && article.helpfulCount > 0 && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <ThumbsUp className="h-3 w-3" />
-                        {article.helpfulCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Arrow */}
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
+                ))}
               </div>
-            </button>
-          ))}
+            </div>
+          )}
+
+          {/* Todos os artigos */}
+          {(!searchQuery && filterCategory === "all" && remaining.length > 0 && articles.length > 3) && (
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <BookOpen className="h-3.5 w-3.5" />
+              Todos os artigos
+            </p>
+          )}
+          <div className="space-y-2">
+            {(searchQuery || filterCategory !== "all" ? articles : remaining).map((article) => (
+              <button
+                key={article.id}
+                className="w-full text-left rounded-xl border bg-card hover:bg-accent transition-colors overflow-hidden group"
+                onClick={() => setLocation(`/kb/articles/${article.id}`)}
+              >
+                <div className="flex items-start gap-4 p-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chart-1/10 mt-0.5">
+                    <BookOpen className="h-4 w-4 text-chart-1" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm leading-snug">{article.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                      {stripMarkdown(article.body)}{article.body.length > 140 ? "…" : ""}
+                    </p>
+                    <div className="flex items-center gap-3 mt-2.5 flex-wrap">
+                      {article.categoryName && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-chart-1/10 text-chart-1 border border-chart-1/20">
+                          {article.categoryName}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">{readingTime(article.body)} de leitura</span>
+                      {article.viewCount !== undefined && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Eye className="h-3 w-3" />{article.viewCount}
+                        </span>
+                      )}
+                      {article.helpfulCount !== undefined && article.helpfulCount > 0 && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <ThumbsUp className="h-3 w-3" />{article.helpfulCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </PageContainer>

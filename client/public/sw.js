@@ -1,6 +1,15 @@
 // 41 Hub — Service Worker para Web Push Notifications
 // Roda em background mesmo com a aba fechada/em segundo plano
 
+// Toma controle das abas abertas imediatamente, sem aguardar refresh
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -22,7 +31,21 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || "41 Hub", options)
+    Promise.all([
+      // 1. Mostra notificação nativa do OS (funciona mesmo sem aba aberta)
+      self.registration.showNotification(payload.title || "41 Hub", options),
+
+      // 2. Sinaliza todas as abas abertas do Hub para tocarem o som customizado.
+      //    Isso não é throttlado pelo browser — dispara imediatamente mesmo
+      //    que a aba esteja em segundo plano.
+      clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clientList) => {
+          clientList.forEach((client) => {
+            client.postMessage({ type: "hub-notify-sound" });
+          });
+        }),
+    ])
   );
 });
 

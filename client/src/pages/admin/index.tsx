@@ -195,7 +195,7 @@ export default function AdminIndex() {
             className="text-xl font-semibold text-foreground"
             data-testid="text-admin-title"
           >
-            Configurações
+            Painel Administrativo
           </h1>
           <p className="text-sm text-muted-foreground">
             Gerencie usuários, chamados, notificações e recursos do Hub
@@ -234,7 +234,7 @@ export default function AdminIndex() {
             iconColor: "text-chart-3",
           },
           {
-            label: "Logs",
+            label: "Logs (30 dias)",
             value: stats?.auditLogs ?? 0,
             icon: FileText,
             stripe: "bg-chart-4",

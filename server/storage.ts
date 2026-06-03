@@ -926,7 +926,8 @@ export class DatabaseStorage implements IStorage {
     const [userCount] = await db.select({ count: sql<number>`count(*)` }).from(users);
     const [sectorCount] = await db.select({ count: sql<number>`count(*)` }).from(sectors);
     const [resourceCount] = await db.select({ count: sql<number>`count(*)` }).from(resources);
-    const [logCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs);
+    const [logCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs)
+      .where(sql`${auditLogs.createdAt} >= NOW() - INTERVAL '30 days'`);
 
     return {
       users: Number(userCount.count),
@@ -1625,7 +1626,10 @@ export class DatabaseStorage implements IStorage {
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId));
     if (!ticket) throw new Error("Ticket not found");
 
-    if (!authorUser.isAdmin) {
+    // Admins: sem restrição
+    // Criador do chamado: pode anexar a qualquer momento (ex: logo após abrir)
+    // Outros: somente quando status for AGUARDANDO_USUARIO
+    if (!authorUser.isAdmin && ticket.createdBy !== authorUser.id) {
       if (ticket.status !== "AGUARDANDO_USUARIO") {
         throw new Error("Anexos só são permitidos quando o chamado está aguardando usuário");
       }

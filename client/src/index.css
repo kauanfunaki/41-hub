@@ -2,13 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Scrollbar global padronizada ────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
 /* Esconde scrollbar da sidebar mantendo o scroll funcional */
 [data-sidebar="content"]::-webkit-scrollbar {
   display: none;
 }
 [data-sidebar="content"] {
-  -ms-overflow-style: none; /* IE / Edge */
-  scrollbar-width: none;    /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Cor das bolinhas do loading — azul (primary) no light, branco no dark */
@@ -212,6 +232,80 @@
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* ── Theme Toggle Switch (UIverse) ───────────────────────────────────────── */
+.theme-switch {
+  font-size: 17px;
+  position: relative;
+  display: inline-block;
+  width: 64px;
+  height: 34px;
+  flex-shrink: 0;
+}
+.theme-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.theme-switch .ts-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #73C0FC;
+  transition: .4s;
+  border-radius: 30px;
+}
+.theme-switch .ts-slider::before {
+  position: absolute;
+  content: "";
+  height: 30px;
+  width: 30px;
+  border-radius: 20px;
+  left: 2px;
+  bottom: 2px;
+  z-index: 2;
+  background-color: #e8e8e8;
+  transition: .4s;
+}
+.theme-switch .ts-sun svg {
+  position: absolute;
+  top: 6px;
+  left: 36px;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  animation: ts-rotate 15s linear infinite;
+}
+.theme-switch .ts-moon svg {
+  fill: #73C0FC;
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  animation: ts-tilt 5s linear infinite;
+}
+@keyframes ts-rotate {
+  0%   { transform: rotate(0); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes ts-tilt {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(-10deg); }
+  75%  { transform: rotate(10deg); }
+  100% { transform: rotate(0deg); }
+}
+.theme-switch input:checked + .ts-slider {
+  background-color: #183153;
+}
+.theme-switch input:focus-visible + .ts-slider {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.theme-switch input:checked + .ts-slider::before {
+  transform: translateX(30px);
 }
 
 @layer base {
