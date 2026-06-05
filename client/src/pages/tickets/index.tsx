@@ -25,6 +25,7 @@ import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
 
 const statusLabels: Record<string, string> = {
   ABERTO: "Aberto",
+  NA_FILA: "Aberto",
   EM_ANDAMENTO: "Em Andamento",
   AGUARDANDO_USUARIO: "Aguardando Usuário",
   AGUARDANDO_APROVACAO: "Aguardando Aprovação",
@@ -55,6 +56,7 @@ const priorityStripe: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   ABERTO: "bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20",
+  NA_FILA: "bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20",
   EM_ANDAMENTO: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20",
   AGUARDANDO_USUARIO: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
   RESOLVIDO: "bg-muted text-muted-foreground border border-border",
@@ -122,6 +124,8 @@ function formatDate(dateStr: string): string {
 // ── Ticket card ──────────────────────────────────────────────────────────────
 
 function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
+  const { user } = useAuth();
+  const isAdminOrCoord = user?.isAdmin || user?.roles?.some(r => r.roleName === "Coordenador");
   const sla = getSlaStatus(ticket.currentCycle);
   return (
     <Link href={`/tickets/${ticket.id}`}>
@@ -166,6 +170,9 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
             </span>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColors[ticket.status]}`}>
               {statusLabels[ticket.status]}
+              {isAdminOrCoord && ticket.status === "NA_FILA" && ticket.queuePosition != null && (
+                <span className="ml-1 opacity-70">#{ticket.queuePosition}</span>
+              )}
             </span>
             {ticket.assignees && ticket.assignees.length > 0 && (
               <div className="flex items-center gap-1">

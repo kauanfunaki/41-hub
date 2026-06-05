@@ -84,6 +84,7 @@ import type {
 
 const statusLabels: Record<string, string> = {
   ABERTO: "Aberto",
+  NA_FILA: "Na fila",
   EM_ANDAMENTO: "Em Andamento",
   AGUARDANDO_USUARIO: "Aguardando Usuário",
   AGUARDANDO_APROVACAO: "Aguardando Aprovação",
@@ -121,6 +122,7 @@ const priorityBadge: Record<string, string> = {
 
 const statusBadge: Record<string, string> = {
   ABERTO:               "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200",
+  NA_FILA:              "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200",
   EM_ANDAMENTO:         "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200",
   AGUARDANDO_USUARIO:   "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
   RESOLVIDO:            "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -346,6 +348,7 @@ export default function TicketsDetail() {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
   const [approvalNote, setApprovalNote] = useState("");
+  const [queueOrderInput, setQueueOrderInput] = useState<string>("");
 
   const { data: ticket, isLoading } = useQuery<TicketWithDetails>({
     queryKey: ["/api/tickets", ticketId],
@@ -500,9 +503,15 @@ export default function TicketsDetail() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <Badge variant="secondary" className={`text-[11px] ${statusBadge[ticket.status]}`}>
-                {statusLabels[ticket.status]}
-              </Badge>
+              {(() => {
+                const isPrivileged = isAdmin || isCoordinator;
+                const displayStatus = (!isPrivileged && ticket.status === "NA_FILA") ? "ABERTO" : ticket.status;
+                return (
+                  <Badge variant="secondary" className={`text-[11px] ${statusBadge[displayStatus]}`}>
+                    {statusLabels[displayStatus]}
+                  </Badge>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -828,18 +837,68 @@ export default function TicketsDetail() {
         {/* ── RIGHT SIDEBAR ── */}
         <div className="lg:sticky lg:top-[57px] lg:self-start lg:max-h-[calc(100vh-57px)] lg:overflow-y-auto divide-y">
 
+          {/* Queue position block — admin/coord only */}
+          {(isAdmin || isCoordinator) && ticket.status === "NA_FILA" && (
+            <div className="p-4 border-b">
+              <SectionLabel>Posição na fila</SectionLabel>
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex-1 rounded-lg border bg-cyan-50 dark:bg-cyan-950/30 p-3 text-center">
+                  <p className="text-3xl font-bold text-cyan-700 dark:text-cyan-300 leading-none">
+                    {ticket.queuePosition ?? "—"}
+                  </p>
+                  {ticket.queueTotal != null && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      de {ticket.queueTotal} na fila
+                    </p>
+                  )}
+                </div>
+              </div>
+              {isAdmin && (
+                <div className="mt-3 space-y-1.5">
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Mover para posição</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={ticket.queueTotal ?? 999}
+                      placeholder={String(ticket.queuePosition ?? "")}
+                      value={queueOrderInput}
+                      onChange={e => setQueueOrderInput(e.target.value)}
+                      className="h-8 text-xs w-24"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      disabled={!queueOrderInput || updateMutation.isPending}
+                      onClick={() => {
+                        const n = parseInt(queueOrderInput, 10);
+                        if (!isNaN(n) && n > 0) {
+                          updateMutation.mutate({ queueOrder: n });
+                          setQueueOrderInput("");
+                        }
+                      }}
+                    >
+                      Salvar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Quick admin actions */}
           {isAdmin && ticket.status !== "RESOLVIDO" && ticket.status !== "CANCELADO" && (
             <div className="p-4">
               <SectionLabel>Ações rápidas</SectionLabel>
               <div className="space-y-2">
-                {ticket.status === "ABERTO" && (
+                {(ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
                   <Button size="sm" className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                     onClick={() => updateMutation.mutate({ status: "EM_ANDAMENTO" })} disabled={updateMutation.isPending} data-testid="button-quick-start">
                     <ArrowRight className="h-3.5 w-3.5" />Iniciar atendimento
                   </Button>
                 )}
-                {(ticket.status === "ABERTO" || ticket.status === "EM_ANDAMENTO") && (
+                {(ticket.status === "ABERTO" || ticket.status === "NA_FILA" || ticket.status === "EM_ANDAMENTO") && (
                   <Button size="sm" variant="outline" className="w-full gap-2"
                     onClick={() => setRequestInfoOpen(true)} data-testid="button-request-info">
                     <HelpCircle className="h-3.5 w-3.5" />Pedir informações
@@ -993,6 +1052,7 @@ export default function TicketsDetail() {
                   <SelectTrigger className="h-8 text-xs" data-testid="admin-select-status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ABERTO">Aberto</SelectItem>
+                    <SelectItem value="NA_FILA">Na fila</SelectItem>
                     <SelectItem value="EM_ANDAMENTO">Em Andamento</SelectItem>
                     <SelectItem value="AGUARDANDO_USUARIO">Aguardando Usuário</SelectItem>
                     <SelectItem value="AGUARDANDO_APROVACAO">Aguardando Aprovação</SelectItem>

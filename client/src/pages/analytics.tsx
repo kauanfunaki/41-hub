@@ -43,6 +43,7 @@ interface AnalyticsStats {
 
 const statusLabels: Record<string, string> = {
   ABERTO: "Aberto",
+  NA_FILA: "Na fila",
   EM_ANDAMENTO: "Em andamento",
   AGUARDANDO_USUARIO: "Aguardando usuário",
   AGUARDANDO_APROVACAO: "Aguardando aprovação",
@@ -52,6 +53,7 @@ const statusLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   ABERTO: "bg-blue-500",
+  NA_FILA: "bg-cyan-500",
   EM_ANDAMENTO: "bg-amber-500",
   AGUARDANDO_USUARIO: "bg-violet-500",
   AGUARDANDO_APROVACAO: "bg-orange-500",

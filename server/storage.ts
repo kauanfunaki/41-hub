@@ -1215,16 +1215,7 @@ export class DatabaseStorage implements IStorage {
       requestData: data.requestData || {},
     }).returning();
 
-    const now = new Date();
-    const dueDates = await computeSlaDueDates(now, priority);
-    await db.insert(ticketSlaCycles).values({
-      ticketId: ticket.id,
-      cycleNumber: 1,
-      openedAt: now,
-      firstResponseDueAt: dueDates.firstResponseDueAt,
-      resolutionDueAt: dueDates.resolutionDueAt,
-      ...(needsApproval ? { pausedAt: now } : {}),
-    });
+    // SLA cycle is created only when ticket moves to EM_ANDAMENTO (see adminUpdateTicket)
 
     if (needsApproval) {
       await db.insert(ticketApprovals).values({
@@ -1270,9 +1261,24 @@ export class DatabaseStorage implements IStorage {
   private async enrichTickets(rawTickets: Ticket[]): Promise<TicketWithDetails[]> {
     if (rawTickets.length === 0) return [];
 
+    const queueRows = await db.execute(sql`
+      SELECT id, ROW_NUMBER() OVER (ORDER BY queue_order ASC NULLS LAST, created_at ASC, id ASC) AS pos,
+             COUNT(*) OVER () AS total
+      FROM tickets WHERE status = 'NA_FILA'
+    `);
+    const queueMap = new Map<string, { pos: number; total: number }>();
+    for (const r of (queueRows.rows ?? []) as { id: string; pos: number; total: number }[]) {
+      queueMap.set(r.id, { pos: Number(r.pos), total: Number(r.total) });
+    }
+
     const result: TicketWithDetails[] = [];
     for (const t of rawTickets) {
       const enriched = await this.enrichSingleTicket(t);
+      if (t.status === "NA_FILA") {
+        const q = queueMap.get(t.id);
+        enriched.queuePosition = q?.pos ?? null;
+        enriched.queueTotal    = q?.total ?? null;
+      }
       result.push(enriched);
     }
     return result;
@@ -1339,7 +1345,7 @@ export class DatabaseStorage implements IStorage {
     } else if (filters.includeClosed) {
       conditions.push(inArray(tickets.status, ["RESOLVIDO", "CANCELADO"]));
     } else {
-      conditions.push(inArray(tickets.status, ["ABERTO", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"]));
+      conditions.push(inArray(tickets.status, ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"]));
     }
 
     if (filters.q) {
@@ -1378,7 +1384,23 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    return this.enrichSingleTicket(ticket);
+    const enriched = await this.enrichSingleTicket(ticket);
+
+    if (ticket.status === "NA_FILA") {
+      const rows = await db.execute(sql`
+        SELECT pos, total FROM (
+          SELECT id,
+            ROW_NUMBER() OVER (ORDER BY queue_order ASC NULLS LAST, created_at ASC, id ASC) AS pos,
+            COUNT(*) OVER () AS total
+          FROM tickets WHERE status = 'NA_FILA'
+        ) sub WHERE id = ${ticket.id}
+      `);
+      const row = rows.rows?.[0] as { pos: number; total: number } | undefined;
+      enriched.queuePosition = row ? Number(row.pos) : null;
+      enriched.queueTotal    = row ? Number(row.total) : null;
+    }
+
+    return enriched;
   }
 
   async adminUpdateTicket(ticketId: string, patch: Partial<{
@@ -1389,6 +1411,7 @@ export class DatabaseStorage implements IStorage {
     tags: string[];
     title: string;
     description: string;
+    queueOrder: number | null;
   }>, actorUser: UserWithRoles): Promise<Ticket | undefined> {
     const [existing] = await db.select().from(tickets).where(eq(tickets.id, ticketId));
     if (!existing) return undefined;
@@ -1402,7 +1425,37 @@ export class DatabaseStorage implements IStorage {
     if (patch.priority !== undefined) updateData.priority = patch.priority;
     if (patch.status !== undefined) updateData.status = patch.status;
 
+    if (patch.queueOrder != null && existing.status === "NA_FILA") {
+      // Full renumber: insert this ticket at targetPos, shift others
+      const others = await db
+        .select({ id: tickets.id })
+        .from(tickets)
+        .where(and(eq(tickets.status, "NA_FILA"), ne(tickets.id, ticketId)))
+        .orderBy(asc(tickets.queueOrder), asc(tickets.createdAt), asc(tickets.id));
+
+      const insertAt = Math.max(0, Math.min(patch.queueOrder - 1, others.length));
+      const reordered = [...others.map(r => r.id)];
+      reordered.splice(insertAt, 0, ticketId);
+
+      for (let i = 0; i < reordered.length; i++) {
+        if (reordered[i] !== ticketId) {
+          await db.update(tickets).set({ queueOrder: i + 1 }).where(eq(tickets.id, reordered[i]));
+        }
+      }
+      updateData.queueOrder = insertAt + 1;
+    }
+
     if (patch.status && patch.status !== existing.status) {
+      if (patch.status === "NA_FILA" && patch.queueOrder === undefined) {
+        const [{ maxOrder }] = await db
+          .select({ maxOrder: sql<number>`COALESCE(MAX(queue_order), 0)::int` })
+          .from(tickets)
+          .where(eq(tickets.status, "NA_FILA"));
+        updateData.queueOrder = Number(maxOrder) + 1;
+      } else if (patch.status !== "NA_FILA") {
+        updateData.queueOrder = null;
+      }
+
       if (existing.status === "AGUARDANDO_APROVACAO" && patch.status !== "CANCELADO" && patch.status !== "AGUARDANDO_APROVACAO") {
         const [cycle] = await db.select().from(ticketSlaCycles)
           .where(eq(ticketSlaCycles.ticketId, ticketId))
@@ -1414,17 +1467,31 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      if (existing.status === "ABERTO" && patch.status !== "ABERTO") {
+      if (patch.status === "EM_ANDAMENTO") {
+        // SLA cycle starts only when work actually begins
         const [cycle] = await db.select().from(ticketSlaCycles)
           .where(eq(ticketSlaCycles.ticketId, ticketId))
           .orderBy(desc(ticketSlaCycles.cycleNumber))
           .limit(1);
-        if (cycle && !cycle.firstResponseAt) {
-          const now = new Date();
-          const breached = now > cycle.firstResponseDueAt;
+        const now = new Date();
+        if (!cycle || cycle.resolvedAt) {
+          // No active cycle yet (new ticket or after close) — create one from now
+          const priority = (patch.priority || existing.priority) as "BAIXA" | "MEDIA" | "ALTA" | "URGENTE";
+          const dueDates = await computeSlaDueDates(now, priority);
+          await db.insert(ticketSlaCycles).values({
+            ticketId,
+            cycleNumber: (cycle?.cycleNumber || 0) + 1,
+            openedAt: now,
+            firstResponseDueAt: dueDates.firstResponseDueAt,
+            resolutionDueAt: dueDates.resolutionDueAt,
+            firstResponseAt: now,
+            firstResponseBreached: false,
+          });
+        } else if (!cycle.firstResponseAt) {
+          // Cycle exists (e.g. came from AGUARDANDO_USUARIO) but not yet responded
           await db.update(ticketSlaCycles).set({
             firstResponseAt: now,
-            firstResponseBreached: breached,
+            firstResponseBreached: false,
           }).where(eq(ticketSlaCycles.id, cycle.id));
         }
       }
@@ -1437,7 +1504,7 @@ export class DatabaseStorage implements IStorage {
           .limit(1);
         if (cycle && !cycle.resolvedAt) {
           const now = new Date();
-          const breached = now > cycle.resolutionDueAt;
+          const breached = cycle.resolutionDueAt ? now > cycle.resolutionDueAt : false;
           await db.update(ticketSlaCycles).set({
             resolvedAt: now,
             resolutionBreached: breached,
@@ -1447,24 +1514,12 @@ export class DatabaseStorage implements IStorage {
           ticketId, actorUserId: actorUser.id, type: "resolved",
           data: { previousStatus: existing.status },
         });
-      } else if (patch.status === "ABERTO" && (existing.status === "RESOLVIDO" || existing.status === "CANCELADO")) {
+      } else if (existing.status === "RESOLVIDO" || existing.status === "CANCELADO") {
+        // Reopen — no new SLA cycle; it will start when admin moves to EM_ANDAMENTO
         updateData.closedAt = null;
-        const [lastCycle] = await db.select().from(ticketSlaCycles)
-          .where(eq(ticketSlaCycles.ticketId, ticketId))
-          .orderBy(desc(ticketSlaCycles.cycleNumber))
-          .limit(1);
-        const newCycleNum = (lastCycle?.cycleNumber || 0) + 1;
-        const priority = (patch.priority || existing.priority) as "BAIXA" | "MEDIA" | "ALTA" | "URGENTE";
-        const now = new Date();
-        const dueDates = await computeSlaDueDates(now, priority);
-        await db.insert(ticketSlaCycles).values({
-          ticketId, cycleNumber: newCycleNum, openedAt: now,
-          firstResponseDueAt: dueDates.firstResponseDueAt,
-          resolutionDueAt: dueDates.resolutionDueAt,
-        });
         await db.insert(ticketEvents).values({
           ticketId, actorUserId: actorUser.id, type: "reopened",
-          data: { cycleNumber: newCycleNum },
+          data: {},
         });
       } else {
         await db.insert(ticketEvents).values({
@@ -2092,11 +2147,11 @@ export class DatabaseStorage implements IStorage {
     const daysBack = range === '7d' ? 7 : 30;
     const rangeStart = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
 
-    const activeStatuses = ['ABERTO', 'EM_ANDAMENTO', 'AGUARDANDO_USUARIO'] as const;
+    const activeStatuses = ['ABERTO', 'NA_FILA', 'EM_ANDAMENTO', 'AGUARDANDO_USUARIO'] as const;
     const allActiveTickets = await db.select().from(tickets)
       .where(inArray(tickets.status, [...activeStatuses]));
 
-    const openCount = allActiveTickets.filter(t => t.status === 'ABERTO').length;
+    const openCount = allActiveTickets.filter(t => t.status === 'ABERTO' || t.status === 'NA_FILA').length;
     const inProgressCount = allActiveTickets.filter(t => t.status === 'EM_ANDAMENTO').length;
     const waitingUserCount = allActiveTickets.filter(t => t.status === 'AGUARDANDO_USUARIO').length;
 

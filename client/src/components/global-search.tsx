@@ -49,6 +49,7 @@ interface TicketResult {
 
 const TICKET_STATUS_LABEL: Record<string, string> = {
   ABERTO: "Aberto",
+  NA_FILA: "Aberto",
   EM_ANDAMENTO: "Em andamento",
   AGUARDANDO_USUARIO: "Aguardando",
   AGUARDANDO_APROVACAO: "Aprovação",
