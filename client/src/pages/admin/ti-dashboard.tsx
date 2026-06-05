@@ -70,6 +70,7 @@ interface TiDashboardData {
 
 const statusLabels: Record<string, string> = {
   ABERTO: "Aberto",
+  NA_FILA: "Na fila",
   EM_ANDAMENTO: "Em andamento",
   AGUARDANDO_USUARIO: "Aguardando",
   AGUARDANDO_APROVACAO: "Aprovação",
@@ -322,6 +323,7 @@ export default function TiDashboard() {
                       <SelectContent>
                         <SelectItem value="ALL">Todos status</SelectItem>
                         <SelectItem value="ABERTO">Aberto</SelectItem>
+                        <SelectItem value="NA_FILA">Na fila</SelectItem>
                         <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
                         <SelectItem value="AGUARDANDO_USUARIO">Aguardando</SelectItem>
                         <SelectItem value="AGUARDANDO_APROVACAO">Aprovação</SelectItem>

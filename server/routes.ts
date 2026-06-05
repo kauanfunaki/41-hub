@@ -1813,7 +1813,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/tickets/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const patchSchema = z.object({
-        status: z.enum(["ABERTO", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "RESOLVIDO", "CANCELADO"]).optional(),
+        status: z.enum(["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "RESOLVIDO", "CANCELADO"]).optional(),
         priority: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]).optional(),
         categoryId: z.string().optional(),
         relatedResourceId: z.string().nullable().optional(),
@@ -1822,6 +1822,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         description: z.string().min(1).optional(),
         resolutionDueAtManual: z.string().optional(),
         resolutionDueAtManualReason: z.string().optional(),
+        queueOrder: z.number().int().positive().nullable().optional(),
       });
 
       const parsed = patchSchema.safeParse(req.body);
@@ -1865,7 +1866,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const enabled = await storage.isNotificationEnabled("ticket_status");
           if (enabled) {
             const statusLabels: Record<string, string> = {
-              ABERTO: "Aberto", EM_ANDAMENTO: "Em andamento",
+              ABERTO: "Aberto", NA_FILA: "Na fila", EM_ANDAMENTO: "Em andamento",
               AGUARDANDO_USUARIO: "Aguardando usuário", AGUARDANDO_APROVACAO: "Aguardando aprovação",
               RESOLVIDO: "Resolvido", CANCELADO: "Cancelado"
             };
@@ -3626,7 +3627,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const [tickets, byStatus, byPriority, topCategories, resources, typing] = await Promise.all([
         pool.query(
           `SELECT COUNT(*) as total,
-                  COUNT(*) FILTER (WHERE status IN ('ABERTO','EM_ANDAMENTO','AGUARDANDO_USUARIO','AGUARDANDO_APROVACAO')) as open,
+                  COUNT(*) FILTER (WHERE status IN ('ABERTO','NA_FILA','EM_ANDAMENTO','AGUARDANDO_USUARIO','AGUARDANDO_APROVACAO')) as open,
                   COUNT(*) FILTER (WHERE status = 'RESOLVIDO') as resolved,
                   COUNT(*) FILTER (WHERE status = 'CANCELADO') as cancelled
            FROM tickets t ${dateWhere}`,
