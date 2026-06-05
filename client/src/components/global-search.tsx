@@ -76,7 +76,7 @@ export function SearchTriggerButton() {
   return (
     <Button
       variant="outline"
-      className="hidden sm:flex h-8 items-center gap-2 px-3 text-muted-foreground font-normal text-sm w-44 justify-between"
+      className="hidden sm:flex h-8 items-center gap-2 px-3 text-muted-foreground font-normal text-sm w-56 justify-between"
       onClick={openGlobalSearch}
     >
       <div className="flex items-center gap-1.5">

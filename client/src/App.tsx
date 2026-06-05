@@ -135,13 +135,14 @@ function AuthenticatedLayout() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card px-4">
-            <div className="flex items-center gap-2">
+          <header className="grid grid-cols-[1fr_auto_1fr] h-14 shrink-0 items-center border-b bg-card px-4">
+            <div className="flex items-center">
               <SidebarBurger />
-              <SearchTriggerButton />
             </div>
-            <div className="flex items-center gap-3">
+            <SearchTriggerButton />
+            <div className="flex items-center justify-end gap-3">
               <NotificationBell />
+              <div className="w-px h-5 bg-border mx-1" />
               <ThemeToggle />
             </div>
           </header>
