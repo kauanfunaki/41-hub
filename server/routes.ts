@@ -1878,7 +1878,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               await storage.createNotifications(recipients, {
                 type: "ticket_status",
                 title: "Status do chamado alterado",
-                message: `Chamado #${updated.number} alterado para: ${statusLabels[ticketPatch.status] || ticketPatch.status}`,
+                message: `Chamado "${updated.title}" alterado para: ${statusLabels[ticketPatch.status] || ticketPatch.status}`,
                 linkUrl: `/tickets/${updated.id}`,
               });
             }
@@ -1891,7 +1891,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (ticketPatch.status) {
         emitEvent("ticket_status_changed", {
           ticketId: updated.id,
-          number: updated.number,
+          title: updated.title,
           oldStatus: req.body._oldStatus,
           newStatus: ticketPatch.status,
           actorUserId: req.user!.id,
@@ -1899,7 +1899,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (ticketPatch.status === "RESOLVIDO") {
           emitEvent("ticket_resolved", {
             ticketId: updated.id,
-            number: updated.number,
+            title: updated.title,
             actorUserId: req.user!.id,
           });
         }
@@ -2000,7 +2000,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             await storage.createNotifications(recipients, {
               type: "ticket_comment",
               title: "Novo comentário no chamado",
-              message: `${req.user!.name} comentou no chamado #${ticket.number}: ${ticket.title}`,
+              message: `${req.user!.name} comentou no chamado "${ticket.title}"`,
               linkUrl: `/tickets/${ticket.id}`,
             });
           }
@@ -2012,7 +2012,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parsed.data.isInternal) {
         emitEvent("ticket_commented", {
           ticketId: ticket.id,
-          number: ticket.number,
+          title: ticket.title,
           commentId: comment.id,
           actorUserId: req.user!.id,
         });
@@ -2305,7 +2305,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             await storage.createNotifications(recipients, {
               type: "ticket_status",
               title: "Chamado aprovado",
-              message: `Chamado #${ticket.number} foi aprovado por ${req.user!.name}`,
+              message: `Chamado "${ticket.title}" foi aprovado por ${req.user!.name}`,
               linkUrl: `/tickets/${ticket.id}`,
             });
           }
@@ -2316,7 +2316,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       emitEvent("ticket_approved", {
         ticketId: ticket.id,
-        number: ticket.number,
+        title: ticket.title,
         approverUserId: req.user!.id,
         note,
       });
@@ -2387,7 +2387,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             await storage.createNotifications(recipients, {
               type: "ticket_status",
               title: "Chamado rejeitado",
-              message: `Chamado #${ticket.number} foi rejeitado: ${parsed.data.note}`,
+              message: `Chamado "${ticket.title}" foi rejeitado: ${parsed.data.note}`,
               linkUrl: `/tickets/${ticket.id}`,
             });
           }
@@ -2398,7 +2398,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       emitEvent("ticket_rejected", {
         ticketId: ticket.id,
-        number: ticket.number,
+        title: ticket.title,
         rejectorUserId: req.user!.id,
         note: parsed.data.note,
       });
