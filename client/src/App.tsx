@@ -9,10 +9,10 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import {
   SidebarProvider,
-  SidebarTrigger,
   SidebarInset,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarBurger } from "@/components/sidebar-burger";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationProvider } from "@/providers/notification-provider";
@@ -137,7 +137,7 @@ function AuthenticatedLayout() {
         <SidebarInset className="flex flex-col flex-1 overflow-hidden">
           <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card px-4">
             <div className="flex items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <SidebarBurger />
               <SearchTriggerButton />
             </div>
             <div className="flex items-center gap-3">

@@ -429,3 +429,130 @@
     inset: -1px;
   }
 }
+
+/* ── Favorite star toggle (Uiverse light-lionfish-40, MIT, adapted) ───────── */
+.fav-star {
+  display: inline-flex;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  line-height: 0;
+}
+.fav-star input {
+  position: absolute;
+  opacity: 0;
+  height: 0;
+  width: 0;
+  cursor: pointer;
+}
+.fav-star svg {
+  height: 22px;
+  width: 22px;
+  transition: all 0.3s;
+  fill: hsl(var(--muted-foreground));
+}
+.fav-star:hover svg {
+  transform: scale(1.15);
+}
+.fav-star input:checked ~ svg {
+  fill: #facc15;
+}
+.fav-star input:focus-visible ~ svg {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Sidebar hamburger ↔ X toggle (Uiverse good-wolverine-51, MIT, adapted) ─ */
+.sidebar-burger {
+  position: relative;
+  width: 26px;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+}
+.sidebar-burger input {
+  display: none;
+}
+.sidebar-burger span {
+  display: block;
+  position: absolute;
+  height: 3px;
+  width: 100%;
+  background: hsl(var(--foreground));
+  border-radius: 9px;
+  opacity: 1;
+  left: 0;
+  transform: rotate(0deg);
+  transition: 0.25s ease-in-out;
+}
+.sidebar-burger span:nth-of-type(1) {
+  top: 0px;
+  transform-origin: left center;
+}
+.sidebar-burger span:nth-of-type(2) {
+  top: 50%;
+  transform: translateY(-50%);
+  transform-origin: left center;
+}
+.sidebar-burger span:nth-of-type(3) {
+  top: 100%;
+  transform: translateY(-100%);
+  transform-origin: left center;
+}
+.sidebar-burger input:checked ~ span:nth-of-type(1) {
+  transform: rotate(45deg);
+  top: -1px;
+  left: 3px;
+}
+.sidebar-burger input:checked ~ span:nth-of-type(2) {
+  width: 0;
+  opacity: 0;
+}
+.sidebar-burger input:checked ~ span:nth-of-type(3) {
+  transform: rotate(-45deg);
+  top: 18px;
+  left: 3px;
+}
+
+/* ── Notification bell ring animation ──────────────────────────────────────
+   Design:  Uiverse "spotty-rabbit-35" by mrhyddenn  (MIT)
+   Motion:  Uiverse "tricky-bullfrog-41" by vinodjangid07 (MIT)
+
+   Two triggers:
+   1. CSS hover  → single swing while hovered
+   2. .ringing   → added programmatically when a new notification arrives
+                   (runs 3× so it catches the user's eye)               */
+
+/* Hover: play once */
+.notif-bell-btn:hover .notif-bell-icon {
+  animation: notif-bell-ring 0.9s both;
+}
+
+/* Programmatic: play 3× when a notification arrives */
+.notif-bell-icon.ringing {
+  animation: notif-bell-ring 0.9s ease 3;
+}
+
+@keyframes notif-bell-ring {
+  0%,
+  100% {
+    transform-origin: top center;
+  }
+  15% {
+    transform: rotateZ(10deg);
+  }
+  30% {
+    transform: rotateZ(-10deg);
+  }
+  45% {
+    transform: rotateZ(5deg);
+  }
+  60% {
+    transform: rotateZ(-5deg);
+  }
+  75% {
+    transform: rotateZ(2deg);
+  }
+}
