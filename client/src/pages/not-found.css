@@ -1,0 +1,648 @@
+/* 404 retro-TV — adapted from Uiverse "fat-horse-65" by Praashoo7 (MIT).
+   Recolored to the 41 Hub blue palette.
+   All selectors are scoped under .nf404 to avoid global collisions.
+   Colors are fixed hex values — NOT CSS variables — so they look identical
+   in both light and dark themes.
+   Stacking-context fix: main_wrapper uses isolation:isolate so that
+   z-index: -1 on children is contained within the widget, not the page. */
+
+/* ── Outer wrapper ────────────────────────── */
+
+.nf404 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-family: var(--font-sans), sans-serif;
+}
+
+.nf404 .main_wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30em;
+  height: 30em;
+  /* Creates an isolated stacking context: z-index on children is
+     relative to THIS box, not the page background.
+     Without this, z-index:-1 / z-index:-5 disappear behind body. */
+  position: relative;
+  isolation: isolate;
+}
+
+/* .main must also be a stacking context so z-index:-1 on .antenna
+   puts it behind .tv (its sibling) but NOT behind .main_wrapper's bg */
+.nf404 .main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 5em;
+  position: relative;
+  z-index: 0;
+}
+
+/* ── Antenna sphere ───────────────────────── */
+
+.nf404 .antenna {
+  width: 5em;
+  height: 5em;
+  border-radius: 50%;
+  border: 2px solid #0a1c33;
+  background-color: #1d6fd4;
+  margin-bottom: -6em;
+  margin-left: 0em;
+  /* position: relative required so z-index actually takes effect */
+  position: relative;
+  z-index: -1;   /* behind .tv within .main's stacking context */
+}
+
+.nf404 .antenna_shadow {
+  position: absolute;
+  background-color: transparent;
+  width: 50px;
+  height: 56px;
+  margin-left: 1.68em;
+  border-radius: 45%;
+  transform: rotate(140deg);
+  border: 4px solid transparent;
+  box-shadow:
+    inset 0px 16px #0e3f7e,
+    inset 0px 16px 1px 1px #0e3f7e;
+  -moz-box-shadow:
+    inset 0px 16px #0e3f7e,
+    inset 0px 16px 1px 1px #0e3f7e;
+}
+
+.nf404 .antenna::after {
+  content: "";
+  position: absolute;
+  margin-top: -9.4em;
+  margin-left: 0.4em;
+  transform: rotate(-25deg);
+  width: 1em;
+  height: 0.5em;
+  border-radius: 50%;
+  background-color: #5b9be8;
+}
+
+.nf404 .antenna::before {
+  content: "";
+  position: absolute;
+  margin-top: 0.2em;
+  margin-left: 1.25em;
+  transform: rotate(-20deg);
+  width: 1.5em;
+  height: 0.8em;
+  border-radius: 50%;
+  background-color: #5b9be8;
+}
+
+/* ── Antenna rods ─────────────────────────── */
+/* Original used dark grays (#171717, #353535) which vanish on dark bg.
+   Replaced with hub-blue gradient — visible on both light and dark. */
+
+.nf404 .a1 {
+  position: relative;
+  top: -102%;
+  left: -130%;
+  width: 12em;
+  height: 5.5em;
+  border-radius: 50px;
+  background-image: linear-gradient(
+    #0d3468,
+    #0d3468,
+    #1c66c4,
+    #1c66c4,
+    #0d3468
+  );
+  transform: rotate(-29deg);
+  clip-path: polygon(50% 0%, 49% 100%, 52% 100%);
+}
+
+/* Silver tip dot on rod 1 */
+.nf404 .a1d {
+  position: relative;
+  top: -211%;
+  left: -35%;
+  transform: rotate(45deg);
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  border: 2px solid #0a1c33;
+  background-color: #979797;
+  z-index: 99;
+}
+
+.nf404 .a2 {
+  position: relative;
+  top: -210%;
+  left: -10%;
+  width: 12em;
+  height: 4em;
+  border-radius: 50px;
+  background-color: #1c66c4;
+  background-image: linear-gradient(
+    #0d3468,
+    #0d3468,
+    #1c66c4,
+    #1c66c4,
+    #0d3468
+  );
+  margin-right: 5em;
+  clip-path: polygon(
+    47% 0,
+    47% 0,
+    34% 34%,
+    54% 25%,
+    32% 100%,
+    29% 96%,
+    49% 32%,
+    30% 38%
+  );
+  transform: rotate(-8deg);
+}
+
+/* Silver tip dot on rod 2 */
+.nf404 .a2d {
+  position: relative;
+  top: -294%;
+  left: 94%;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  border: 2px solid #0a1c33;
+  background-color: #979797;
+  z-index: 99;
+}
+
+/* ── Antenna base connector ───────────────── */
+/* Was missing entirely — small plate at the bottom of the antenna
+   sphere that visually connects it to the TV body. */
+
+.nf404 .a_base {
+  position: absolute;
+  bottom: -0.4em;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3.5em;
+  height: 0.6em;
+  background-color: #1c66c4;
+  border: 2px solid #0a1c33;
+  border-radius: 4px;
+  z-index: 1;
+}
+
+/* ── "NOT FOUND" badge text ───────────────── */
+
+.nf404 .notfound_text {
+  background-color: #000;
+  padding-left: 0.3em;
+  padding-right: 0.3em;
+  font-size: 0.75em;
+  color: #fff;
+  letter-spacing: 0;
+  border-radius: 5px;
+  z-index: 10;
+}
+
+/* ── TV body ──────────────────────────────── */
+
+.nf404 .tv {
+  width: 17em;
+  height: 9em;
+  margin-top: 3em;
+  border-radius: 15px;
+  background-color: #1c66c4;
+  display: flex;
+  justify-content: center;
+  border: 2px solid #0a1c33;
+  box-shadow: inset 0.2em 0.2em #3f8ae0;
+}
+
+.nf404 .tv::after {
+  content: "";
+  position: absolute;
+  width: 17em;
+  height: 9em;
+  border-radius: 15px;
+  background:
+    repeating-radial-gradient(#1c66c4 0 0.0001%, #00000070 0 0.0002%) 50% 0/2500px
+      2500px,
+    repeating-conic-gradient(#1c66c4 0 0.0001%, #00000070 0 0.0002%) 60% 60%/2500px
+      2500px;
+  background-blend-mode: difference;
+  opacity: 0.09;
+}
+
+.nf404 .curve_svg {
+  position: absolute;
+  margin-top: 0.25em;
+  margin-left: -0.25em;
+  height: 12px;
+  width: 12px;
+}
+
+/* ── Screen ───────────────────────────────── */
+
+.nf404 .display_div {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  justify-content: center;
+  border-radius: 15px;
+  box-shadow: 3.5px 3.5px 0px #3f8ae0;
+}
+
+.nf404 .screen_out {
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+}
+
+.nf404 .screen_out1 {
+  width: 11em;
+  height: 7.75em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+/* Desktop: animated static noise */
+.nf404 .screen {
+  width: 13em;
+  height: 7.85em;
+  font-family: var(--font-sans), sans-serif;
+  border: 2px solid #0a1c33;
+  background:
+    repeating-radial-gradient(#000 0 0.0001%, #fff 0 0.0002%) 50% 0/2500px
+      2500px,
+    repeating-conic-gradient(#000 0 0.0001%, #fff 0 0.0002%) 60% 60%/2500px
+      2500px;
+  background-blend-mode: difference;
+  animation: nf404-static 0.2s infinite alternate;
+  border-radius: 10px;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #252525;
+  letter-spacing: 0.15em;
+  text-align: center;
+}
+
+/* Mobile: colour-bar test pattern */
+.nf404 .screenM {
+  width: 13em;
+  height: 7.85em;
+  position: relative;
+  font-family: var(--font-sans), sans-serif;
+  background: linear-gradient(
+    to right,
+    #002fc6 0%,
+    #002bb2 14.2857142857%,
+    #3a3a3a 14.2857142857%,
+    #303030 28.5714285714%,
+    #ff0afe 28.5714285714%,
+    #f500f4 42.8571428571%,
+    #6c6c6c 42.8571428571%,
+    #626262 57.1428571429%,
+    #0affd9 57.1428571429%,
+    #00f5ce 71.4285714286%,
+    #3a3a3a 71.4285714286%,
+    #303030 85.7142857143%,
+    white 85.7142857143%,
+    #fafafa 100%
+  );
+  border-radius: 10px;
+  border: 2px solid #0a1c33;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #252525;
+  letter-spacing: 0.15em;
+  text-align: center;
+  overflow: hidden;
+}
+
+.nf404 .screenM:before,
+.nf404 .screenM:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+}
+
+.nf404 .screenM:before {
+  top: 0;
+  height: 68.4782608696%;
+  background: linear-gradient(
+    to right,
+    white 0%,
+    #fafafa 14.2857142857%,
+    #ffe60a 14.2857142857%,
+    #f5dc00 28.5714285714%,
+    #0affd9 28.5714285714%,
+    #00f5ce 42.8571428571%,
+    #10ea00 42.8571428571%,
+    #0ed600 57.1428571429%,
+    #ff0afe 57.1428571429%,
+    #f500f4 71.4285714286%,
+    #ed0014 71.4285714286%,
+    #d90012 85.7142857143%,
+    #002fc6 85.7142857143%,
+    #002bb2 100%
+  );
+}
+
+.nf404 .screenM:after {
+  bottom: 0;
+  height: 21.7391304348%;
+  background: linear-gradient(
+    to right,
+    #006c6b 0%,
+    #005857 16.6666666667%,
+    white 16.6666666667%,
+    #fafafa 33.3333333333%,
+    #001b75 33.3333333333%,
+    #001761 50%,
+    #6c6c6c 50%,
+    #626262 66.6666666667%,
+    #929292 66.6666666667%,
+    #888888 83.3333333333%,
+    #3a3a3a 83.3333333333%,
+    #303030 100%
+  );
+}
+
+@keyframes nf404-static {
+  100% {
+    background-position:
+      50% 0,
+      60% 50%;
+  }
+}
+
+/* ── Separator lines (between screen and buttons) ── */
+
+.nf404 .lines {
+  display: flex;
+  column-gap: 0.1em;
+  align-self: flex-end;
+}
+
+.nf404 .line1,
+.nf404 .line3 {
+  width: 2px;
+  height: 0.5em;
+  background-color: #0a1c33;
+  border-radius: 25px 25px 0px 0px;
+  margin-top: 0.5em;
+}
+
+.nf404 .line2 {
+  flex-grow: 1;
+  width: 2px;
+  height: 1em;
+  background-color: #0a1c33;
+  border-radius: 25px 25px 0px 0px;
+}
+
+/* ── Side panel (buttons + speakers) ─────── */
+
+.nf404 .buttons_div {
+  width: 4.25em;
+  align-self: center;
+  height: 8em;
+  background-color: #3f8ae0;
+  border: 2px solid #0a1c33;
+  padding: 0.6em;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  row-gap: 0.75em;
+  box-shadow: 3px 3px 0px #0a1c33;
+}
+
+.nf404 .b1 {
+  width: 1.65em;
+  height: 1.65em;
+  border-radius: 50%;
+  background-color: #2e4d7a;
+  border: 2px solid #0a1c33;
+  box-shadow:
+    inset 2px 2px 1px #7ea2d6,
+    -2px 0px #1a3052,
+    -2px 0px 0px 1px #0a1c33;
+}
+
+.nf404 .b1::before {
+  content: "";
+  position: absolute;
+  margin-top: 1em;
+  margin-left: 0.5em;
+  transform: rotate(47deg);
+  border-radius: 5px;
+  width: 0.1em;
+  height: 0.4em;
+  background-color: #000;
+}
+
+.nf404 .b1::after {
+  content: "";
+  position: absolute;
+  margin-top: 0.9em;
+  margin-left: 0.8em;
+  transform: rotate(47deg);
+  border-radius: 5px;
+  width: 0.1em;
+  height: 0.55em;
+  background-color: #000;
+}
+
+.nf404 .b1 div {
+  content: "";
+  position: absolute;
+  margin-top: -0.1em;
+  margin-left: 0.65em;
+  transform: rotate(45deg);
+  width: 0.15em;
+  height: 1.5em;
+  background-color: #000;
+}
+
+.nf404 .b2 {
+  width: 1.65em;
+  height: 1.65em;
+  border-radius: 50%;
+  background-color: #2e4d7a;
+  border: 2px solid #0a1c33;
+  box-shadow:
+    inset 2px 2px 1px #7ea2d6,
+    -2px 0px #1a3052,
+    -2px 0px 0px 1px #0a1c33;
+}
+
+.nf404 .b2::before {
+  content: "";
+  position: absolute;
+  margin-top: 1.05em;
+  margin-left: 0.8em;
+  transform: rotate(-45deg);
+  border-radius: 5px;
+  width: 0.15em;
+  height: 0.4em;
+  background-color: #000;
+}
+
+.nf404 .b2::after {
+  content: "";
+  position: absolute;
+  margin-top: -0.1em;
+  margin-left: 0.65em;
+  transform: rotate(-45deg);
+  width: 0.15em;
+  height: 1.5em;
+  background-color: #000;
+}
+
+.nf404 .speakers {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.5em;
+}
+
+.nf404 .speakers .g1 {
+  display: flex;
+  column-gap: 0.25em;
+}
+
+.nf404 .speakers .g1 .g11,
+.nf404 .g12,
+.nf404 .g13 {
+  width: 0.65em;
+  height: 0.65em;
+  border-radius: 50%;
+  background-color: #2e4d7a;
+  border: 2px solid #0a1c33;
+  box-shadow: inset 1.25px 1.25px 1px #7ea2d6;
+}
+
+/* Speaker grill lines — was #171717 (invisible on dark bg) */
+.nf404 .speakers .g {
+  width: auto;
+  height: 2px;
+  background-color: #0a1c33;
+}
+
+/* ── Feet / base ─────────────────────────── */
+/* Was dark gray (#4d4d4d, #171717) — invisible on dark backgrounds.
+   Now uses hub blue — visible on both light and dark themes. */
+
+.nf404 .bottom {
+  width: 100%;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  column-gap: 8.7em;
+}
+
+.nf404 .base1 {
+  height: 1em;
+  width: 2em;
+  border: 2px solid #0a1c33;
+  background-color: #1c66c4;
+  margin-top: -0.15em;
+}
+
+.nf404 .base2 {
+  height: 1em;
+  width: 2em;
+  border: 2px solid #0a1c33;
+  background-color: #1c66c4;
+  margin-top: -0.15em;
+}
+
+.nf404 .base3 {
+  position: absolute;
+  height: 0.15em;
+  width: 17.5em;
+  background-color: #0a1c33;
+  margin-top: 0.8em;
+}
+
+/* ── Large background "404" numbers ─────── */
+/* Was z-index: -5 with no parent stacking context → disappeared
+   behind body background.  Now z-index: -1 within the isolated
+   .main_wrapper stacking context, so it stays visible. */
+
+.nf404 .text_404 {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  column-gap: 6em;
+  z-index: -1;
+  margin-bottom: 2em;
+  align-items: center;
+  justify-content: center;
+  /* Fixed color (not CSS variable) — same shade in light and dark */
+  color: #1c66c4;
+  opacity: 0.18;
+  font-family: var(--font-sans), sans-serif;
+}
+
+.nf404 .text_4041,
+.nf404 .text_4042,
+.nf404 .text_4043 {
+  transform: scaleY(24.5) scaleX(9);
+}
+
+/* ── Responsive ──────────────────────────── */
+
+@media only screen and (max-width: 495px) {
+  .nf404 .text_404 {
+    column-gap: 6em;
+  }
+}
+
+@media only screen and (max-width: 395px) {
+  .nf404 .text_404 {
+    column-gap: 4em;
+  }
+  .nf404 .text_4041,
+  .nf404 .text_4042,
+  .nf404 .text_4043 {
+    transform: scaleY(25) scaleX(8);
+  }
+}
+
+@media (max-width: 275px), (max-height: 520px) {
+  .nf404 .main {
+    position: relative;
+  }
+}
+
+@media only screen and (max-width: 1024px) {
+  .nf404 .screenM {
+    display: flex;
+  }
+  .nf404 .screen {
+    display: none;
+  }
+}
+
+@media only screen and (min-width: 1025px) {
+  .nf404 .screen {
+    display: flex;
+  }
+  .nf404 .screenM {
+    display: none;
+  }
+}
