@@ -143,7 +143,8 @@ function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-function getFileIcon(mimeType: string) {
+function getFileIcon(mimeType: string | null | undefined) {
+  if (!mimeType) return <File className="h-4 w-4 text-muted-foreground" />;
   if (mimeType.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
   if (mimeType === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
   if (mimeType.startsWith("video/")) return <Film className="h-4 w-4 text-purple-500" />;
