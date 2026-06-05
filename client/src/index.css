@@ -234,78 +234,144 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-/* ── Theme Toggle Switch (UIverse) ───────────────────────────────────────── */
-.theme-switch {
-  font-size: 17px;
+/* ── Theme Toggle Switch v2 (UIverse jolly-chicken-91, RiccardoRapelli, MIT) ── */
+/* Note: #moon-dot-N, #cloud-N, #star-N, #light-ray-N are safe singletons     */
+.ts2-switch {
   position: relative;
   display: inline-block;
-  width: 64px;
+  width: 60px;
   height: 34px;
   flex-shrink: 0;
+  cursor: pointer;
 }
-.theme-switch input {
+.ts2-switch .ts2-input {
   opacity: 0;
   width: 0;
   height: 0;
+  position: absolute;
 }
-.theme-switch .ts-slider {
+.ts2-slider {
   position: absolute;
   cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #73C0FC;
-  transition: .4s;
-  border-radius: 30px;
+  background-color: #2196f3;
+  transition: 0.4s;
+  z-index: 0;
+  overflow: hidden;
 }
-.theme-switch .ts-slider::before {
-  position: absolute;
-  content: "";
-  height: 30px;
-  width: 30px;
-  border-radius: 20px;
-  left: 2px;
-  bottom: 2px;
-  z-index: 2;
-  background-color: #e8e8e8;
-  transition: .4s;
-}
-.theme-switch .ts-sun svg {
-  position: absolute;
-  top: 6px;
-  left: 36px;
-  z-index: 1;
-  width: 24px;
-  height: 24px;
-  animation: ts-rotate 15s linear infinite;
-}
-.theme-switch .ts-moon svg {
-  fill: #73C0FC;
-  position: absolute;
-  top: 5px;
-  left: 5px;
-  z-index: 1;
-  width: 24px;
-  height: 24px;
-  animation: ts-tilt 5s linear infinite;
-}
-@keyframes ts-rotate {
-  0%   { transform: rotate(0); }
-  100% { transform: rotate(360deg); }
-}
-@keyframes ts-tilt {
-  0%   { transform: rotate(0deg); }
-  25%  { transform: rotate(-10deg); }
-  75%  { transform: rotate(10deg); }
-  100% { transform: rotate(0deg); }
-}
-.theme-switch input:checked + .ts-slider {
-  background-color: #183153;
-}
-.theme-switch input:focus-visible + .ts-slider {
+.ts2-slider.ts2-round { border-radius: 34px; }
+.ts2-slider.ts2-round .ts2-sun-moon { border-radius: 50%; }
+/* Focus ring for keyboard nav */
+.ts2-input:focus-visible + .ts2-slider {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
-.theme-switch input:checked + .ts-slider::before {
-  transform: translateX(30px);
+
+/* ── Knob (sun / moon) ───────────────────────────────────────────────────── */
+/* Use individual CSS transform properties (translate / rotate) so the slide
+   transition and the spin animation live on separate properties and never
+   fight each other. Supported in all modern browsers (Chrome 104+, FF 72+,
+   Safari 14.1+). */
+.ts2-sun-moon {
+  position: absolute;
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: yellow;
+  translate: 0px 0px;
+  /* transition only the properties we want to slide/fade */
+  transition: translate 0.4s, background-color 0.4s;
+  overflow: visible;
+}
+.ts2-input:checked + .ts2-slider { background-color: #1a1a2e; }
+.ts2-input:checked + .ts2-slider .ts2-sun-moon {
+  /* individual property: animates via transition, no interference */
+  translate: 26px 0;
+  background-color: white;
+  /* delay matches transition → knob slides first, then spins */
+  animation: ts2-rotate-center 0.6s ease-in-out 0.4s forwards;
+}
+
+/* ── Moon craters ────────────────────────────────────────────────────────── */
+.ts2-moon-dot {
+  opacity: 0;
+  transition: 0.4s;
+  fill: #ccc;
+}
+.ts2-input:checked + .ts2-slider .ts2-sun-moon .ts2-moon-dot { opacity: 1; }
+#moon-dot-1 { left: 10px; top: 3px;  position: absolute; width: 6px;  height: 6px;  z-index: 4; }
+#moon-dot-2 { left: 2px;  top: 10px; position: absolute; width: 10px; height: 10px; z-index: 4; }
+#moon-dot-3 { left: 16px; top: 18px; position: absolute; width: 3px;  height: 3px;  z-index: 4; }
+
+/* ── Sun light rays ─────────────────────────────────────────────────────── */
+.ts2-light-ray {
+  position: absolute;
+  z-index: -1;
+  fill: white;
+  opacity: 0.1;
+}
+#light-ray-1 { left: -8px;  top: -8px;  width: 43px; height: 43px; }
+#light-ray-2 { left: -13px; top: -13px; width: 52px; height: 52px; }
+#light-ray-3 { left: -18px; top: -18px; width: 60px; height: 60px; }
+
+/* ── Clouds (float inside knob, visible in light mode) ───────────────────── */
+.ts2-cloud-light {
+  position: absolute;
+  fill: #eee;
+  animation: ts2-cloud-move 6s ease-in-out infinite;
+}
+.ts2-cloud-dark {
+  position: absolute;
+  fill: #ccc;
+  animation: ts2-cloud-move 6s ease-in-out infinite;
+  animation-delay: 1s;
+}
+#cloud-1 { left: 30px; top: 15px; width: 40px; }
+#cloud-2 { left: 44px; top: 10px; width: 20px; }
+#cloud-3 { left: 18px; top: 24px; width: 30px; }
+#cloud-4 { left: 36px; top: 18px; width: 40px; }
+#cloud-5 { left: 48px; top: 14px; width: 20px; }
+#cloud-6 { left: 22px; top: 26px; width: 30px; }
+@keyframes ts2-cloud-move {
+  0%   { transform: translateX(0px);  }
+  40%  { transform: translateX(4px);  }
+  80%  { transform: translateX(-4px); }
+  100% { transform: translateX(0px);  }
+}
+
+/* ── Stars (slide in when dark) ──────────────────────────────────────────── */
+.ts2-stars {
+  transform: translateY(-32px);
+  opacity: 0;
+  transition: 0.4s;
+}
+.ts2-input:checked + .ts2-slider .ts2-stars {
+  transform: translateY(0);
+  opacity: 1;
+}
+.ts2-star {
+  fill: white;
+  position: absolute;
+  transition: 0.4s;
+  animation: ts2-star-twinkle 2s ease-in-out infinite;
+}
+#star-1 { width: 20px; top: 2px;  left: 3px;  animation-delay: 0.3s; }
+#star-2 { width: 6px;  top: 16px; left: 3px;  }
+#star-3 { width: 12px; top: 20px; left: 10px; animation-delay: 0.6s; }
+#star-4 { width: 18px; top: 0px;  left: 18px; animation-delay: 1.3s; }
+@keyframes ts2-star-twinkle {
+  0%   { transform: scale(1);   }
+  40%  { transform: scale(1.2); }
+  80%  { transform: scale(0.8); }
+  100% { transform: scale(1);   }
+}
+
+/* ── Knob spin when switching to dark ───────────────────────────────────── */
+/* Animates only `rotate` — `translate` is handled by transition separately */
+@keyframes ts2-rotate-center {
+  0%   { rotate: 0deg;   }
+  100% { rotate: 360deg; }
 }
 
 @layer base {

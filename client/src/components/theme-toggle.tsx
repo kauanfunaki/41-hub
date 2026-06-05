@@ -1,39 +1,82 @@
 import { useTheme } from "@/lib/theme-provider";
 
+/**
+ * ThemeToggle v2 — adapted from Uiverse "jolly-chicken-91" (RiccardoRapelli, MIT).
+ * Sun (light mode) ←→ Moon + stars (dark mode), with cloud and star animations.
+ */
 export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <label className="theme-switch" aria-label="Alternar tema">
+    <label className="ts2-switch" aria-label="Alternar tema">
       <input
+        className="ts2-input"
         type="checkbox"
         checked={theme === "dark"}
         onChange={toggleTheme}
         data-testid="button-theme-toggle"
       />
-      <span className="ts-slider">
-        {/* Sol — visível no modo claro (thumb cobre a lua) */}
-        <span className="ts-sun">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#F59E0B"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="4" fill="#F59E0B" />
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      <div className="ts2-slider ts2-round">
+        {/* Knob: yellow sun → white moon */}
+        <div className="ts2-sun-moon">
+          {/* Moon craters */}
+          <svg id="moon-dot-1" className="ts2-moon-dot" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
           </svg>
-        </span>
-        {/* Lua — visível no modo escuro (thumb cobre o sol) */}
-        <span className="ts-moon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          <svg id="moon-dot-2" className="ts2-moon-dot" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
           </svg>
-        </span>
-      </span>
+          <svg id="moon-dot-3" className="ts2-moon-dot" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          {/* Sun light rays */}
+          <svg id="light-ray-1" className="ts2-light-ray" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          <svg id="light-ray-2" className="ts2-light-ray" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          <svg id="light-ray-3" className="ts2-light-ray" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          {/* Clouds (dark shadow) */}
+          <svg id="cloud-1" className="ts2-cloud-dark" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          <svg id="cloud-2" className="ts2-cloud-dark" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          <svg id="cloud-3" className="ts2-cloud-dark" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          {/* Clouds (light highlight) */}
+          <svg id="cloud-4" className="ts2-cloud-light" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          <svg id="cloud-5" className="ts2-cloud-light" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+          <svg id="cloud-6" className="ts2-cloud-light" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="50" />
+          </svg>
+        </div>
+
+        {/* Stars — slide in when dark mode is active */}
+        <div className="ts2-stars">
+          <svg id="star-1" className="ts2-star" viewBox="0 0 20 20">
+            <path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" />
+          </svg>
+          <svg id="star-2" className="ts2-star" viewBox="0 0 20 20">
+            <path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" />
+          </svg>
+          <svg id="star-3" className="ts2-star" viewBox="0 0 20 20">
+            <path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" />
+          </svg>
+          <svg id="star-4" className="ts2-star" viewBox="0 0 20 20">
+            <path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" />
+          </svg>
+        </div>
+      </div>
     </label>
   );
 }
