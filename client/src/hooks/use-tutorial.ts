@@ -7,9 +7,15 @@ export type TutorialRole = "Coordenador" | "Usuario";
 export function useTutorial() {
   const { user, refreshUser } = useAuth();
 
-  const mutation = useMutation({
+  const completeMutation = useMutation({
     mutationFn: () =>
       apiRequest("PATCH", "/api/users/me", { tutorialCompleted: true }),
+    onSuccess: () => refreshUser(),
+  });
+
+  const restartMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PATCH", "/api/users/me", { tutorialCompleted: false }),
     onSuccess: () => refreshUser(),
   });
 
@@ -25,7 +31,9 @@ export function useTutorial() {
   return {
     shouldShow,
     role: primaryRole,
-    complete: () => mutation.mutate(),
-    isCompleting: mutation.isPending,
+    complete: () => completeMutation.mutate(),
+    isCompleting: completeMutation.isPending,
+    restart: () => restartMutation.mutate(),
+    isRestarting: restartMutation.isPending,
   };
 }

@@ -206,7 +206,7 @@ export default function Analytics() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <KpiCard
               title="Total"
-              value={stats?.tickets.total}
+              value={stats?.tickets?.total}
               icon={Ticket}
               stripe="bg-primary"
               textColor="text-foreground"
@@ -214,7 +214,7 @@ export default function Analytics() {
             />
             <KpiCard
               title="Abertos"
-              value={stats?.tickets.open}
+              value={stats?.tickets?.open}
               icon={Clock}
               stripe="bg-blue-500"
               textColor="text-blue-600 dark:text-blue-400"
@@ -222,7 +222,7 @@ export default function Analytics() {
             />
             <KpiCard
               title="Resolvidos"
-              value={stats?.tickets.resolved}
+              value={stats?.tickets?.resolved}
               icon={CheckCircle2}
               stripe="bg-green-500"
               textColor="text-green-600 dark:text-green-400"
@@ -230,7 +230,7 @@ export default function Analytics() {
             />
             <KpiCard
               title="Cancelados"
-              value={stats?.tickets.cancelled}
+              value={stats?.tickets?.cancelled}
               icon={AlertTriangle}
               stripe="bg-red-500"
               textColor="text-red-600 dark:text-red-400"
@@ -253,7 +253,7 @@ export default function Analytics() {
             <div className="space-y-3.5">
               {(stats?.byStatus ?? []).map((row) => {
                 const total =
-                  parseInt(stats?.tickets.total || "1", 10) || 1;
+                  parseInt(stats?.tickets?.total || "1", 10) || 1;
                 const pct = Math.round(
                   (parseInt(row.count, 10) / total) * 100,
                 );
@@ -357,14 +357,14 @@ export default function Analytics() {
               <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-center">
                 <div className="h-2 w-2 rounded-full bg-green-500 mx-auto mb-2" />
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">
-                  {stats?.resources.up ?? 0}
+                  {stats?.resources?.up ?? 0}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">OK</p>
               </div>
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-center">
                 <div className="h-2 w-2 rounded-full bg-amber-500 mx-auto mb-2" />
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                  {stats?.resources.degraded ?? 0}
+                  {stats?.resources?.degraded ?? 0}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Degradado
@@ -373,7 +373,7 @@ export default function Analytics() {
               <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-center">
                 <div className="h-2 w-2 rounded-full bg-red-500 mx-auto mb-2" />
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400 tabular-nums">
-                  {stats?.resources.down ?? 0}
+                  {stats?.resources?.down ?? 0}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Fora do ar
@@ -394,19 +394,19 @@ export default function Analytics() {
             <div className="grid grid-cols-3 divide-x">
               <div className="text-center px-3 first:pl-0">
                 <p className="text-3xl font-bold tabular-nums">
-                  {stats?.typing.totalSessions ?? 0}
+                  {stats?.typing?.totalSessions ?? 0}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Sessões</p>
               </div>
               <div className="text-center px-3">
                 <p className="text-3xl font-bold tabular-nums">
-                  {stats?.typing.avgWpm ?? "—"}
+                  {stats?.typing?.avgWpm ?? "—"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">WPM médio</p>
               </div>
               <div className="text-center px-3 last:pr-0">
                 <p className="text-3xl font-bold tabular-nums">
-                  {stats?.typing.avgAccuracy
+                  {stats?.typing?.avgAccuracy
                     ? `${stats.typing.avgAccuracy}%`
                     : "—"}
                 </p>
