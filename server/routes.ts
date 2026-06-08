@@ -2030,7 +2030,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ticket = await storage.getTicketDetail(req.params.id, req.user!);
       if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
       const result = await pool.query(
-        `SELECT ta.*, u.name as "uploadedByName"
+        `SELECT
+           ta.id,
+           ta.ticket_id       AS "ticketId",
+           ta.uploaded_by     AS "uploadedBy",
+           ta.original_name   AS "originalName",
+           ta.storage_name    AS "storageName",
+           ta.mime_type       AS "mimeType",
+           ta.size_bytes      AS "sizeBytes",
+           ta.attachment_key  AS "attachmentKey",
+           ta.created_at      AS "createdAt",
+           u.name             AS "uploadedByName"
          FROM ticket_attachments ta
          LEFT JOIN users u ON u.id = ta.uploaded_by
          WHERE ta.ticket_id = $1
