@@ -393,7 +393,7 @@ export default function TicketsDetail() {
 
   const updateMutation = useMutation({
     mutationFn: async (patch: Record<string, any>) => { const r = await apiRequest("PATCH", `/api/tickets/${ticketId}`, patch); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); toast({ title: "Chamado atualizado" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); toast({ title: "Chamado atualizado" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
   const assignMutation = useMutation({
@@ -433,12 +433,12 @@ export default function TicketsDetail() {
   });
   const requestInfoMutation = useMutation({
     mutationFn: async () => { const r = await apiRequest("POST", `/api/tickets/${ticketId}/request-info`, { message: requestInfoMessage, markAwaiting: requestInfoMarkAwaiting }); return r.json(); },
-    onSuccess: () => { setRequestInfoOpen(false); setRequestInfoMessage(""); setRequestInfoMarkAwaiting(true); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] }); toast({ title: "Solicitação enviada" }); },
+    onSuccess: () => { setRequestInfoOpen(false); setRequestInfoMessage(""); setRequestInfoMarkAwaiting(true); queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] }); toast({ title: "Solicitação enviada" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
   const approvalMutation = useMutation({
     mutationFn: async ({ action, note }: { action: "approve" | "reject"; note: string }) => { const r = await apiRequest("POST", `/api/tickets/${ticketId}/${action === "approve" ? "approve" : "reject"}`, { note }); return r.json(); },
-    onSuccess: (data: any) => { queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "approval"] }); setApprovalDialogOpen(false); setApprovalNote(""); toast({ title: data.message || "Decisão registrada" }); },
+    onSuccess: (data: any) => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "approval"] }); setApprovalDialogOpen(false); setApprovalNote(""); toast({ title: data.message || "Decisão registrada" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
