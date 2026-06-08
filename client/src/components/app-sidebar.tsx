@@ -17,6 +17,7 @@ import {
   BookOpen,
   Activity,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { ThemeLogo } from "@/components/theme-logo";
 import {
   Sidebar,
@@ -75,6 +76,35 @@ export function AppSidebar() {
   });
   const showOpsCenter =
     isAdmin || (opsWatchers !== undefined && opsWatchers.length > 0);
+
+  // Ticket + alert count badges for sidebar
+  const { data: activeTickets = [] } = useQuery<{ id: string }[]>({
+    queryKey: ["/api/tickets", { sidebar: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/tickets", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isAuthenticated && !isUsuarioOnly,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const { data: activeAlertsData = [] } = useQuery<{ id: string; isRead?: boolean }[]>({
+    queryKey: ["/api/alerts", { sidebar: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/alerts?active=true", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const ticketCount = Array.isArray(activeTickets) ? activeTickets.length : 0;
+  const alertCount = Array.isArray(activeAlertsData) ? activeAlertsData.filter((a) => !a.isRead).length : 0;
 
   const getInitials = (name: string) => {
     return name
@@ -163,6 +193,14 @@ export function AppSidebar() {
                     <Link href="/tickets">
                       <Ticket className="h-4 w-4" />
                       <span>Chamados</span>
+                      {ticketCount > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center"
+                        >
+                          {ticketCount > 99 ? "99+" : ticketCount}
+                        </Badge>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -208,6 +246,14 @@ export function AppSidebar() {
                   <Link href="/alerts">
                     <Bell className="h-4 w-4" />
                     <span>Alertas</span>
+                    {alertCount > 0 && (
+                      <Badge
+                        variant="destructive"
+                        className="ml-auto h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center"
+                      >
+                        {alertCount > 99 ? "99+" : alertCount}
+                      </Badge>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

@@ -326,14 +326,23 @@ export default function TicketsNew() {
       </div>
 
       {availableSectors.length === 0 ? (
-        <div className="rounded-xl border bg-card p-12 flex flex-col items-center justify-center text-center gap-3" data-testid="text-no-sector">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <AlertTriangle className="h-6 w-6 text-muted-foreground" />
+        <div className="rounded-xl border bg-card p-12 flex flex-col items-center justify-center text-center gap-4" data-testid="text-no-sector">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10">
+            <AlertTriangle className="h-7 w-7 text-amber-500" />
           </div>
-          <p className="font-medium">Sem setor vinculado</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Sua conta não possui setor vinculado. Fale com um administrador para poder abrir chamados.
-          </p>
+          <div className="space-y-1.5 max-w-sm">
+            <p className="font-semibold text-base">Conta sem setor vinculado</p>
+            <p className="text-sm text-muted-foreground">
+              Para abrir chamados, sua conta precisa estar associada a pelo menos um setor.
+            </p>
+          </div>
+          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 max-w-sm w-full">
+            <p className="text-sm text-amber-800 dark:text-amber-300 font-medium mb-1">O que fazer?</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Peça ao administrador do portal para acessar <strong>Admin → Usuários</strong> e vincular um setor à sua conta.
+              Após isso, tente novamente.
+            </p>
+          </div>
         </div>
       ) : (
         <>

@@ -424,8 +424,8 @@ export default function OpsCenter() {
             <SummaryCard title="Processados"    value={summary?.success ?? 0} sub="com sucesso"   icon={CheckCircle2}  stripe="bg-green-500"   iconBg="bg-green-500/10"   iconColor="text-green-600 dark:text-green-400" />
             <SummaryCard title="Erros"          value={summary?.error ?? 0}  sub="requerem atenção" icon={XCircle}    stripe="bg-red-500"     iconBg="bg-red-500/10"     iconColor="text-red-600 dark:text-red-400" />
             <SummaryCard title="Taxa de sucesso"
-              value={summary?.successRate != null ? `${summary.successRate}%` : "—"}
-              sub={summary?.warning ? `${summary.warning} avisos` : undefined}
+              value={summary?.successRate != null ? `${summary.successRate}%` : summary?.total === 0 ? "N/A" : "—"}
+              sub={summary?.total === 0 ? "Sem processamentos hoje" : summary?.warning ? `${summary.warning} avisos` : undefined}
               icon={AlertTriangle} stripe="bg-amber-500" iconBg="bg-amber-500/10" iconColor="text-amber-600 dark:text-amber-400"
             />
           </>

@@ -972,7 +972,21 @@ export default function TicketsDetail() {
 
               <div className="space-y-0.5">
                 <InfoRow label="1ª resposta">
-                  <span className={`text-[11px] font-semibold ${slaInfo.firstColor}`}>{slaInfo.firstStatus}</span>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[11px] font-semibold ${slaInfo.firstColor}`}>{slaInfo.firstStatus}</span>
+                    {slaInfo.firstStatus === "Estourado" && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-56">
+                            <p className="text-xs">A 1ª resposta não foi registrada dentro do prazo estipulado pelo SLA. Isso não afeta necessariamente o prazo de resolução geral.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
                 </InfoRow>
                 <InfoRow label="Prazo resp.">{formatDate(slaInfo.cycle.firstResponseDueAt)}</InfoRow>
                 <InfoRow label="Prazo resolução">

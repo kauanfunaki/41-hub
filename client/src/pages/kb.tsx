@@ -70,12 +70,15 @@ export default function Kb() {
     queryKey: ["/api/admin/tickets/categories"],
   });
 
-  const leafCategories = categories.filter((c) => c.parentId !== null);
+  // Show all categories (both parent and leaf) so the filter is more useful
+  const allCategories = categories;
 
   const mostRead = [...articles].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0)).slice(0, 3);
+  // Exclude the top-3 most-read from "Todos os artigos" to prevent duplication
+  const mostReadIds = new Set(mostRead.map(m => m.id));
   const remaining = searchQuery || filterCategory !== "all"
     ? articles
-    : articles.filter(a => !mostRead.slice(0, 3).find(m => m.id === a.id) || mostRead.length < 3);
+    : articles.filter(a => !mostReadIds.has(a.id));
 
   return (
     <PageContainer className="flex flex-col gap-6 py-6">
@@ -103,7 +106,7 @@ export default function Kb() {
       </div>
 
       {/* Search + filter */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap" data-tutorial="kb-search">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -113,15 +116,17 @@ export default function Kb() {
             className="pl-9"
           />
         </div>
-        {leafCategories.length > 0 && (
+        {allCategories.length > 0 && (
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Todas as categorias" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as categorias</SelectItem>
-              {leafCategories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              {allCategories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.parentId ? `↳ ${c.name}` : c.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -194,14 +199,16 @@ export default function Kb() {
           )}
 
           {/* Todos os artigos */}
-          {(!searchQuery && filterCategory === "all" && remaining.length > 0 && articles.length > 3) && (
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              <BookOpen className="h-3.5 w-3.5" />
-              Todos os artigos
-            </p>
-          )}
+          {remaining.length > 0 && (
+            <>
+              {(!searchQuery && filterCategory === "all" && mostRead.length > 0) && (
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Todos os artigos
+                </p>
+              )}
           <div className="space-y-2">
-            {(searchQuery || filterCategory !== "all" ? articles : remaining).map((article) => (
+            {remaining.map((article) => (
               <button
                 key={article.id}
                 className="w-full text-left rounded-xl border bg-card hover:bg-accent transition-colors overflow-hidden group"
@@ -240,6 +247,8 @@ export default function Kb() {
               </button>
             ))}
           </div>
+            </>
+          )}
         </div>
       )}
     </PageContainer>

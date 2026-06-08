@@ -93,11 +93,20 @@ const ticketUpload = multer({
   storage: ticketAttachmentStorage,
   limits: { fileSize: TICKET_MAX_FILE_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "application/pdf", "video/mp4"];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedTypes = [
+      "image/jpeg", "image/png", "application/pdf", "video/mp4",
+      "application/zip", "application/x-zip-compressed",
+      "application/x-7z-compressed",
+      "application/vnd.rar", "application/x-rar-compressed",
+      "application/x-rar",
+      "application/octet-stream", // some browsers send this for .zip
+    ];
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedExts = [".jpg", ".jpeg", ".png", ".pdf", ".mp4", ".zip", ".7z", ".rar"];
+    if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Only JPEG, PNG, PDF and MP4 files are allowed"));
+      cb(new Error("Tipo de arquivo não permitido. Formatos aceitos: JPEG, PNG, PDF, MP4, ZIP, RAR, 7Z"));
     }
   },
 });

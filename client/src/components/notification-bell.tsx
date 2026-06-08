@@ -121,6 +121,7 @@ export function NotificationBell() {
           className="notif-bell-btn rounded-lg"
           onClick={() => setOpen((v) => !v)}
           data-testid="button-notification-bell"
+          data-tutorial="notification-bell"
         >
           {/* SVG from Uiverse spotty-rabbit-35 (mrhyddenn, MIT) */}
           <svg
@@ -152,7 +153,14 @@ export function NotificationBell() {
           data-testid="dropdown-notifications"
         >
           <div className="flex items-center justify-between p-3 border-b">
-            <span className="font-semibold text-sm">Notificações</span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm">Notificações</span>
+              {notifications.length > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {notifications.length}
+                </span>
+              )}
+            </div>
             {unreadCount > 0 && (
               <Button
                 variant="ghost"
@@ -168,7 +176,7 @@ export function NotificationBell() {
             )}
           </div>
 
-          <ScrollArea className="max-h-80">
+          <ScrollArea className="max-h-[480px]">
             {isLoading ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 Carregando...
