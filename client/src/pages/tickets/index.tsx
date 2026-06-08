@@ -223,6 +223,7 @@ export default function TicketsIndex() {
   });
 
   // ── Aguardando você: status=AGUARDANDO_USUARIO (only for admin/coord)
+  // Always fetch (not just when on this tab) so the badge shows even before clicking
   const { data: waitingTickets = [], isLoading: loadingWaiting } = useQuery<
     TicketWithDetails[]
   >({
@@ -234,7 +235,7 @@ export default function TicketsIndex() {
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
-    enabled: tab === "aguardando" && !!isAdminOrCoord,
+    enabled: !!isAdminOrCoord,
   });
 
   // ── Histórico: RESOLVIDO + CANCELADO
@@ -338,7 +339,7 @@ export default function TicketsIndex() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
+        <TabsList data-tutorial="tickets-tabs">
           <TabsTrigger value="ativos" data-testid="tab-active">
             Ativos
             {activeTickets.length > 0 && (
@@ -379,7 +380,7 @@ export default function TicketsIndex() {
                 : "Nenhum chamado encontrado"}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" data-tutorial="tickets-list">
               {displayTickets.map((ticket) => (
                 <TicketCard key={ticket.id} ticket={ticket} />
               ))}

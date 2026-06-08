@@ -9,6 +9,12 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -389,10 +395,19 @@ export default function AdminAudit() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {log.targetType && log.targetId ? (
-                        <span className="text-sm font-mono">
-                          {log.targetType}:{" "}
-                          <span className="text-xs">{log.targetId.slice(0, 8)}…</span>
-                        </span>
+                        <TooltipProvider delayDuration={120}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-sm font-mono cursor-default">
+                                {log.targetType}:{" "}
+                                <span className="text-xs">{log.targetId.slice(0, 8)}…</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="font-mono text-xs max-w-xs break-all">
+                              {log.targetType}: {log.targetId}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       ) : (
                         <span className="text-muted-foreground/50">—</span>
                       )}

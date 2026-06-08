@@ -84,12 +84,12 @@
   --card: 210 5% 96%;
   --card-foreground: 210 6% 12%;
   --card-border: 210 5% 94%;
-  --sidebar: 210 5% 94%;
+  --sidebar: 210 10% 89%;
   --sidebar-foreground: 210 6% 12%;
-  --sidebar-border: 210 5% 90%;
+  --sidebar-border: 210 10% 80%;
   --sidebar-primary: 210 85% 42%;
   --sidebar-primary-foreground: 210 85% 98%;
-  --sidebar-accent: 210 6% 88%;
+  --sidebar-accent: 210 10% 83%;
   --sidebar-accent-foreground: 210 6% 12%;
   --sidebar-ring: 210 85% 42%;
   --popover: 210 5% 92%;
@@ -620,5 +620,29 @@
   }
   75% {
     transform: rotateZ(2deg);
+  }
+}
+
+/* ── Item 15: Light mode header visual separation ─────────────────────────── */
+html.light header {
+  box-shadow: 0 1px 3px 0 hsl(210 12% 74% / 0.55);
+}
+
+/* ── Interactive tutorial highlight ─────────────────────────────────────── */
+.tutorial-highlight {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 3px;
+  border-radius: 6px;
+  animation: tutorial-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes tutorial-pulse {
+  0%, 100% {
+    outline-color: hsl(var(--primary));
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  50% {
+    outline-color: hsl(var(--primary) / 0.7);
+    box-shadow: 0 0 0 6px hsl(var(--primary) / 0);
   }
 }

@@ -376,8 +376,14 @@ export default function AdminUsers() {
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <CardTitle className="text-base font-medium">
-              {filteredUsers.length} usuário{filteredUsers.length !== 1 ? "s" : ""}
-              {statusFilter === "active" && <span className="text-xs text-muted-foreground font-normal ml-1">(ativos)</span>}
+              {usersLoading ? (
+                <span className="text-muted-foreground font-normal">Carregando usuários…</span>
+              ) : (
+                <>
+                  {filteredUsers.length} usuário{filteredUsers.length !== 1 ? "s" : ""}
+                  {statusFilter === "active" && <span className="text-xs text-muted-foreground font-normal ml-1">(ativos)</span>}
+                </>
+              )}
             </CardTitle>
             <Button onClick={handleOpenCreate} data-testid="button-create-user">
               <Plus className="h-4 w-4 mr-2" />

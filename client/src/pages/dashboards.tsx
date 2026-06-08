@@ -68,7 +68,7 @@ export default function Dashboards() {
       <div className="rounded-xl border bg-card overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border-b">
           <p className="text-sm font-medium text-muted-foreground">
-            {filteredResources.length} {filteredResources.length !== 1 ? "dashboards disponíveis" : "dashboard disponível"}
+            {isLoading ? "Carregando dashboards…" : `${filteredResources.length} ${filteredResources.length !== 1 ? "dashboards disponíveis" : "dashboard disponível"}`}
           </p>
           <SearchInput
             value={searchQuery}
@@ -77,7 +77,7 @@ export default function Dashboards() {
             className="sm:w-64"
           />
         </div>
-        <div className="p-4">
+        <div className="p-4" data-tutorial="dashboards-grid">
           <ResourceGrid
             resources={filteredResources}
             isLoading={isLoading}

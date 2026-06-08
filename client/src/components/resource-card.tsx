@@ -196,11 +196,12 @@ export function ResourceCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-8 w-8 opacity-30 group-hover:opacity-100 transition-opacity"
               onClick={(e) => {
                 e.stopPropagation();
                 handleClick();
               }}
+              title="Abrir"
               data-testid={`button-open-${resource.id}`}
             >
               <ExternalLink className="h-4 w-4 text-muted-foreground" />

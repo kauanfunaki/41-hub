@@ -17,7 +17,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import type { Sector } from "@shared/schema";
+import type { Sector, UserWithRoles } from "@shared/schema";
+import { Users } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -180,30 +181,40 @@ export default function AdminTicketsAnalytics() {
   const [to, setTo] = useState("");
   const [sectorId, setSectorId] = useState("");
   const [priority, setPriority] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
   const [page, setPage] = useState(1);
 
   const { data: sectors = [] } = useQuery<Sector[]>({
     queryKey: ["/api/admin/sectors"],
   });
 
+  const { data: allUsers = [] } = useQuery<UserWithRoles[]>({
+    queryKey: ["/api/admin/users"],
+  });
+  // Only show tech team members (admins + coordinators) as assignee options
+  const techUsers = allUsers.filter(
+    (u) => u.isActive && (u.isAdmin || u.roles?.some((r) => r.roleName === "Coordenador"))
+  );
+
   const apiUrl = useMemo(() => buildUrl("/api/admin/analytics/tickets-detail", {
     from: from || undefined,
     to: to || undefined,
     sectorId: sectorId || undefined,
     priority: priority || undefined,
+    assigneeId: assigneeId || undefined,
     page: String(page),
     limit: "25",
-  }), [from, to, sectorId, priority, page]);
+  }), [from, to, sectorId, priority, assigneeId, page]);
 
   const { data, isLoading } = useQuery<DetailResponse>({
     queryKey: [apiUrl],
     queryFn: () => fetch(apiUrl, { credentials: "include" }).then((r) => r.json()),
   });
 
-  const hasFilters = from || to || sectorId || priority;
+  const hasFilters = from || to || sectorId || priority || assigneeId;
 
   function clearFilters() {
-    setFrom(""); setTo(""); setSectorId(""); setPriority(""); setPage(1);
+    setFrom(""); setTo(""); setSectorId(""); setPriority(""); setAssigneeId(""); setPage(1);
   }
 
   const totalPages = data ? Math.ceil(data.total / 25) : 1;
@@ -273,6 +284,18 @@ export default function AdminTicketsAnalytics() {
             <SelectItem value="URGENTE">Urgente</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={assigneeId} onValueChange={(v) => { setAssigneeId(v === "_all" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="h-8 w-44 text-xs">
+            <Users className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+            <SelectValue placeholder="Colaborador" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">Todos os colaboradores</SelectItem>
+            {techUsers.map((u) => (
+              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {hasFilters && (
           <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={clearFilters}>
             <X className="h-3 w-3" /> Limpar
@@ -331,8 +354,9 @@ export default function AdminTicketsAnalytics() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[280px]">Chamado</TableHead>
+                  <TableHead className="w-[260px]">Chamado</TableHead>
                   <TableHead>Setor</TableHead>
+                  <TableHead>Responsável</TableHead>
                   <TableHead>Prioridade</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>SLA</TableHead>
@@ -344,14 +368,14 @@ export default function AdminTicketsAnalytics() {
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : (data?.tickets ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-16 text-center text-muted-foreground text-sm">
+                    <TableCell colSpan={8} className="py-16 text-center text-muted-foreground text-sm">
                       Nenhum chamado encontrado com os filtros selecionados
                     </TableCell>
                   </TableRow>
@@ -371,6 +395,13 @@ export default function AdminTicketsAnalytics() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {t.targetSector}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[120px]">
+                          {t.assignees && t.assignees !== "—" ? (
+                            <span className="truncate block" title={t.assignees}>{t.assignees}</span>
+                          ) : (
+                            <span className="opacity-40">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <span className={cn("inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium", PRIORITY_COLOR[t.priority] ?? "")}>

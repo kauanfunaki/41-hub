@@ -266,7 +266,7 @@ export default function TypingTest() {
   if (!user) return null;
 
   return (
-    <div className="max-w-4xl w-full mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-5xl w-full mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -304,86 +304,115 @@ export default function TypingTest() {
       </div>
 
       {state === "idle" && (
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="h-[3px] bg-primary w-full" />
-          <div className="flex flex-col items-center justify-center py-14 px-6 gap-7">
-            {/* Icon */}
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
-              <Keyboard className="h-10 w-10 text-primary" />
-            </div>
-
-            {/* Text */}
-            <div className="text-center space-y-2 max-w-md">
-              <p className="text-lg font-semibold">Pronto para começar?</p>
-              <p className="text-sm text-muted-foreground">
-                Um texto aleatório será exibido. Digite-o o mais rápido e preciso possível em 60 segundos.
-              </p>
-            </div>
-
-            {/* Difficulty picker */}
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                Dificuldade
-              </p>
-              <div className="flex gap-0.5 p-0.5 rounded-xl bg-muted border border-border">
-                {(["easy", "medium", "hard"] as Level[]).map((lv) => (
-                  <button
-                    key={lv}
-                    onClick={() => setLevel(lv)}
-                    className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                      level === lv
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    data-testid={`button-difficulty-${lv}`}
-                  >
-                    {LEVEL_LABELS[lv]}
-                  </button>
-                ))}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+          {/* Main test card */}
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="h-[3px] bg-primary w-full" />
+            <div className="flex flex-col items-center justify-center py-10 px-6 gap-6">
+              {/* Icon */}
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+                <Keyboard className="h-8 w-8 text-primary" />
               </div>
-            </div>
 
-            {/* Anti-cheat notice */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ShieldAlert className="h-3.5 w-3.5" />
-              Colar texto é bloqueado e invalida o resultado
-            </div>
+              {/* Text */}
+              <div className="text-center space-y-1.5 max-w-md">
+                <p className="text-lg font-semibold">Pronto para começar?</p>
+                <p className="text-sm text-muted-foreground">
+                  Um texto aleatório será exibido. Digite-o o mais rápido e preciso possível em 60 segundos.
+                </p>
+              </div>
 
-            {/* Start button */}
-            <Button
-              size="lg"
-              onClick={handleStart}
-              disabled={startSessionMutation.isPending}
-              data-testid="button-start-test"
-            >
-              {startSessionMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              Iniciar Teste
-            </Button>
+              {/* Difficulty picker */}
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                  Dificuldade
+                </p>
+                <div className="flex gap-0.5 p-0.5 rounded-xl bg-muted border border-border">
+                  {(["easy", "medium", "hard"] as Level[]).map((lv) => (
+                    <button
+                      key={lv}
+                      onClick={() => setLevel(lv)}
+                      className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                        level === lv
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      data-testid={`button-difficulty-${lv}`}
+                    >
+                      {LEVEL_LABELS[lv]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Anti-cheat notice */}
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Colar texto é bloqueado e invalida o resultado
+              </div>
+
+              {/* Start button */}
+              <Button
+                size="lg"
+                onClick={handleStart}
+                disabled={startSessionMutation.isPending}
+                data-testid="button-start-test"
+              >
+                {startSessionMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                Iniciar Teste
+              </Button>
+            </div>
           </div>
 
-          {/* Estatísticas pessoais */}
-          {myStats && myStats.totalSessions > 0 && (
-            <div className="border-t px-6 py-4 grid grid-cols-3 divide-x text-center">
-              <div className="px-4">
-                <p className="text-xl font-bold tabular-nums">{myStats.bestWpm ?? "—"}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Melhor WPM</p>
-              </div>
-              <div className="px-4">
-                <p className="text-xl font-bold tabular-nums">
-                  {myStats.bestAccuracy != null ? `${myStats.bestAccuracy}%` : "—"}
+          {/* Side panel: personal stats */}
+          <div className="flex flex-col gap-4">
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="h-[3px] bg-chart-3 w-full" />
+              <div className="p-5">
+                <p className="text-sm font-semibold mb-4 flex items-center gap-2">
+                  <Target className="h-4 w-4 text-chart-3" />
+                  Suas Estatísticas
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Melhor precisão</p>
-              </div>
-              <div className="px-4">
-                <p className="text-xl font-bold tabular-nums">{myStats.totalSessions}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Sessões</p>
+                {myStats && myStats.totalSessions > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-muted/50 p-3 text-center">
+                        <p className="text-2xl font-bold tabular-nums text-foreground">{myStats.bestWpm ?? "—"}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Melhor WPM</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 p-3 text-center">
+                        <p className="text-2xl font-bold tabular-nums text-foreground">
+                          {myStats.bestAccuracy != null ? `${myStats.bestAccuracy}%` : "—"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Melhor precisão</p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                      <p className="text-2xl font-bold tabular-nums text-foreground">{myStats.totalSessions}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Sessões realizadas</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">Nenhum teste realizado ainda.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Complete seu primeiro teste para ver suas estatísticas.</p>
+                  </div>
+                )}
               </div>
             </div>
-          )}
+
+            <button
+              className="flex items-center justify-center gap-2 rounded-xl border bg-card p-4 hover:bg-accent transition-colors text-sm font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => setLocation("/typing/leaderboard")}
+            >
+              <Trophy className="h-4 w-4" />
+              Ver Ranking Geral
+            </button>
+          </div>
         </div>
       )}
 

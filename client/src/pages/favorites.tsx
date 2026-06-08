@@ -69,7 +69,7 @@ export default function Favorites() {
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle className="text-base font-medium">
-              {filteredFavorites.length} favorito{filteredFavorites.length !== 1 ? "s" : ""}
+              {isLoading ? "Carregando favoritos…" : `${filteredFavorites.length} favorito${filteredFavorites.length !== 1 ? "s" : ""}`}
             </CardTitle>
             <SearchInput
               value={searchQuery}

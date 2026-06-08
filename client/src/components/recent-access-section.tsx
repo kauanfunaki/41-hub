@@ -1,8 +1,9 @@
-import { Clock } from "lucide-react";
+import { Clock, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SectionDivider } from "@/components/section-divider";
 import type { ResourceWithHealth } from "@shared/schema";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface RecentAccessSectionProps {
   resources: ResourceWithHealth[];
@@ -47,7 +48,14 @@ export function RecentAccessSection({
 
   return (
     <div className="space-y-3">
-      <SectionDivider icon={Clock} label="Acessados Recentemente" />
+      <div className="flex items-center justify-between">
+        <SectionDivider icon={Clock} label="Acessados Recentemente" />
+        <Link href="/apps">
+          <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 shrink-0 ml-3">
+            Ver todos <ArrowRight className="h-3 w-3" />
+          </button>
+        </Link>
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
         {resources.map((resource) => (
           <button

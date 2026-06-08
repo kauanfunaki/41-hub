@@ -108,7 +108,7 @@ export default function Alerts() {
           description="Tudo em ordem! Não há alertas no momento."
         />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2" data-tutorial="alerts-list">
           {alerts.map((alert) => {
             const cfg =
               SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.info;
