@@ -11,6 +11,7 @@ import {
   CalendarDays,
   X,
   BarChart2,
+  ArrowLeft,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,6 +48,8 @@ const statusLabels: Record<string, string> = {
   EM_ANDAMENTO: "Em andamento",
   AGUARDANDO_USUARIO: "Aguardando usuário",
   AGUARDANDO_APROVACAO: "Aguardando aprovação",
+  AGUARDANDO_REQUERENTE: "Aguardando usuário",
+  STANDBY: "Em pausa",
   RESOLVIDO: "Resolvido",
   CANCELADO: "Cancelado",
 };
@@ -57,6 +60,8 @@ const statusColors: Record<string, string> = {
   EM_ANDAMENTO: "bg-amber-500",
   AGUARDANDO_USUARIO: "bg-violet-500",
   AGUARDANDO_APROVACAO: "bg-orange-500",
+  AGUARDANDO_REQUERENTE: "bg-violet-500",
+  STANDBY: "bg-slate-500",
   RESOLVIDO: "bg-green-500",
   CANCELADO: "bg-red-500",
 };
@@ -139,6 +144,11 @@ export default function Analytics() {
       {/* Header + Date Filter */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
+          <Link href="/admin">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-4/10">
             <LineChart className="h-5 w-5 text-chart-4" />
           </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PageContainer } from "@/components/page-container";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   Bell,
   Plus,
@@ -9,6 +10,7 @@ import {
   Power,
   PowerOff,
   ShieldAlert,
+  ArrowLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,6 +146,11 @@ export default function AdminAlerts() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <Link href="/admin">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
             <ShieldAlert className="h-5 w-5 text-red-500" />
           </div>

@@ -302,7 +302,7 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    isActive={location.startsWith("/admin") || location.startsWith("/analytics")}
+                    isActive={location.startsWith("/admin")}
                     data-testid="nav-admin"
                   >
                     <Link href="/admin">

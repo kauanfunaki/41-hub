@@ -132,7 +132,7 @@ export default function Home() {
     retry: false,
   });
   const myTickets: MyTicket[] = Array.isArray(myTicketsRaw) ? myTicketsRaw.filter((t: MyTicket) =>
-    ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"].includes(t.status)
+    ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "AGUARDANDO_REQUERENTE", "STANDBY"].includes(t.status)
   ).slice(0, 4) : [];
 
   const { data: opsStatsRaw } = useQuery<OpsStats | unknown>({
@@ -346,6 +346,7 @@ export default function Home() {
               const statusLabel: Record<string, string> = {
                 ABERTO: "Aberto", NA_FILA: "Aberto", EM_ANDAMENTO: "Em andamento",
                 AGUARDANDO_USUARIO: "Aguard. usuário", AGUARDANDO_APROVACAO: "Aguard. aprovação",
+                AGUARDANDO_REQUERENTE: "Aguard. usuário", STANDBY: "Em pausa",
               };
               return (
                 <div

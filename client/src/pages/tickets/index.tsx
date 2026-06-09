@@ -20,6 +20,7 @@ import {
   Clock,
 } from "lucide-react";
 import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 // ── Labels / colours ────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ const statusLabels: Record<string, string> = {
   EM_ANDAMENTO: "Em Andamento",
   AGUARDANDO_USUARIO: "Aguardando Usuário",
   AGUARDANDO_APROVACAO: "Aguardando Aprovação",
+  AGUARDANDO_REQUERENTE: "Aguardando Usuário",
+  STANDBY: "Em Pausa",
   RESOLVIDO: "Resolvido",
   CANCELADO: "Cancelado",
 };
@@ -59,6 +62,8 @@ const statusColors: Record<string, string> = {
   NA_FILA: "bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20",
   EM_ANDAMENTO: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20",
   AGUARDANDO_USUARIO: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+  AGUARDANDO_REQUERENTE: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+  STANDBY: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/20",
   RESOLVIDO: "bg-muted text-muted-foreground border border-border",
   AGUARDANDO_APROVACAO: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border border-violet-500/20",
   CANCELADO: "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20",
@@ -207,11 +212,12 @@ export default function TicketsIndex() {
   const isAdminOrCoord =
     user?.isAdmin || user?.roles?.some((r) => r.roleName === "Coordenador");
 
-  // ── Ativos: ABERTO + EM_ANDAMENTO (no status filter = server default active)
+  // ── Active list: all non-closed tickets (server default). Always fetched so
+  //    the tab count badges show even before clicking each tab.
   const { data: activeTickets = [], isLoading: loadingActive } = useQuery<
     TicketWithDetails[]
   >({
-    queryKey: ["/api/tickets", { tab: "ativos", q: search || undefined }],
+    queryKey: ["/api/tickets", { tab: "active", q: search || undefined }],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (search) p.set("q", search);
@@ -219,26 +225,9 @@ export default function TicketsIndex() {
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
-    enabled: tab === "ativos",
   });
 
-  // ── Aguardando você: status=AGUARDANDO_USUARIO (only for admin/coord)
-  // Always fetch (not just when on this tab) so the badge shows even before clicking
-  const { data: waitingTickets = [], isLoading: loadingWaiting } = useQuery<
-    TicketWithDetails[]
-  >({
-    queryKey: ["/api/tickets", { tab: "aguardando", q: search || undefined }],
-    queryFn: async () => {
-      const p = new URLSearchParams({ status: "AGUARDANDO_USUARIO" });
-      if (search) p.set("q", search);
-      const res = await fetch(`/api/tickets?${p}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch tickets");
-      return res.json();
-    },
-    enabled: !!isAdminOrCoord,
-  });
-
-  // ── Histórico: RESOLVIDO + CANCELADO
+  // ── Histórico: RESOLVIDO + CANCELADO. Always fetched for the count badge.
   const { data: allTickets = [], isLoading: loadingAll } = useQuery<
     TicketWithDetails[]
   >({
@@ -250,37 +239,38 @@ export default function TicketsIndex() {
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
-    enabled: tab === "historico",
   });
 
-  // Pick the right data for current tab
-  const rawTickets =
-    tab === "ativos"
-      ? activeTickets
-      : tab === "aguardando"
-      ? waitingTickets
-      : allTickets;
+  // ── Status buckets ──────────────────────────────────────────────────────
+  const ATIVOS_STATUSES = ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_APROVACAO"];
+  const AGUARDANDO_STATUSES = ["AGUARDANDO_REQUERENTE", "AGUARDANDO_USUARIO"];
 
-  const isLoading =
-    tab === "ativos"
-      ? loadingActive
-      : tab === "aguardando"
-      ? loadingWaiting
-      : loadingAll;
+  const inBucket = (t: TicketWithDetails, statuses: string[]) =>
+    statuses.includes(t.status);
 
-  // Client-side priority filter
-  const ticketsToShow =
-    priorityFilter === "all"
-      ? rawTickets
-      : rawTickets.filter((t) => t.priority === priorityFilter);
-
-  // Histórico: only closed statuses
-  const historyTickets = ticketsToShow.filter(
+  // Tab counts (independent of the priority filter → always show the total)
+  const countAtivos = activeTickets.filter((t) => inBucket(t, ATIVOS_STATUSES)).length;
+  const countAguardando = activeTickets.filter((t) => inBucket(t, AGUARDANDO_STATUSES)).length;
+  const countStandby = activeTickets.filter((t) => t.status === "STANDBY").length;
+  const countHistorico = allTickets.filter(
     (t) => t.status === "RESOLVIDO" || t.status === "CANCELADO"
-  );
+  ).length;
 
-  const displayTickets =
-    tab === "historico" ? historyTickets : ticketsToShow;
+  // Apply priority filter for the displayed list only
+  const matchesPriority = (t: TicketWithDetails) =>
+    priorityFilter === "all" || t.priority === priorityFilter;
+
+  const displayTickets = (
+    tab === "ativos"
+      ? activeTickets.filter((t) => inBucket(t, ATIVOS_STATUSES))
+      : tab === "aguardando"
+      ? activeTickets.filter((t) => inBucket(t, AGUARDANDO_STATUSES))
+      : tab === "standby"
+      ? activeTickets.filter((t) => t.status === "STANDBY")
+      : allTickets.filter((t) => t.status === "RESOLVIDO" || t.status === "CANCELADO")
+  ).filter(matchesPriority);
+
+  const isLoading = tab === "historico" ? loadingAll : loadingActive;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -339,34 +329,55 @@ export default function TicketsIndex() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList data-tutorial="tickets-tabs">
-          <TabsTrigger value="ativos" data-testid="tab-active">
-            Ativos
-            {activeTickets.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 px-1.5 h-4 text-[10px]">
-                {activeTickets.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-
-          {isAdminOrCoord && (
-            <TabsTrigger value="aguardando" data-testid="tab-waiting">
-              Aguardando você
-              {waitingTickets.length > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="ml-1.5 px-1.5 h-4 text-[10px]"
-                >
-                  {waitingTickets.length}
+        <div className="flex items-center justify-between gap-4">
+          <TabsList data-tutorial="tickets-tabs">
+            <TabsTrigger value="ativos" data-testid="tab-active">
+              Em Fila
+              {countAtivos > 0 && (
+                <Badge variant="secondary" className="ml-1.5 px-1.5 h-4 text-[10px]">
+                  {countAtivos}
                 </Badge>
               )}
             </TabsTrigger>
-          )}
 
-          <TabsTrigger value="historico" data-testid="tab-history">
+            <TabsTrigger value="aguardando" data-testid="tab-waiting">
+              Aguardando Usuário
+              {countAguardando > 0 && (
+                <Badge variant="secondary" className="ml-1.5 px-1.5 h-4 text-[10px]">
+                  {countAguardando}
+                </Badge>
+              )}
+            </TabsTrigger>
+
+            <TabsTrigger value="standby" data-testid="tab-standby">
+              Em Pausa
+              {countStandby > 0 && (
+                <Badge variant="secondary" className="ml-1.5 px-1.5 h-4 text-[10px]">
+                  {countStandby}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Histórico — separado à direita */}
+          <button
+            onClick={() => setTab("historico")}
+            data-testid="tab-history"
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors border",
+              tab === "historico"
+                ? "bg-background text-foreground shadow-sm border-border"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
             Histórico
-          </TabsTrigger>
-        </TabsList>
+            {countHistorico > 0 && (
+              <Badge variant="secondary" className="ml-1 px-1.5 h-4 text-[10px]">
+                {countHistorico}
+              </Badge>
+            )}
+          </button>
+        </div>
 
         <TabsContent value={tab} className="mt-4">
           {isLoading ? (
@@ -376,7 +387,9 @@ export default function TicketsIndex() {
           ) : displayTickets.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               {tab === "aguardando"
-                ? "Nenhum chamado aguardando sua ação"
+                ? "Nenhum chamado aguardando o usuário"
+                : tab === "standby"
+                ? "Nenhum chamado em pausa"
                 : "Nenhum chamado encontrado"}
             </div>
           ) : (

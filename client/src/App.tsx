@@ -80,6 +80,27 @@ function TicketGuard({ component: Component }: { component: React.ComponentType 
   return <Component />;
 }
 
+function AdminAccessDenied() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-12 gap-4 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+        <ShieldOff className="h-8 w-8 text-destructive" />
+      </div>
+      <h2 className="text-xl font-semibold">Acesso restrito</h2>
+      <p className="text-muted-foreground max-w-sm">
+        Esta página é exclusiva para Administradores. Entre em contato com um
+        Administrador se precisar de acesso.
+      </p>
+    </div>
+  );
+}
+
+function AdminGuard({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  if (!user?.isAdmin) return <AdminAccessDenied />;
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -103,7 +124,7 @@ function Router() {
       <Route path="/admin/tickets-settings" component={AdminTicketsSettings} />
       <Route path="/admin/notifications" component={AdminNotifications} />
       <Route path="/admin/kb" component={AdminKb} />
-      <Route path="/admin/ti" component={Analytics} />
+      <Route path="/admin/analytics" component={() => <AdminGuard component={Analytics} />} />
       <Route path="/admin/typing" component={AdminTyping} />
       <Route path="/admin/reports" component={AdminReports} />
       <Route path="/admin/tickets/categories" component={AdminTicketCategories} />
@@ -111,8 +132,7 @@ function Router() {
       <Route path="/admin/integrations" component={AdminIntegrations} />
       <Route path="/alerts" component={Alerts} />
       <Route path="/admin/alerts" component={AdminAlerts} />
-      <Route path="/analytics" component={Analytics} />
-      <Route path="/admin/analytics/tickets" component={AdminTicketsAnalytics} />
+      <Route path="/admin/analytics/tickets" component={() => <AdminGuard component={AdminTicketsAnalytics} />} />
       <Route path="/kb" component={Kb} />
       <Route path="/kb/articles/:id" component={KbArticle} />
       <Route path="/ops" component={OpsCenter} />

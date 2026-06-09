@@ -76,6 +76,8 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
   const [newFieldMin, setNewFieldMin] = useState("");
   const [newFieldMax, setNewFieldMax] = useState("");
   const [showAddField, setShowAddField] = useState(false);
+  // When set, the field panel is editing an existing field (by its original key)
+  const [editingFieldKey, setEditingFieldKey] = useState<string | null>(null);
 
   const [requiredAttachments, setRequiredAttachments] = useState<RequiredAttachment[]>([]);
   const [showAddAttachment, setShowAddAttachment] = useState(false);
@@ -202,6 +204,32 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
     setNewFieldPlaceholder(""); setNewFieldHelpText("");
     setNewFieldRegex(""); setNewFieldMinLen(""); setNewFieldMaxLen("");
     setNewFieldMin(""); setNewFieldMax("");
+    setEditingFieldKey(null);
+  }
+
+  // Populate the field panel with an existing field's values for editing
+  function startEditField(field: FormField) {
+    setEditingFieldKey(field.key);
+    setNewFieldKey(field.key);
+    setNewFieldLabel(field.label);
+    setNewFieldType(field.type);
+    setNewFieldRequired(field.required);
+    // Options are stored as an array → show one per line (commas allowed inside)
+    setNewFieldOptions(field.options && field.options.length > 0 ? field.options.join("\n") : "");
+    setNewFieldPlaceholder(field.placeholder || "");
+    setNewFieldHelpText(field.helpText || "");
+    setNewFieldRegex(field.rules?.regex || "");
+    setNewFieldMinLen(field.rules?.minLen != null ? String(field.rules.minLen) : "");
+    setNewFieldMaxLen(field.rules?.maxLen != null ? String(field.rules.maxLen) : "");
+    setNewFieldMin(field.rules?.min != null ? String(field.rules.min) : "");
+    setNewFieldMax(field.rules?.max != null ? String(field.rules.max) : "");
+    setShowAddField(true);
+  }
+
+  // Open a blank field panel for adding a new field
+  function startAddField() {
+    resetFieldForm();
+    setShowAddField(true);
   }
 
   function openCreateBranch() {
@@ -242,8 +270,18 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
     setDialogOpen(true);
   }
 
-  function addFormField() {
-    if (!newFieldKey.trim() || !newFieldLabel.trim()) return;
+  function saveFormField() {
+    const key = newFieldKey.trim();
+    const label = newFieldLabel.trim();
+    if (!key || !label) return;
+
+    // Prevent duplicate keys (ignoring the field currently being edited)
+    const keyTaken = formFields.some(f => f.key === key && f.key !== editingFieldKey);
+    if (keyTaken) {
+      toast({ title: "Chave duplicada", description: `Já existe um campo com a chave "${key}".`, variant: "destructive" });
+      return;
+    }
+
     const rules: FormFieldRule = {};
     if (newFieldRegex.trim()) rules.regex = newFieldRegex.trim();
     if (newFieldMinLen) rules.minLen = Number(newFieldMinLen);
@@ -251,21 +289,25 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
     if (newFieldMin) rules.min = Number(newFieldMin);
     if (newFieldMax) rules.max = Number(newFieldMax);
 
-    setFormFields(prev => [
-      ...prev,
-      {
-        key: newFieldKey.trim(),
-        label: newFieldLabel.trim(),
-        type: newFieldType,
-        required: newFieldRequired,
-        ...(newFieldType === "select" && newFieldOptions.trim()
-          ? { options: newFieldOptions.split(",").map(o => o.trim()).filter(Boolean) }
-          : {}),
-        ...(newFieldPlaceholder.trim() ? { placeholder: newFieldPlaceholder.trim() } : {}),
-        ...(newFieldHelpText.trim() ? { helpText: newFieldHelpText.trim() } : {}),
-        ...(Object.keys(rules).length > 0 ? { rules } : {}),
-      },
-    ]);
+    const field: FormField = {
+      key,
+      label,
+      type: newFieldType,
+      required: newFieldRequired,
+      // Options are split by line break so commas can appear inside an option
+      ...(newFieldType === "select" && newFieldOptions.trim()
+        ? { options: newFieldOptions.split("\n").map(o => o.trim()).filter(Boolean) }
+        : {}),
+      ...(newFieldPlaceholder.trim() ? { placeholder: newFieldPlaceholder.trim() } : {}),
+      ...(newFieldHelpText.trim() ? { helpText: newFieldHelpText.trim() } : {}),
+      ...(Object.keys(rules).length > 0 ? { rules } : {}),
+    };
+
+    setFormFields(prev =>
+      editingFieldKey
+        ? prev.map(f => (f.key === editingFieldKey ? field : f))
+        : [...prev, field]
+    );
     resetFieldForm();
     setShowAddField(false);
   }
@@ -392,6 +434,7 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                   <TableHead>Tipo</TableHead>
                   <TableHead>Template</TableHead>
                   <TableHead>Formulário</TableHead>
+                  <TableHead>Fluxo</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -401,6 +444,8 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                   const isRoot = !cat.parentId;
                   const attachCount = ((cat as any).requiredAttachments || []).length;
                   const checkCount = ((cat as any).checklistTemplate || []).length;
+                  const askInfo = (cat as any).autoAwaitOnMissing === true;
+                  const needsApproval = (cat as any).requiresApproval === true;
                   return (
                     <TableRow key={cat.id} className={!cat.isActive ? "opacity-60" : ""} data-testid={`category-${cat.id}`}>
                       <TableCell className={isRoot ? "font-semibold" : "pl-8"}>
@@ -438,6 +483,27 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {isRoot ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex gap-1 flex-wrap">
+                            {askInfo && (
+                              <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-600 dark:text-amber-400">
+                                Pedir infos
+                              </Badge>
+                            )}
+                            {needsApproval && (
+                              <Badge variant="outline" className="text-xs border-purple-500/40 text-purple-600 dark:text-purple-400">
+                                Aprovação
+                              </Badge>
+                            )}
+                            {!askInfo && !needsApproval && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={cat.isActive ? "default" : "secondary"}>
@@ -644,7 +710,20 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
               <TabsContent value="form" className="space-y-4 mt-4">
                 <div className="flex items-center justify-between">
                   <Label>Campos do formulário</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShowAddField(!showAddField)} data-testid="button-toggle-add-field">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (showAddField) {
+                        setShowAddField(false);
+                        resetFieldForm();
+                      } else {
+                        startAddField();
+                      }
+                    }}
+                    data-testid="button-toggle-add-field"
+                  >
                     <Plus className="h-3 w-3 mr-1" />
                     Campo
                   </Button>
@@ -653,18 +732,29 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                 {formFields.length > 0 && (
                   <div className="space-y-1">
                     {formFields.map(f => (
-                      <div key={f.key} className="flex items-center justify-between border rounded px-2 py-1 text-sm">
+                      <div
+                        key={f.key}
+                        className={`flex items-center justify-between border rounded px-2 py-1 text-sm ${editingFieldKey === f.key ? "border-primary ring-1 ring-primary/40" : ""}`}
+                      >
                         <div className="flex-1 min-w-0">
                           <span className="font-medium">{f.label}</span>
                           <span className="text-muted-foreground ml-1">({f.type})</span>
                           {f.required && <Badge variant="destructive" className="ml-1 text-xs">obr.</Badge>}
+                          {f.type === "select" && f.options && f.options.length > 0 && (
+                            <Badge variant="outline" className="ml-1 text-xs">{f.options.length} opções</Badge>
+                          )}
                           {f.rules && Object.keys(f.rules).length > 0 && (
                             <Badge variant="outline" className="ml-1 text-xs">regras</Badge>
                           )}
                         </div>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeFormField(f.key)} data-testid={`remove-field-${f.key}`}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => startEditField(f)} data-testid={`edit-field-${f.key}`}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeFormField(f.key)} data-testid={`remove-field-${f.key}`}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -707,8 +797,18 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                     </div>
                     {newFieldType === "select" && (
                       <div>
-                        <Label className="text-xs">Opções (separar por vírgula)</Label>
-                        <Input value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} placeholder="Opção 1, Opção 2" className="h-8" data-testid="input-field-options" />
+                        <Label className="text-xs">Opções (uma por linha)</Label>
+                        <Textarea
+                          value={newFieldOptions}
+                          onChange={e => setNewFieldOptions(e.target.value)}
+                          placeholder={"Sim, somente eu\nNão, está instável\nNão sei"}
+                          rows={4}
+                          className="text-sm font-mono"
+                          data-testid="input-field-options"
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Uma opção por linha. Vírgulas dentro da opção são preservadas (ex.: "Sim, somente eu").
+                        </p>
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2">
@@ -750,9 +850,22 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                         )}
                       </div>
                     </details>
-                    <Button type="button" size="sm" onClick={addFormField} disabled={!newFieldKey.trim() || !newFieldLabel.trim()} data-testid="button-add-field">
-                      Adicionar campo
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" size="sm" onClick={saveFormField} disabled={!newFieldKey.trim() || !newFieldLabel.trim()} data-testid="button-add-field">
+                        {editingFieldKey ? "Salvar campo" : "Adicionar campo"}
+                      </Button>
+                      {editingFieldKey && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { resetFieldForm(); setShowAddField(false); }}
+                          data-testid="button-cancel-edit-field"
+                        >
+                          Cancelar edição
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </TabsContent>
