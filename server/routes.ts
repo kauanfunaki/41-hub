@@ -100,13 +100,17 @@ const ticketUpload = multer({
       "application/vnd.rar", "application/x-rar-compressed",
       "application/x-rar",
       "application/octet-stream", // some browsers send this for .zip
+      // Office documents (used by some ticket-category attachment configs)
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/plain", "text/csv",
     ];
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowedExts = [".jpg", ".jpeg", ".png", ".pdf", ".mp4", ".zip", ".7z", ".rar"];
+    const allowedExts = [".jpg", ".jpeg", ".png", ".pdf", ".mp4", ".zip", ".7z", ".rar", ".docx", ".xlsx", ".txt", ".csv"];
     if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Tipo de arquivo não permitido. Formatos aceitos: JPEG, PNG, PDF, MP4, ZIP, RAR, 7Z"));
+      cb(new Error("Tipo de arquivo não permitido. Formatos aceitos: JPEG, PNG, PDF, MP4, ZIP, RAR, 7Z, DOCX, XLSX, TXT, CSV"));
     }
   },
 });
@@ -1822,7 +1826,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/tickets/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const patchSchema = z.object({
-        status: z.enum(["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "RESOLVIDO", "CANCELADO"]).optional(),
+        status: z.enum(["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "AGUARDANDO_REQUERENTE", "STANDBY", "RESOLVIDO", "CANCELADO"]).optional(),
         priority: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]).optional(),
         categoryId: z.string().optional(),
         relatedResourceId: z.string().nullable().optional(),
@@ -1877,6 +1881,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             const statusLabels: Record<string, string> = {
               ABERTO: "Aberto", NA_FILA: "Na fila", EM_ANDAMENTO: "Em andamento",
               AGUARDANDO_USUARIO: "Aguardando usuário", AGUARDANDO_APROVACAO: "Aguardando aprovação",
+              AGUARDANDO_REQUERENTE: "Aguardando usuário", STANDBY: "Em pausa",
               RESOLVIDO: "Resolvido", CANCELADO: "Cancelado"
             };
             const assignees = await storage.getTicketAssigneeIds(req.params.id);
@@ -2215,8 +2220,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ticket = await storage.getTicketDetail(req.params.id, req.user!);
       if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
 
-      if (markAwaiting && ticket.status !== "AGUARDANDO_USUARIO") {
-        await storage.adminUpdateTicket(req.params.id, { status: "AGUARDANDO_USUARIO" }, req.user!);
+      if (markAwaiting && ticket.status !== "AGUARDANDO_REQUERENTE" && ticket.status !== "AGUARDANDO_USUARIO") {
+        await storage.adminUpdateTicket(req.params.id, { status: "AGUARDANDO_REQUERENTE" }, req.user!);
       }
 
       const commentBody = `📌 Solicitação de informações: ${message}`;
@@ -3119,6 +3124,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/typing/me/stats", requireAuth, async (req, res) => {
+    try {
+      const stats = await storage.getUserTypingStats(req.user!.id);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching user typing stats:", error);
+      res.status(500).json({ error: "Failed to fetch user typing stats" });
+    }
+  });
+
   // ============ Admin Typing Text Routes ============
 
   app.get("/api/admin/typing/texts", requireAuth, requireAdmin, async (req, res) => {
@@ -3646,7 +3661,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const [tickets, byStatus, byPriority, topCategories, resources, typing] = await Promise.all([
         pool.query(
           `SELECT COUNT(*) as total,
-                  COUNT(*) FILTER (WHERE status IN ('ABERTO','NA_FILA','EM_ANDAMENTO','AGUARDANDO_USUARIO','AGUARDANDO_APROVACAO')) as open,
+                  COUNT(*) FILTER (WHERE status IN ('ABERTO','NA_FILA','EM_ANDAMENTO','AGUARDANDO_USUARIO','AGUARDANDO_APROVACAO','AGUARDANDO_REQUERENTE','STANDBY')) as open,
                   COUNT(*) FILTER (WHERE status = 'RESOLVIDO') as resolved,
                   COUNT(*) FILTER (WHERE status = 'CANCELADO') as cancelled
            FROM tickets t ${dateWhere}`,

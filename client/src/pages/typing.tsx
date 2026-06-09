@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -44,8 +44,8 @@ export default function TypingTest() {
   const [, setLocation] = useLocation();
 
   const { data: myStats } = useQuery<{ bestWpm: number; bestAccuracy: number; totalSessions: number } | null>({
-    queryKey: ["/api/typing/me"],
-    queryFn: () => fetch("/api/typing/me", { credentials: "include" }).then(r => r.ok ? r.json() : null),
+    queryKey: ["/api/typing/me/stats"],
+    queryFn: () => fetch("/api/typing/me/stats", { credentials: "include" }).then(r => r.ok ? r.json() : null),
     retry: false,
   });
 
@@ -114,6 +114,8 @@ export default function TypingTest() {
     },
     onSuccess: (score) => {
       setResult((prev) => prev ? { ...prev, score } : null);
+      queryClient.invalidateQueries({ queryKey: ["/api/typing/me/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/typing/me"] });
     },
     onError: (err: Error) => {
       toast({
@@ -370,7 +372,7 @@ export default function TypingTest() {
 
           {/* Side panel: personal stats */}
           <div className="flex flex-col gap-4">
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-hidden h-full">
               <div className="h-[3px] bg-chart-3 w-full" />
               <div className="p-5">
                 <p className="text-sm font-semibold mb-4 flex items-center gap-2">
@@ -404,14 +406,6 @@ export default function TypingTest() {
                 )}
               </div>
             </div>
-
-            <button
-              className="flex items-center justify-center gap-2 rounded-xl border bg-card p-4 hover:bg-accent transition-colors text-sm font-medium text-muted-foreground hover:text-foreground"
-              onClick={() => setLocation("/typing/leaderboard")}
-            >
-              <Trophy className="h-4 w-4" />
-              Ver Ranking Geral
-            </button>
           </div>
         </div>
       )}

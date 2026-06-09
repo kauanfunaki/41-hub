@@ -37,7 +37,7 @@ async function tryInsertAlert(ticketId: string, cycleNumber: number, alertType: 
 }
 
 async function checkAndAlert() {
-  const activeStatuses = ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"];
+  const activeStatuses = ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "AGUARDANDO_REQUERENTE", "STANDBY"];
 
   const activeTickets = await db.select({
     ticket: tickets,

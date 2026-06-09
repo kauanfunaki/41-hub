@@ -56,7 +56,7 @@ const adminGroups: AdminGroup[] = [
         title: "Analytics",
         description: "Métricas, SLA e painel de operações TI",
         icon: LineChart,
-        href: "/analytics",
+        href: "/admin/analytics",
         color: "text-chart-4",
         bgColor: "bg-chart-4/10",
       },

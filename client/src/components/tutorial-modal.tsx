@@ -105,13 +105,6 @@ const STEPS_COORDENADOR: TutorialStep[] = [
       "Clique em qualquer chamado para ver detalhes, atribuir responsáveis, responder mensagens e acompanhar o SLA.",
   },
   {
-    page: "/analytics",
-    targetSelector: "[data-tutorial='analytics-kpi']",
-    title: "Analytics & KPIs",
-    description:
-      "Acompanhe métricas da equipe: tickets por período, SLA cumprido, carga por colaborador e tendências ao longo do tempo.",
-  },
-  {
     page: "/",
     targetSelector: "[data-tutorial='notification-bell']",
     title: "Notificações em Tempo Real",
@@ -122,7 +115,7 @@ const STEPS_COORDENADOR: TutorialStep[] = [
     page: "/",
     title: "🎉 Pronto para gerenciar!",
     description:
-      "Você tem acesso completo ao Hub. Chamados, analytics e configurações ficam no menu lateral. Bom trabalho!",
+      "Você tem acesso completo ao Hub. Chamados e configurações ficam no menu lateral. Bom trabalho!",
   },
 ];
 
@@ -131,18 +124,20 @@ export function TutorialModal() {
   const [step, setStep] = useState(0);
   const [, navigate] = useLocation();
 
-  // Save location ONCE when the component first renders (before tutorial navigates away)
-  const [savedLocation] = useState(() =>
-    typeof window !== "undefined" ? window.location.pathname : "/"
-  );
+  // Capture the user's current location each time the tutorial opens/restarts,
+  // so "Começar a usar" always returns them to where they were.
+  const [savedLocation, setSavedLocation] = useState("/");
 
   const steps = role === "Coordenador" ? STEPS_COORDENADOR : STEPS_USUARIO;
   const current = steps[step];
   const isLast = step === steps.length - 1;
 
-  // Navigate to the first step's page when tutorial first becomes visible
+  // When shouldShow flips to true (first time or after restart): save location,
+  // reset to step 0, and navigate to the first page.
   useEffect(() => {
     if (shouldShow) {
+      setSavedLocation(window.location.pathname);
+      setStep(0);
       navigate(steps[0].page);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

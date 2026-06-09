@@ -16,6 +16,7 @@ import {
   Bell,
   BookOpen,
   Activity,
+  GraduationCap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemeLogo } from "@/components/theme-logo";
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
+import { useTutorial } from "@/hooks/use-tutorial";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -105,6 +107,8 @@ export function AppSidebar() {
   });
   const ticketCount = Array.isArray(activeTickets) ? activeTickets.length : 0;
   const alertCount = Array.isArray(activeAlertsData) ? activeAlertsData.filter((a) => !a.isRead).length : 0;
+
+  const { restart: restartTutorial, isRestarting } = useTutorial();
 
   const getInitials = (name: string) => {
     return name
@@ -298,7 +302,7 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    isActive={location.startsWith("/admin") || location.startsWith("/analytics")}
+                    isActive={location.startsWith("/admin")}
                     data-testid="nav-admin"
                   >
                     <Link href="/admin">
@@ -314,6 +318,24 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
+        {/* Tutorial shortcut — visible only for non-admin users */}
+        {isAuthenticated && !isAdmin && (
+          <SidebarMenu className="mb-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={restartTutorial}
+                disabled={isRestarting}
+                tooltip="Ver tutorial do portal"
+                className="text-muted-foreground hover:text-foreground"
+                data-testid="button-tutorial"
+              >
+                <GraduationCap className="h-4 w-4" />
+                <span>{isRestarting ? "Abrindo…" : "Ver tutorial"}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
+
         {isAuthenticated && user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

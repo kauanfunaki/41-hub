@@ -62,6 +62,8 @@ const STATUS_LABEL: Record<string, string> = {
   EM_ANDAMENTO: "Em andamento",
   AGUARDANDO_USUARIO: "Aguard. usuário",
   AGUARDANDO_APROVACAO: "Aguard. aprovação",
+  AGUARDANDO_REQUERENTE: "Aguard. usuário",
+  STANDBY: "Em pausa",
   RESOLVIDO: "Resolvido",
   CANCELADO: "Cancelado",
 };
@@ -72,6 +74,8 @@ const STATUS_COLOR: Record<string, string> = {
   EM_ANDAMENTO: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
   AGUARDANDO_USUARIO: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
   AGUARDANDO_APROVACAO: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
+  AGUARDANDO_REQUERENTE: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  STANDBY: "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20",
   RESOLVIDO: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
   CANCELADO: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
 };
@@ -228,7 +232,7 @@ export default function AdminTicketsAnalytics() {
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/analytics">
+        <Link href="/admin/analytics">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>

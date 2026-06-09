@@ -88,6 +88,8 @@ const statusLabels: Record<string, string> = {
   EM_ANDAMENTO: "Em Andamento",
   AGUARDANDO_USUARIO: "Aguardando Usuário",
   AGUARDANDO_APROVACAO: "Aguardando Aprovação",
+  AGUARDANDO_REQUERENTE: "Aguardando Usuário",
+  STANDBY: "Em Pausa",
   RESOLVIDO: "Resolvido",
   CANCELADO: "Cancelado",
 };
@@ -125,6 +127,8 @@ const statusBadge: Record<string, string> = {
   NA_FILA:              "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200",
   EM_ANDAMENTO:         "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200",
   AGUARDANDO_USUARIO:   "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
+  AGUARDANDO_REQUERENTE:"bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
+  STANDBY:              "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
   RESOLVIDO:            "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
   AGUARDANDO_APROVACAO: "bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200",
   CANCELADO:            "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200",
@@ -904,7 +908,19 @@ export default function TicketsDetail() {
                     <HelpCircle className="h-3.5 w-3.5" />Pedir informações
                   </Button>
                 )}
-                {(ticket.status === "EM_ANDAMENTO" || ticket.status === "AGUARDANDO_USUARIO") && (
+                {(ticket.status === "AGUARDANDO_REQUERENTE" || ticket.status === "AGUARDANDO_USUARIO" || ticket.status === "STANDBY") && (
+                  <Button size="sm" variant="outline" className="w-full gap-2"
+                    onClick={() => updateMutation.mutate({ status: "EM_ANDAMENTO" })} disabled={updateMutation.isPending} data-testid="button-quick-resume">
+                    <ArrowRight className="h-3.5 w-3.5" />Retomar atendimento
+                  </Button>
+                )}
+                {(ticket.status === "EM_ANDAMENTO" || ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
+                  <Button size="sm" variant="outline" className="w-full gap-2"
+                    onClick={() => updateMutation.mutate({ status: "STANDBY" })} disabled={updateMutation.isPending} data-testid="button-quick-standby">
+                    <Clock className="h-3.5 w-3.5" />Colocar em Pausa
+                  </Button>
+                )}
+                {(ticket.status === "EM_ANDAMENTO" || ticket.status === "AGUARDANDO_USUARIO" || ticket.status === "AGUARDANDO_REQUERENTE" || ticket.status === "STANDBY") && (
                   <Button size="sm" className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                     onClick={() => updateMutation.mutate({ status: "RESOLVIDO" })} disabled={updateMutation.isPending} data-testid="button-quick-resolve">
                     <CheckCircle2 className="h-3.5 w-3.5" />Concluir chamado
@@ -1068,8 +1084,12 @@ export default function TicketsDetail() {
                     <SelectItem value="ABERTO">Aberto</SelectItem>
                     <SelectItem value="NA_FILA">Na fila</SelectItem>
                     <SelectItem value="EM_ANDAMENTO">Em Andamento</SelectItem>
-                    <SelectItem value="AGUARDANDO_USUARIO">Aguardando Usuário</SelectItem>
+                    <SelectItem value="AGUARDANDO_REQUERENTE">Aguardando Usuário</SelectItem>
+                    <SelectItem value="STANDBY">Em Pausa</SelectItem>
                     <SelectItem value="AGUARDANDO_APROVACAO">Aguardando Aprovação</SelectItem>
+                    {ticket.status === "AGUARDANDO_USUARIO" && (
+                      <SelectItem value="AGUARDANDO_USUARIO">Aguardando Usuário (legado)</SelectItem>
+                    )}
                     <SelectItem value="RESOLVIDO">Resolvido</SelectItem>
                     <SelectItem value="CANCELADO">Cancelado</SelectItem>
                   </SelectContent>

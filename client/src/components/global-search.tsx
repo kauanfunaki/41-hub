@@ -51,8 +51,10 @@ const TICKET_STATUS_LABEL: Record<string, string> = {
   ABERTO: "Aberto",
   NA_FILA: "Aberto",
   EM_ANDAMENTO: "Em andamento",
-  AGUARDANDO_USUARIO: "Aguardando",
+  AGUARDANDO_USUARIO: "Aguardando Usuário",
   AGUARDANDO_APROVACAO: "Aprovação",
+  AGUARDANDO_REQUERENTE: "Aguardando Usuário",
+  STANDBY: "Em Pausa",
   RESOLVIDO: "Resolvido",
   CANCELADO: "Cancelado",
 };

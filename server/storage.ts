@@ -337,6 +337,7 @@ export interface IStorage {
   submitTypingSession(sessionId: string, score: { wpm: number; accuracy: string; durationMs: number; userId: string; sectorId: string | null; monthKey: string; difficulty: number; level: string }): Promise<TypingScore>;
   getTypingLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; wpm: number; accuracy: string; monthKey: string; level: string }>>;
   getUserBestTypingScore(userId: string, level?: string): Promise<TypingScore | undefined>;
+  getUserTypingStats(userId: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }>;
   getTypingPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; wpm: number; accuracy: string }>>;
 
   // TI Dashboard
@@ -1345,7 +1346,7 @@ export class DatabaseStorage implements IStorage {
     } else if (filters.includeClosed) {
       conditions.push(inArray(tickets.status, ["RESOLVIDO", "CANCELADO"]));
     } else {
-      conditions.push(inArray(tickets.status, ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"]));
+      conditions.push(inArray(tickets.status, ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "AGUARDANDO_REQUERENTE", "STANDBY"]));
     }
 
     if (filters.q) {
@@ -1534,7 +1535,7 @@ export class DatabaseStorage implements IStorage {
         .limit(1);
 
       if (slaCycle) {
-        const pauseStatuses = ["AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO"];
+        const pauseStatuses = ["AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "AGUARDANDO_REQUERENTE", "STANDBY"];
         if (pauseStatuses.includes(patch.status!) && !slaCycle.pausedAt) {
           await db.update(ticketSlaCycles).set({
             pausedAt: new Date(),
@@ -1626,8 +1627,8 @@ export class DatabaseStorage implements IStorage {
     if (!ticket) throw new Error("Ticket not found");
 
     if (!authorUser.isAdmin) {
-      if (ticket.status !== "AGUARDANDO_USUARIO") {
-        throw new Error("Comentários só são permitidos quando o chamado está aguardando usuário");
+      if (ticket.status !== "AGUARDANDO_USUARIO" && ticket.status !== "AGUARDANDO_REQUERENTE") {
+        throw new Error("Comentários só são permitidos quando o chamado está aguardando o usuário");
       }
       if (data.isInternal) {
         throw new Error("Comentários internos são exclusivos para administradores");
@@ -1685,8 +1686,8 @@ export class DatabaseStorage implements IStorage {
     // Criador do chamado: pode anexar a qualquer momento (ex: logo após abrir)
     // Outros: somente quando status for AGUARDANDO_USUARIO
     if (!authorUser.isAdmin && ticket.createdBy !== authorUser.id) {
-      if (ticket.status !== "AGUARDANDO_USUARIO") {
-        throw new Error("Anexos só são permitidos quando o chamado está aguardando usuário");
+      if (ticket.status !== "AGUARDANDO_USUARIO" && ticket.status !== "AGUARDANDO_REQUERENTE") {
+        throw new Error("Anexos só são permitidos quando o chamado está aguardando o usuário");
       }
     }
 
@@ -2147,13 +2148,13 @@ export class DatabaseStorage implements IStorage {
     const daysBack = range === '7d' ? 7 : 30;
     const rangeStart = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
 
-    const activeStatuses = ['ABERTO', 'NA_FILA', 'EM_ANDAMENTO', 'AGUARDANDO_USUARIO'] as const;
+    const activeStatuses = ['ABERTO', 'NA_FILA', 'EM_ANDAMENTO', 'AGUARDANDO_USUARIO', 'AGUARDANDO_REQUERENTE', 'STANDBY'] as const;
     const allActiveTickets = await db.select().from(tickets)
       .where(inArray(tickets.status, [...activeStatuses]));
 
     const openCount = allActiveTickets.filter(t => t.status === 'ABERTO' || t.status === 'NA_FILA').length;
     const inProgressCount = allActiveTickets.filter(t => t.status === 'EM_ANDAMENTO').length;
-    const waitingUserCount = allActiveTickets.filter(t => t.status === 'AGUARDANDO_USUARIO').length;
+    const waitingUserCount = allActiveTickets.filter(t => t.status === 'AGUARDANDO_USUARIO' || t.status === 'AGUARDANDO_REQUERENTE').length;
 
     const resolvedInRange = await db.select({ count: sql<number>`count(*)::int` })
       .from(tickets)
@@ -2427,6 +2428,22 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(typingScores.wpm))
       .limit(1);
     return row;
+  }
+
+  async getUserTypingStats(userId: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }> {
+    const [row] = await db
+      .select({
+        bestWpm: sql<number>`COALESCE(MAX(${typingScores.wpm}), 0)::int`,
+        bestAccuracy: sql<number>`COALESCE(MAX(${typingScores.accuracy}), 0)::float`,
+        totalSessions: sql<number>`COUNT(*)::int`,
+      })
+      .from(typingScores)
+      .where(eq(typingScores.userId, userId));
+    return {
+      bestWpm: row?.bestWpm ?? 0,
+      bestAccuracy: row?.bestAccuracy != null ? Math.round(Number(row.bestAccuracy) * 100) / 100 : 0,
+      totalSessions: row?.totalSessions ?? 0,
+    };
   }
 
   async getTypingPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; wpm: number; accuracy: string }>> {
