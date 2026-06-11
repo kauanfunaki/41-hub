@@ -442,12 +442,18 @@ export default function TicketsNew() {
     (att) => att.required && !attachmentFiles[att.key]
   );
 
+  // Required dynamic form fields that are empty
+  const missingRequiredFields = selectedFormSchema.filter(
+    (field) => field.required && !requestData[field.key]?.trim()
+  );
+
   const canSubmit =
     !!title &&
     !!description &&
     !!effectiveSectorId &&
     !!categoryId &&
-    missingRequiredAttachments.length === 0;
+    missingRequiredAttachments.length === 0 &&
+    missingRequiredFields.length === 0;
 
   return (
     <div className="flex flex-col gap-6 p-6">
