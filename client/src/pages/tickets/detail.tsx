@@ -251,6 +251,37 @@ function SlaEventRow({ event }: { event: TicketEventWithActor }) {
   );
 }
 
+function StatusChangedEventRow({ event }: { event: TicketEventWithActor }) {
+  const data = event.data as { from?: string | null; to?: string };
+  const fromLabel = data?.from ? (statusLabels[data.from] ?? data.from) : null;
+  const toLabel = data?.to ? (statusLabels[data.to] ?? data.to) : "—";
+  return (
+    <div className="flex gap-3 items-center">
+      <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+      </div>
+      <div className="flex-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {event.actorName && <span className="font-medium text-foreground">{event.actorName}</span>}
+          {event.actorName && " alterou status"}
+          {!event.actorName && "Status alterado"}
+          {fromLabel && (
+            <> de <span className="font-medium text-foreground">{fromLabel}</span></>
+          )}{" "}
+          para{" "}
+          <span className={cn(
+            "inline-flex items-center font-semibold px-1.5 py-0.5 rounded",
+            statusBadge[data?.to ?? ""] ?? "bg-muted text-foreground"
+          )}>
+            {toLabel}
+          </span>
+        </span>
+        <span className="shrink-0">{formatDate(event.createdAt)}</span>
+      </div>
+    </div>
+  );
+}
+
 function AssigneesBlock({ assignees, isAdmin, assignableUsers, onSave, isSaving }: {
   assignees: Array<{ userId: string; userName: string; userEmail: string }>;
   isAdmin: boolean; assignableUsers: DirectoryUser[];
@@ -535,6 +566,28 @@ export default function TicketsDetail() {
             </p>
           </section>
 
+          {/* Form data — shown only when the ticket has filled form fields */}
+          {ticket.requestData && Object.keys(ticket.requestData).length > 0 && (() => {
+            const schemaMap = new Map((ticket.categoryFormSchema ?? []).map(f => [f.key, f.label]));
+            return (
+              <section className="px-6 py-5 border-b">
+                <SectionLabel>Dados do formulário</SectionLabel>
+                <div className="space-y-3">
+                  {Object.entries(ticket.requestData).map(([key, value]) => (
+                    <div key={key}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
+                        {schemaMap.get(key) ?? key}
+                      </p>
+                      <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`request-data-${key}`}>
+                        {String(value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })()}
+
           {/* Checklist */}
           {checklist.length > 0 && (
             <section className="px-6 py-5 border-b">
@@ -657,7 +710,11 @@ export default function TicketsDetail() {
               <div className="space-y-3">
                 {timeline.map((item) => {
                   if (item._kind === "sla_event") {
-                    return <SlaEventRow key={`ev-${item.id}`} event={item as TicketEventWithActor} />;
+                    const ev = item as TicketEventWithActor & { _kind: "sla_event"; _date: Date };
+                    if (ev.type === "status_changed") {
+                      return <StatusChangedEventRow key={`ev-${ev.id}`} event={ev} />;
+                    }
+                    return <SlaEventRow key={`ev-${ev.id}`} event={ev} />;
                   }
                   if (item._kind === "image_attachment") {
                     const att = item as AttachmentWithUploader & { _kind: "image_attachment"; _date: Date };
@@ -1059,18 +1116,6 @@ export default function TicketsDetail() {
               />
             </div>
           </div>
-
-          {/* Request data */}
-          {ticket.requestData && Object.keys(ticket.requestData).length > 0 && (
-            <div className="p-4">
-              <SectionLabel>Dados do chamado</SectionLabel>
-              <div className="space-y-0.5">
-                {Object.entries(ticket.requestData).map(([key, value]) => (
-                  <InfoRow key={key} label={key}><span data-testid={`request-data-${key}`}>{String(value)}</span></InfoRow>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Admin status/priority */}
           {isAdmin && (

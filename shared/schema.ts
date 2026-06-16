@@ -636,6 +636,7 @@ export type TicketWithDetails = Ticket & {
   currentCycle?: TicketSlaCycle | null;
   queuePosition?: number | null;
   queueTotal?: number | null;
+  categoryFormSchema?: Array<{ key: string; label: string; type: string; required?: boolean }> | null;
 };
 
 export type TicketCategoryTree = TicketCategory & {

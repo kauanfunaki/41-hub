@@ -1312,6 +1312,7 @@ export class DatabaseStorage implements IStorage {
       creatorEmail: creator?.email,
       assignees: assigneeRows,
       currentCycle: currentCycle || null,
+      categoryFormSchema: cat?.formSchema ?? null,
     };
   }
 
