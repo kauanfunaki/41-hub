@@ -1871,8 +1871,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
       }
 
+      // Capture old status before update so the event records the transition
+      let oldStatus: string | undefined;
+      if (ticketPatch.status) {
+        const ticketBeforeUpdate = await storage.getTicketDetail(req.params.id, req.user!);
+        oldStatus = ticketBeforeUpdate?.status;
+      }
+
       const updated = await storage.adminUpdateTicket(req.params.id, ticketPatch, req.user!);
       if (!updated) return res.status(404).json({ error: "Chamado não encontrado" });
+
+      // Record status change in the ticket_events timeline
+      if (ticketPatch.status) {
+        await pool.query(
+          `INSERT INTO ticket_events (id, ticket_id, actor_user_id, type, data, created_at)
+           VALUES (gen_random_uuid(), $1, $2, 'status_changed', $3, NOW())`,
+          [req.params.id, req.user!.id, JSON.stringify({ from: oldStatus ?? null, to: ticketPatch.status })]
+        );
+      }
 
       if (ticketPatch.status) {
         try {
@@ -1973,8 +1989,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ticket = await storage.getTicketDetail(ticketId, req.user!);
       if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
       const events = await storage.listTicketEvents(ticketId);
-      // Only expose sla_deadline_changed events to all; other system events are internal
-      const filtered = events.filter(e => e.type === "sla_deadline_changed");
+      const filtered = events.filter(e =>
+        e.type === "sla_deadline_changed" || e.type === "status_changed"
+      );
       res.json(filtered);
     } catch (error) {
       console.error("Error fetching ticket events:", error);
@@ -2093,8 +2110,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
 
+        // multer receives the filename as Latin-1 bytes but browsers send UTF-8;
+        // re-interpret the bytes as UTF-8 to fix mojibake (e.g. "VERIFICA��O" → "VERIFICAÇÃO")
+        const rawName = req.file.originalname;
+        const originalName = /[^\x00-\x7F]/.test(rawName)
+          ? Buffer.from(rawName, "latin1").toString("utf8")
+          : rawName;
+
         const attachment = await storage.addTicketAttachment(req.params.id, req.user!, {
-          originalName: req.file.originalname,
+          originalName,
           storageName: req.file.filename,
           mimeType: req.file.mimetype,
           sizeBytes: req.file.size,
@@ -2126,7 +2150,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ error: "Arquivo não encontrado" });
       }
 
-      res.setHeader("Content-Disposition", `attachment; filename="${attachment.originalName}"`);
+      const safeName = attachment.originalName.replace(/[^\x20-\x7E]/g, "_");
+      const encodedName = encodeURIComponent(attachment.originalName);
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`);
       res.setHeader("Content-Type", attachment.mimeType);
       res.sendFile(filePath);
     } catch (error) {

@@ -336,11 +336,7 @@ export default function AdminResources() {
                                 : "bg-chart-2/10 text-chart-2"
                             )}
                           >
-                            {resource.type === "APP" ? (
-                              <Monitor className="h-4 w-4" />
-                            ) : (
-                              <BarChart3 className="h-4 w-4" />
-                            )}
+                            {(() => { const Icon = getIcon(resource.icon || "Layout"); return <Icon className="h-4 w-4" />; })()}
                           </div>
                           <div>
                             <p className="font-medium">{resource.name}</p>

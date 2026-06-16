@@ -154,8 +154,6 @@ export default function TicketsNew() {
   const [showTemplateConfirm, setShowTemplateConfirm] = useState(false);
   const pendingTemplate = useRef("");
   const [requestData, setRequestData] = useState<Record<string, string>>({});
-  const [files, setFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   // Files chosen for each configured required-attachment slot, keyed by attachment key
   const [attachmentFiles, setAttachmentFiles] = useState<Record<string, File>>({});
 
@@ -202,33 +200,6 @@ export default function TicketsNew() {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  function handleAddFiles(fileList: FileList | null) {
-    if (!fileList) return;
-    const incoming = Array.from(fileList);
-    const accepted: File[] = [];
-    for (const f of incoming) {
-      const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
-      if (!ALLOWED_EXTS.includes(ext)) {
-        toast({ title: "Tipo não permitido", description: `"${f.name}" não é um formato aceito (JPEG, PNG, PDF, MP4, ZIP, RAR, 7Z, DOCX, XLSX, TXT, CSV).`, variant: "destructive" });
-        continue;
-      }
-      if (f.size > MAX_FILE_MB * 1024 * 1024) {
-        toast({ title: "Arquivo muito grande", description: `"${f.name}" excede o limite de ${MAX_FILE_MB} MB.`, variant: "destructive" });
-        continue;
-      }
-      accepted.push(f);
-    }
-    setFiles((prev) => {
-      const seen = new Set(prev.map((p) => `${p.name}:${p.size}`));
-      return [...prev, ...accepted.filter((f) => !seen.has(`${f.name}:${f.size}`))];
-    });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function removeFile(idx: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== idx));
   }
 
   // Validate + store a file for a specific required-attachment slot
@@ -361,12 +332,10 @@ export default function TicketsNew() {
       const res = await apiRequest("POST", "/api/tickets", payload);
       const ticket = await res.json();
 
-      // Build the upload list: configured required-attachment slots (tagged with
-      // their attachmentKey) first, then any extra optional files.
-      const uploads: Array<{ file: File; key?: string }> = [
-        ...Object.entries(attachmentFiles).map(([key, file]) => ({ file, key })),
-        ...files.map((file) => ({ file })),
-      ];
+      // Upload only the configured required/optional attachment slots
+      const uploads: Array<{ file: File; key?: string }> = Object.entries(attachmentFiles).map(
+        ([key, file]) => ({ file, key })
+      );
 
       let failedUploads = 0;
       for (const { file, key } of uploads) {
@@ -945,57 +914,6 @@ export default function TicketsNew() {
                     </div>
                   )}
 
-                  {/* Anexos extras (opcional) */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5">
-                      <Paperclip className="h-3.5 w-3.5" />
-                      {selectedRequiredAttachments.length > 0 ? "Outros anexos" : "Anexos"} <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
-                    </Label>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept={ALLOWED_EXTS.join(",")}
-                      onChange={(e) => handleAddFiles(e.target.files)}
-                      className="hidden"
-                      data-testid="input-attachments"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border py-6 text-center transition-colors hover:border-primary/40 hover:bg-muted/40"
-                      data-testid="button-pick-attachments"
-                    >
-                      <Paperclip className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-sm font-medium">Clique para anexar arquivos</span>
-                      <span className="text-xs text-muted-foreground">JPEG, PNG, PDF, MP4, ZIP, RAR, 7Z, DOCX, XLSX · até {MAX_FILE_MB} MB cada</span>
-                    </button>
-
-                    {files.length > 0 && (
-                      <div className="space-y-1.5">
-                        {files.map((file, idx) => (
-                          <div
-                            key={`${file.name}:${file.size}:${idx}`}
-                            className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm"
-                            data-testid={`attachment-item-${idx}`}
-                          >
-                            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <span className="flex-1 truncate">{file.name}</span>
-                            <span className="text-xs text-muted-foreground shrink-0">{formatBytes(file.size)}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeFile(idx)}
-                              className="text-muted-foreground hover:text-destructive shrink-0"
-                              aria-label={`Remover ${file.name}`}
-                              data-testid={`remove-attachment-${idx}`}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* RIGHT — Painel de resumo sticky */}
@@ -1048,7 +966,7 @@ export default function TicketsNew() {
                         data-testid="button-submit-ticket"
                       >
                         {createMutation.isPending ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{files.length > 0 ? "Enviando..." : "Criando..."}</>
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{Object.keys(attachmentFiles).length > 0 ? "Enviando..." : "Criando..."}</>
                         ) : (
                           "Criar Chamado"
                         )}
@@ -1065,7 +983,7 @@ export default function TicketsNew() {
               <div className="flex justify-end gap-3 mt-6 lg:hidden">
                 <Button type="button" variant="outline" onClick={() => setStep(2)}>Voltar</Button>
                 <Button type="submit" disabled={createMutation.isPending || !canSubmit} data-testid="button-submit-ticket-mobile">
-                  {createMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{files.length > 0 ? "Enviando..." : "Criando..."}</> : "Criar Chamado"}
+                  {createMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{Object.keys(attachmentFiles).length > 0 ? "Enviando..." : "Criando..."}</> : "Criar Chamado"}
                 </Button>
               </div>
             </form>
