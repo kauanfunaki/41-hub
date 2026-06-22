@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   MessageSquarePlus, CheckCircle2, Bug, Lightbulb, Wrench, HelpCircle,
-  ChevronDown, ChevronUp, Inbox,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,99 +53,12 @@ const TYPE_OPTIONS: Array<{
   },
 ];
 
-function typeInfo(type: string) {
-  return TYPE_OPTIONS.find((t) => t.value === type) ?? TYPE_OPTIONS[3];
-}
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  }).format(new Date(d));
-}
-
-// ── Admin feedback list ──────────────────────────────────────────────────────
-
-interface FeedbackItem {
-  id: string;
-  type: FeedbackType;
-  title: string;
-  message: string;
-  isRead: boolean;
-  createdAt: string;
-  userName?: string | null;
-}
-
-function AdminFeedbackPanel() {
-  const [open, setOpen] = useState(false);
-
-  const { data: items = [], isLoading } = useQuery<FeedbackItem[]>({
-    queryKey: ["/api/admin/feedback"],
-    queryFn: () => fetch("/api/admin/feedback", { credentials: "include" }).then((r) => r.json()),
-    enabled: open,
-  });
-
-  return (
-    <div className="rounded-xl border bg-card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Inbox className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Feedbacks recebidos</span>
-        </div>
-        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-
-      {open && (
-        <div className="border-t">
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Carregando…</p>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
-              <Inbox className="h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">Nenhum feedback recebido ainda</p>
-            </div>
-          ) : (
-            <div className="divide-y max-h-[500px] overflow-y-auto">
-              {items.map((item) => {
-                const info = typeInfo(item.type);
-                const Icon = info.icon;
-                return (
-                  <div key={item.id} className="flex gap-3 px-6 py-4 hover:bg-muted/20 transition-colors">
-                    <div className="mt-0.5 shrink-0">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", info.badgeClass)}>
-                          {info.label}
-                        </span>
-                        <span className="text-sm font-medium truncate">{item.title}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{item.message}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {item.userName ?? "Usuário desconhecido"} · {formatDate(item.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function FeedbackPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [submitted, setSubmitted] = useState(false);
   const [type, setType] = useState<FeedbackType>("SUGESTAO");
   const [title, setTitle] = useState("");
@@ -210,8 +124,20 @@ export default function FeedbackPage() {
           </div>
         </div>
 
-        {/* Admin inbox */}
-        {user?.isAdmin && <AdminFeedbackPanel />}
+        {/* Admin shortcut */}
+        {user?.isAdmin && (
+          <button
+            type="button"
+            onClick={() => setLocation("/admin/feedback")}
+            className="flex items-center justify-between w-full rounded-xl border bg-card px-5 py-3.5 hover:bg-accent transition-colors text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Ver feedbacks recebidos</span>
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+        )}
 
         {/* Form */}
         <div className="rounded-xl border bg-card overflow-hidden">
