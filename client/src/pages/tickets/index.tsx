@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   Clock,
+  UserCheck,
 } from "lucide-react";
 import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -201,6 +202,7 @@ export default function TicketsIndex() {
   const [tab, setTab] = useState("ativos");
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<Priority>("all");
+  const [assignedToMe, setAssignedToMe] = useState(false);
 
   const isAdminOrCoord =
     user?.isAdmin || user?.roles?.some((r) => r.roleName === "Coordenador");
@@ -210,10 +212,11 @@ export default function TicketsIndex() {
   const { data: activeTickets = [], isLoading: loadingActive } = useQuery<
     TicketWithDetails[]
   >({
-    queryKey: ["/api/tickets", { tab: "active", q: search || undefined }],
+    queryKey: ["/api/tickets", { tab: "active", q: search || undefined, assignedToMe }],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (search) p.set("q", search);
+      if (assignedToMe) p.set("assignedToMe", "true");
       const res = await fetch(`/api/tickets?${p}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
@@ -224,10 +227,11 @@ export default function TicketsIndex() {
   const { data: allTickets = [], isLoading: loadingAll } = useQuery<
     TicketWithDetails[]
   >({
-    queryKey: ["/api/tickets", { tab: "historico", q: search || undefined }],
+    queryKey: ["/api/tickets", { tab: "historico", q: search || undefined, assignedToMe }],
     queryFn: async () => {
       const p = new URLSearchParams({ includeClosed: "true" });
       if (search) p.set("q", search);
+      if (assignedToMe) p.set("assignedToMe", "true");
       const res = await fetch(`/api/tickets?${p}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
@@ -318,6 +322,23 @@ export default function TicketsIndex() {
             <SelectItem value="BAIXA">Baixa</SelectItem>
           </SelectContent>
         </Select>
+
+        {isAdminOrCoord && (
+          <button
+            type="button"
+            onClick={() => setAssignedToMe((v) => !v)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+              assignedToMe
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+            data-testid="toggle-assigned-to-me"
+          >
+            <UserCheck className="h-4 w-4" />
+            Atribuídos a mim
+          </button>
+        )}
       </div>
 
       {/* Tabs */}

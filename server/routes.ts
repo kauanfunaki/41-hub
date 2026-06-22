@@ -1628,6 +1628,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: req.query.status as string | undefined,
         q: req.query.q as string | undefined,
         includeClosed: req.query.includeClosed === "true",
+        assignedToMe: req.query.assignedToMe === "true",
       };
       const ticketList = await storage.listTicketsForUser(req.user!, filters);
       res.json(ticketList);

@@ -15,6 +15,7 @@ import {
   Puzzle,
   Activity,
   ShieldAlert,
+  MessageSquarePlus,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,14 @@ const adminGroups: AdminGroup[] = [
         href: "/admin/audit",
         color: "text-chart-3",
         bgColor: "bg-chart-3/10",
+      },
+      {
+        title: "Feedbacks",
+        description: "Bugs, sugestões e melhorias enviados pelos usuários",
+        icon: MessageSquarePlus,
+        href: "/admin/feedback",
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
       },
     ],
   },

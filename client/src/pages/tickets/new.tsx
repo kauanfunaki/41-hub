@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import {
   Card,
@@ -211,17 +211,20 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 export default function TicketsNew() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { toast } = useToast();
 
   const isAdmin = user?.isAdmin;
   const isCoordinator = !isAdmin && user?.roles?.some((r) => r.roleName === "Coordenador");
   const isUser = !isAdmin && !isCoordinator;
 
+  const prefillParams = new URLSearchParams(search);
+
   // Wizard step: 1 = categoria, 2 = detalhes
   const [step, setStep] = useState(1);
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(() => prefillParams.get("prefillTitle") ?? "");
+  const [description, setDescription] = useState(() => prefillParams.get("prefillDescription") ?? "");
   const [requesterSectorId, setRequesterSectorId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categorySearch, setCategorySearch] = useState("");

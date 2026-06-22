@@ -257,6 +257,7 @@ export interface IStorage {
     status?: string;
     q?: string;
     includeClosed?: boolean;
+    assignedToMe?: boolean;
   }): Promise<TicketWithDetails[]>;
 
   getTicketDetail(ticketId: string, user: UserWithRoles): Promise<TicketWithDetails | undefined>;
@@ -1324,6 +1325,7 @@ export class DatabaseStorage implements IStorage {
     status?: string;
     q?: string;
     includeClosed?: boolean;
+    assignedToMe?: boolean;
   }): Promise<TicketWithDetails[]> {
     const conditions: any[] = [];
 
@@ -1344,6 +1346,11 @@ export class DatabaseStorage implements IStorage {
           conditions.push(eq(tickets.createdBy, user.id));
         }
       }
+    }
+
+    if (filters.assignedToMe) {
+      const assignedSub = db.select({ ticketId: ticketAssignees.ticketId }).from(ticketAssignees).where(eq(ticketAssignees.userId, user.id));
+      conditions.push(inArray(tickets.id, assignedSub));
     }
 
     if (filters.status) {

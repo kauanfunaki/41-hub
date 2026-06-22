@@ -129,8 +129,8 @@ export default function Home() {
   });
 
   const { data: myTicketsRaw } = useQuery<MyTicket[] | unknown>({
-    queryKey: ["/api/tickets?limit=5"],
-    queryFn: () => fetch("/api/tickets?limit=5", { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/tickets?assignedToMe=true"],
+    queryFn: () => fetch("/api/tickets?assignedToMe=true", { credentials: "include" }).then(r => r.json()),
     retry: false,
   });
   const myTickets: MyTicket[] = Array.isArray(myTicketsRaw) ? myTicketsRaw.filter((t: MyTicket) =>
