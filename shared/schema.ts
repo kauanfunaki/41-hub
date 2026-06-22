@@ -585,6 +585,24 @@ export const apiTokens = pgTable("api_tokens", {
 export const insertSystemAlertSchema = createInsertSchema(systemAlerts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertApiTokenSchema = createInsertSchema(apiTokens).omit({ id: true, createdAt: true });
 
+// ============ Platform Feedback ============
+
+export const feedbackTypeEnum = pgEnum("feedback_type", ["BUG", "SUGESTAO", "MELHORIA", "OUTRO"]);
+
+export const platformFeedback = pgTable("platform_feedback", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).references(() => users.id, { onDelete: "set null" }),
+  type: feedbackTypeEnum("type").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPlatformFeedbackSchema = createInsertSchema(platformFeedback).omit({ id: true, createdAt: true, isRead: true });
+export type PlatformFeedback = typeof platformFeedback.$inferSelect;
+export type InsertPlatformFeedback = z.infer<typeof insertPlatformFeedbackSchema>;
+
 export type SystemAlert = typeof systemAlerts.$inferSelect;
 export type InsertSystemAlert = z.infer<typeof insertSystemAlertSchema>;
 export type SystemAlertRead = typeof systemAlertReads.$inferSelect;

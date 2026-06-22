@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
@@ -46,6 +46,7 @@ import {
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Sector, TicketCategoryTree, KbArticle } from "@shared/schema";
@@ -96,6 +97,80 @@ const PRIORITY_OPTIONS = [
   { value: "ALTA",    label: "Alta",    color: "border-amber-400 text-amber-600 dark:text-amber-400 bg-amber-500/5 hover:bg-amber-500/10" },
   { value: "URGENTE", label: "Urgente", color: "border-red-400 text-red-600 dark:text-red-400 bg-red-500/5 hover:bg-red-500/10" },
 ];
+
+// ── Multi-email input ────────────────────────────────────────────────────────
+
+function MultiEmailInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+}) {
+  const emails = value ? value.split(",").map((e) => e.trim()).filter(Boolean) : [];
+  const [inputVal, setInputVal] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addEmail = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return;
+      if (emails.includes(trimmed)) { setInputVal(""); return; }
+      onChange([...emails, trimmed].join(","));
+      setInputVal("");
+    },
+    [emails, onChange]
+  );
+
+  function removeEmail(email: string) {
+    onChange(emails.filter((e) => e !== email).join(","));
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === "," || e.key === "Tab") {
+      e.preventDefault();
+      addEmail(inputVal);
+    } else if (e.key === "Backspace" && !inputVal && emails.length > 0) {
+      removeEmail(emails[emails.length - 1]);
+    }
+  }
+
+  return (
+    <div
+      className="flex flex-wrap gap-1.5 min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm cursor-text focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+      onClick={() => inputRef.current?.focus()}
+    >
+      {emails.map((email) => (
+        <span
+          key={email}
+          className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs font-medium"
+        >
+          {email}
+          <button
+            type="button"
+            onClick={(ev) => { ev.stopPropagation(); removeEmail(email); }}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        type="text"
+        value={inputVal}
+        onChange={(e) => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => addEmail(inputVal)}
+        placeholder={emails.length === 0 ? (placeholder || "Adicionar e-mail... pressione Enter para confirmar") : ""}
+        className="flex-1 min-w-[180px] bg-transparent outline-none placeholder:text-muted-foreground text-sm"
+      />
+    </div>
+  );
+}
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -156,6 +231,10 @@ export default function TicketsNew() {
   const [requestData, setRequestData] = useState<Record<string, string>>({});
   // Files chosen for each configured required-attachment slot, keyed by attachment key
   const [attachmentFiles, setAttachmentFiles] = useState<Record<string, File>>({});
+  // Optional extra attachments (user-selected, beyond the category requirements)
+  const [addExtraAttachments, setAddExtraAttachments] = useState(false);
+  const [extraFiles, setExtraFiles] = useState<File[]>([]);
+  const extraFileInputRef = useRef<HTMLInputElement>(null);
 
   const ALLOWED_EXTS = [".jpg", ".jpeg", ".png", ".pdf", ".mp4", ".zip", ".7z", ".rar", ".docx", ".xlsx", ".txt", ".csv"];
   const MAX_FILE_MB = 100;
@@ -332,10 +411,11 @@ export default function TicketsNew() {
       const res = await apiRequest("POST", "/api/tickets", payload);
       const ticket = await res.json();
 
-      // Upload only the configured required/optional attachment slots
-      const uploads: Array<{ file: File; key?: string }> = Object.entries(attachmentFiles).map(
-        ([key, file]) => ({ file, key })
-      );
+      // Upload required/optional attachment slots + any extra files
+      const uploads: Array<{ file: File; key?: string }> = [
+        ...Object.entries(attachmentFiles).map(([key, file]) => ({ file, key })),
+        ...extraFiles.map((file) => ({ file })),
+      ];
 
       let failedUploads = 0;
       for (const { file, key } of uploads) {
@@ -815,9 +895,15 @@ export default function TicketsNew() {
                                   ))}
                                 </SelectContent>
                               </Select>
+                            ) : field.type === "email" ? (
+                              <MultiEmailInput
+                                value={requestData[field.key] || ""}
+                                onChange={(val) => setRequestData((prev) => ({ ...prev, [field.key]: val }))}
+                                placeholder={field.placeholder}
+                              />
                             ) : (
                               <Input
-                                type={field.type === "email" ? "email" : field.type === "number" ? "number" : "text"}
+                                type={field.type === "number" ? "number" : "text"}
                                 value={requestData[field.key] || ""}
                                 onChange={(e) => setRequestData((prev) => ({ ...prev, [field.key]: e.target.value }))}
                                 placeholder={field.placeholder}
@@ -913,6 +999,86 @@ export default function TicketsNew() {
                       </div>
                     </div>
                   )}
+
+                  {/* Anexos extras opcionais */}
+                  <div className="rounded-xl border bg-card overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <Checkbox
+                        id="add-extra-attachments"
+                        checked={addExtraAttachments}
+                        onCheckedChange={(v) => {
+                          setAddExtraAttachments(!!v);
+                          if (!v) setExtraFiles([]);
+                        }}
+                        data-testid="checkbox-extra-attachments"
+                      />
+                      <label htmlFor="add-extra-attachments" className="text-sm font-medium cursor-pointer select-none">
+                        Adicionar anexos relevantes?
+                      </label>
+                    </div>
+
+                    {addExtraAttachments && (
+                      <div className="px-4 pb-4 space-y-2 border-t pt-3">
+                        <p className="text-xs text-muted-foreground">
+                          Selecione um ou mais arquivos complementares para este chamado.
+                        </p>
+                        <input
+                          ref={extraFileInputRef}
+                          type="file"
+                          multiple
+                          accept={ALLOWED_EXTS.join(",")}
+                          className="hidden"
+                          onChange={(e) => {
+                            const picked = Array.from(e.target.files || []);
+                            const valid: File[] = [];
+                            for (const file of picked) {
+                              if (!ALLOWED_EXTS.includes(extOf(file.name))) {
+                                toast({ title: "Tipo não permitido", description: `"${file.name}" tem extensão não suportada.`, variant: "destructive" });
+                                continue;
+                              }
+                              if (file.size > MAX_FILE_MB * 1024 * 1024) {
+                                toast({ title: "Arquivo muito grande", description: `"${file.name}" excede ${MAX_FILE_MB} MB.`, variant: "destructive" });
+                                continue;
+                              }
+                              valid.push(file);
+                            }
+                            setExtraFiles((prev) => {
+                              const names = new Set(prev.map((f) => f.name));
+                              return [...prev, ...valid.filter((f) => !names.has(f.name))];
+                            });
+                            e.target.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => extraFileInputRef.current?.click()}
+                          className="flex w-full items-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2.5 text-sm cursor-pointer transition-colors hover:border-muted-foreground/50 hover:bg-muted/30"
+                        >
+                          <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="text-muted-foreground">Selecionar arquivos…</span>
+                        </button>
+
+                        {extraFiles.length > 0 && (
+                          <div className="space-y-1.5">
+                            {extraFiles.map((file, idx) => (
+                              <div key={`${file.name}-${idx}`} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                                <span className="flex-1 truncate">{file.name}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">{formatBytes(file.size)}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExtraFiles((prev) => prev.filter((_, i) => i !== idx))}
+                                  className="text-muted-foreground hover:text-destructive shrink-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                 </div>
 

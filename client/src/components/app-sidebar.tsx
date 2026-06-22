@@ -17,6 +17,7 @@ import {
   BookOpen,
   Activity,
   GraduationCap,
+  MessageSquarePlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemeLogo } from "@/components/theme-logo";
@@ -266,6 +267,41 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
+          <SidebarGroupLabel>Ajuda</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {/* Base de Conhecimento */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith("/kb")}
+                  data-testid="nav-kb"
+                >
+                  <Link href="/kb">
+                    <BookOpen className="h-4 w-4" />
+                    <span>Base de Conhecimento</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {/* Feedback */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith("/feedback")}
+                  data-testid="nav-feedback"
+                >
+                  <Link href="/feedback">
+                    <MessageSquarePlus className="h-4 w-4" />
+                    <span>Feedback</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupLabel>Configurações</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -279,20 +315,6 @@ export function AppSidebar() {
                   <Link href="/profile">
                     <User className="h-4 w-4" />
                     <span>Perfil</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {/* Base de Conhecimento */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.startsWith("/kb")}
-                  data-testid="nav-kb"
-                >
-                  <Link href="/kb">
-                    <BookOpen className="h-4 w-4" />
-                    <span>Base de Conhecimento</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

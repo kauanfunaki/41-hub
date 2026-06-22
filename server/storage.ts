@@ -57,9 +57,12 @@ import {
   kbArticles,
   kbArticleViews,
   kbArticleFeedback,
+  platformFeedback,
   type KbArticle,
   type InsertKbArticle,
   type KbArticleFeedback as KbArticleFeedbackType,
+  type PlatformFeedback,
+  type InsertPlatformFeedback,
   ticketChecklistItems,
   type TicketChecklistItem,
   ticketApprovals,
@@ -2490,6 +2493,34 @@ export class DatabaseStorage implements IStorage {
     }
 
     return result;
+  }
+
+  async createFeedback(data: InsertPlatformFeedback): Promise<PlatformFeedback> {
+    const [row] = await db.insert(platformFeedback).values(data).returning();
+    return row;
+  }
+
+  async listFeedback(limit = 100): Promise<Array<PlatformFeedback & { userName?: string | null }>> {
+    const rows = await db
+      .select({
+        id: platformFeedback.id,
+        userId: platformFeedback.userId,
+        type: platformFeedback.type,
+        title: platformFeedback.title,
+        message: platformFeedback.message,
+        isRead: platformFeedback.isRead,
+        createdAt: platformFeedback.createdAt,
+        userName: users.name,
+      })
+      .from(platformFeedback)
+      .leftJoin(users, eq(platformFeedback.userId, users.id))
+      .orderBy(desc(platformFeedback.createdAt))
+      .limit(limit);
+    return rows;
+  }
+
+  async markFeedbackRead(id: string): Promise<void> {
+    await db.update(platformFeedback).set({ isRead: true }).where(eq(platformFeedback.id, id));
   }
 }
 
