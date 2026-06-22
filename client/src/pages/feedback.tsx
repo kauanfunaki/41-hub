@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { MessageSquarePlus, CheckCircle2, Bug, Lightbulb, Wrench, HelpCircle } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  MessageSquarePlus, CheckCircle2, Bug, Lightbulb, Wrench, HelpCircle,
+  ChevronDown, ChevronUp, Inbox,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,52 +11,139 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 
 type FeedbackType = "BUG" | "SUGESTAO" | "MELHORIA" | "OUTRO";
 
 const TYPE_OPTIONS: Array<{
   value: FeedbackType;
   label: string;
-  description: string;
   icon: React.ComponentType<{ className?: string }>;
-  color: string;
   activeColor: string;
+  badgeClass: string;
 }> = [
   {
     value: "BUG",
     label: "Bug",
-    description: "Algo está funcionando errado",
     icon: Bug,
-    color: "border-red-300 dark:border-red-700",
     activeColor: "border-red-500 bg-red-500/5 text-red-700 dark:text-red-400",
+    badgeClass: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
   },
   {
     value: "SUGESTAO",
     label: "Sugestão",
-    description: "Uma ideia para o portal",
     icon: Lightbulb,
-    color: "border-amber-300 dark:border-amber-700",
     activeColor: "border-amber-500 bg-amber-500/5 text-amber-700 dark:text-amber-400",
+    badgeClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   },
   {
     value: "MELHORIA",
     label: "Melhoria",
-    description: "Aperfeiçoar algo existente",
     icon: Wrench,
-    color: "border-blue-300 dark:border-blue-700",
     activeColor: "border-blue-500 bg-blue-500/5 text-blue-700 dark:text-blue-400",
+    badgeClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   },
   {
     value: "OUTRO",
     label: "Outro",
-    description: "Qualquer outra mensagem",
     icon: HelpCircle,
-    color: "border-slate-300 dark:border-slate-700",
     activeColor: "border-slate-500 bg-slate-500/5 text-slate-700 dark:text-slate-400",
+    badgeClass: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   },
 ];
 
+function typeInfo(type: string) {
+  return TYPE_OPTIONS.find((t) => t.value === type) ?? TYPE_OPTIONS[3];
+}
+
+function formatDate(d: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  }).format(new Date(d));
+}
+
+// ── Admin feedback list ──────────────────────────────────────────────────────
+
+interface FeedbackItem {
+  id: string;
+  type: FeedbackType;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  userName?: string | null;
+}
+
+function AdminFeedbackPanel() {
+  const [open, setOpen] = useState(false);
+
+  const { data: items = [], isLoading } = useQuery<FeedbackItem[]>({
+    queryKey: ["/api/admin/feedback"],
+    queryFn: () => fetch("/api/admin/feedback", { credentials: "include" }).then((r) => r.json()),
+    enabled: open,
+  });
+
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Inbox className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">Feedbacks recebidos</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="border-t">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Carregando…</p>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+              <Inbox className="h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Nenhum feedback recebido ainda</p>
+            </div>
+          ) : (
+            <div className="divide-y max-h-[500px] overflow-y-auto">
+              {items.map((item) => {
+                const info = typeInfo(item.type);
+                const Icon = info.icon;
+                return (
+                  <div key={item.id} className="flex gap-3 px-6 py-4 hover:bg-muted/20 transition-colors">
+                    <div className="mt-0.5 shrink-0">
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", info.badgeClass)}>
+                          {info.label}
+                        </span>
+                        <span className="text-sm font-medium truncate">{item.title}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{item.message}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {item.userName ?? "Usuário desconhecido"} · {formatDate(item.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
+
 export default function FeedbackPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [type, setType] = useState<FeedbackType>("SUGESTAO");
@@ -105,89 +195,95 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-          <MessageSquarePlus className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Feedback</h1>
-          <p className="text-sm text-muted-foreground">
-            Ajude a melhorar o portal reportando bugs ou sugerindo melhorias
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="px-6 py-4 border-b bg-muted/30">
-          <p className="text-sm font-semibold">Enviar feedback</p>
+    <div className="flex flex-col items-center p-6">
+      <div className="w-full max-w-2xl flex flex-col gap-6">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+            <MessageSquarePlus className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Feedback</h1>
+            <p className="text-sm text-muted-foreground">
+              Ajude a melhorar o portal reportando bugs ou sugerindo melhorias
+            </p>
+          </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Tipo */}
-          <div className="space-y-2">
-            <Label>Tipo de feedback</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {TYPE_OPTIONS.map((opt) => {
-                const Icon = opt.icon;
-                const isActive = type === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setType(opt.value)}
-                    className={cn(
-                      "flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 text-center transition-all",
-                      isActive ? opt.activeColor : "border-border hover:border-muted-foreground/40 hover:bg-muted/40"
-                    )}
-                  >
-                    <Icon className={cn("h-5 w-5", isActive ? "" : "text-muted-foreground")} />
-                    <span className={cn("text-xs font-medium", isActive ? "" : "text-muted-foreground")}>
-                      {opt.label}
-                    </span>
-                  </button>
-                );
-              })}
+        {/* Admin inbox */}
+        {user?.isAdmin && <AdminFeedbackPanel />}
+
+        {/* Form */}
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="px-6 py-4 border-b bg-muted/30">
+            <p className="text-sm font-semibold">Enviar feedback</p>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Tipo */}
+            <div className="space-y-2">
+              <Label>Tipo de feedback</Label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {TYPE_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const isActive = type === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setType(opt.value)}
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 text-center transition-all",
+                        isActive ? opt.activeColor : "border-border hover:border-muted-foreground/40 hover:bg-muted/40"
+                      )}
+                    >
+                      <Icon className={cn("h-5 w-5", isActive ? "" : "text-muted-foreground")} />
+                      <span className={cn("text-xs font-medium", isActive ? "" : "text-muted-foreground")}>
+                        {opt.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Título */}
-          <div className="space-y-2">
-            <Label htmlFor="fb-title">
-              Título <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="fb-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Descreva brevemente..."
-              maxLength={200}
-            />
-            <p className="text-xs text-muted-foreground text-right">{title.length}/200</p>
-          </div>
+            {/* Título */}
+            <div className="space-y-2">
+              <Label htmlFor="fb-title">
+                Título <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="fb-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Descreva brevemente..."
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground text-right">{title.length}/200</p>
+            </div>
 
-          {/* Mensagem */}
-          <div className="space-y-2">
-            <Label htmlFor="fb-message">
-              Mensagem <span className="text-destructive">*</span>
-            </Label>
-            <Textarea
-              id="fb-message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Descreva com detalhes o que aconteceu ou o que você gostaria de ver no portal..."
-              rows={5}
-            />
-          </div>
+            {/* Mensagem */}
+            <div className="space-y-2">
+              <Label htmlFor="fb-message">
+                Mensagem <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="fb-message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Descreva com detalhes o que aconteceu ou o que você gostaria de ver no portal..."
+                rows={5}
+              />
+            </div>
 
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || !title.trim() || !message.trim()}
-            className="w-full sm:w-auto"
-          >
-            {mutation.isPending ? "Enviando..." : "Enviar feedback"}
-          </Button>
+            <Button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending || !title.trim() || !message.trim()}
+              className="w-full sm:w-auto"
+            >
+              {mutation.isPending ? "Enviando..." : "Enviar feedback"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

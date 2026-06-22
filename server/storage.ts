@@ -1289,7 +1289,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   private async enrichSingleTicket(t: Ticket): Promise<TicketWithDetails> {
-    const [reqSector] = await db.select({ name: sectors.name }).from(sectors).where(eq(sectors.id, t.requesterSectorId));
+    const [reqSector] = await db.select({ name: sectors.name, color: sectors.color }).from(sectors).where(eq(sectors.id, t.requesterSectorId));
     const [tgtSector] = await db.select({ name: sectors.name }).from(sectors).where(eq(sectors.id, t.targetSectorId));
     const [cat] = await db.select().from(ticketCategories).where(eq(ticketCategories.id, t.categoryId));
     const [creator] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, t.createdBy));
@@ -1308,6 +1308,7 @@ export class DatabaseStorage implements IStorage {
     return {
       ...t,
       requesterSectorName: reqSector?.name,
+      requesterSectorColor: reqSector?.color ?? null,
       targetSectorName: tgtSector?.name,
       categoryName: cat?.name,
       categoryBranch: cat?.branch as "INFRA" | "DEV" | "SUPORTE" | undefined,

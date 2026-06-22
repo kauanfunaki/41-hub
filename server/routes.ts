@@ -118,10 +118,12 @@ const ticketUpload = multer({
 // Validation schemas
 const createSectorSchema = z.object({
   name: z.string().min(1).max(255),
+  color: z.string().max(20).optional(),
 });
 
 const updateSectorSchema = z.object({
-  name: z.string().min(1).max(255),
+  name: z.string().min(1).max(255).optional(),
+  color: z.string().max(20).optional(),
 });
 
 const createUserSchema = z.object({
@@ -397,6 +399,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       UPDATE ops_watchers SET folder_output = '\\\\192.168.140.249\\Publico\\DOCS BPO\\ELIO RUBENS\\09-DESTINO NOTAS'
       WHERE slug = 'watcher-er-dias' AND folder_output IS NULL
     `);
+
+    // sector color column
+    await pool.query(`ALTER TABLE sectors ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#6366f1'`);
 
     // platform_feedback table
     await pool.query(`DO $$ BEGIN

@@ -36,30 +36,11 @@ interface MyTicket {
   status: string;
   priority: string;
   categoryName?: string | null;
-  requesterSectorName?: string | null;
+  requesterSectorColor?: string | null;
   createdAt: string;
   slaStatus?: string;
 }
 
-const SECTOR_COLORS = [
-  "bg-violet-500/10 text-violet-700 dark:text-violet-300 border border-violet-500/20",
-  "bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20",
-  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20",
-  "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20",
-  "bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20",
-  "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-500/20",
-  "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20",
-  "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20",
-];
-
-function getSectorColor(name: string | undefined | null): string {
-  if (!name) return SECTOR_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
-  }
-  return SECTOR_COLORS[Math.abs(hash) % SECTOR_COLORS.length];
-}
 
 interface OpsStats {
   totalToday: number;
@@ -360,10 +341,6 @@ export default function Home() {
           <SectionDivider icon={Ticket} label={`Meus Chamados Ativos (${myTickets.length})`} />
           <div className="space-y-2">
             {myTickets.map((ticket) => {
-              const priorityColor: Record<string, string> = {
-                URGENTE: "bg-red-500", ALTA: "bg-amber-500",
-                MEDIA: "bg-blue-500", BAIXA: "bg-slate-400",
-              };
               const statusLabel: Record<string, string> = {
                 ABERTO: "Aberto", NA_FILA: "Aberto", EM_ANDAMENTO: "Em andamento",
                 AGUARDANDO_USUARIO: "Aguard. usuário", AGUARDANDO_APROVACAO: "Aguard. aprovação",
@@ -375,7 +352,7 @@ export default function Home() {
                   className="flex items-stretch rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer overflow-hidden"
                   onClick={() => setLocation(`/tickets/${ticket.id}`)}
                 >
-                  <div className={cn("w-1 shrink-0", priorityColor[ticket.priority] ?? "bg-muted")} />
+                  <div className="w-1 shrink-0" style={{ backgroundColor: ticket.requesterSectorColor || "#94a3b8" }} />
                   <div className="flex flex-1 items-center gap-3 px-4 py-3 min-w-0">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium leading-tight truncate">
@@ -386,16 +363,9 @@ export default function Home() {
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{ticket.categoryName}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                      {ticket.requesterSectorName && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getSectorColor(ticket.requesterSectorName)}`}>
-                          {ticket.requesterSectorName}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        {statusLabel[ticket.status] ?? ticket.status}
-                      </span>
-                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {statusLabel[ticket.status] ?? ticket.status}
+                    </span>
                     <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   </div>
                 </div>

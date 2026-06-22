@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Pencil, Trash2, Building2 } from "lucide-react";
-import { useLocation, Link } from "wouter";
+import { ArrowLeft, Plus, Pencil, Trash2, Building2, Check } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,52 @@ import { EmptyState } from "@/components/empty-state";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Sector } from "@shared/schema";
 
+const PRESET_COLORS = [
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6",
+  "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
+  "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e",
+  "#64748b", "#78716c",
+];
+
+function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {PRESET_COLORS.map((color) => (
+          <button
+            key={color}
+            type="button"
+            onClick={() => onChange(color)}
+            className="h-7 w-7 rounded-full border-2 transition-all flex items-center justify-center"
+            style={{
+              backgroundColor: color,
+              borderColor: value === color ? "white" : "transparent",
+              outline: value === color ? `2px solid ${color}` : "none",
+              outlineOffset: "2px",
+            }}
+            title={color}
+          >
+            {value === color && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mt-3">
+        <div className="h-7 w-7 rounded-full border border-border shrink-0" style={{ backgroundColor: value }} />
+        <Input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="#6366f1"
+          className="h-8 text-xs font-mono w-32"
+          maxLength={20}
+        />
+        <span className="text-xs text-muted-foreground">Ou insira um hex personalizado</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminSectors() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -44,14 +90,15 @@ export default function AdminSectors() {
   const [editingSector, setEditingSector] = useState<Sector | null>(null);
   const [deletingSector, setDeletingSector] = useState<Sector | null>(null);
   const [formName, setFormName] = useState("");
+  const [formColor, setFormColor] = useState("#6366f1");
 
   const { data: sectors = [], isLoading } = useQuery<Sector[]>({
     queryKey: ["/api/admin/sectors"],
   });
 
   const createMutation = useMutation({
-    mutationFn: async (name: string) => {
-      return apiRequest("POST", "/api/admin/sectors", { name });
+    mutationFn: async ({ name, color }: { name: string; color: string }) => {
+      return apiRequest("POST", "/api/admin/sectors", { name, color });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/sectors"] });
@@ -65,8 +112,8 @@ export default function AdminSectors() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      return apiRequest("PATCH", `/api/admin/sectors/${id}`, { name });
+    mutationFn: async ({ id, name, color }: { id: string; name: string; color: string }) => {
+      return apiRequest("PATCH", `/api/admin/sectors/${id}`, { name, color });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/sectors"] });
@@ -97,12 +144,14 @@ export default function AdminSectors() {
   const handleOpenCreate = () => {
     setEditingSector(null);
     setFormName("");
+    setFormColor("#6366f1");
     setIsDialogOpen(true);
   };
 
   const handleOpenEdit = (sector: Sector) => {
     setEditingSector(sector);
     setFormName(sector.name);
+    setFormColor((sector as any).color || "#6366f1");
     setIsDialogOpen(true);
   };
 
@@ -115,6 +164,7 @@ export default function AdminSectors() {
     setIsDialogOpen(false);
     setEditingSector(null);
     setFormName("");
+    setFormColor("#6366f1");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -122,9 +172,9 @@ export default function AdminSectors() {
     if (!formName.trim()) return;
 
     if (editingSector) {
-      updateMutation.mutate({ id: editingSector.id, name: formName });
+      updateMutation.mutate({ id: editingSector.id, name: formName, color: formColor });
     } else {
-      createMutation.mutate(formName);
+      createMutation.mutate({ name: formName, color: formColor });
     }
   };
 
@@ -175,6 +225,7 @@ export default function AdminSectors() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8">Cor</TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Data de Criação</TableHead>
                   <TableHead className="w-[100px]">Ações</TableHead>
@@ -183,6 +234,13 @@ export default function AdminSectors() {
               <TableBody>
                 {sectors.map((sector) => (
                   <TableRow key={sector.id} data-testid={`row-sector-${sector.id}`}>
+                    <TableCell>
+                      <div
+                        className="h-4 w-4 rounded-full border border-border/50"
+                        style={{ backgroundColor: (sector as any).color || "#6366f1" }}
+                        title={(sector as any).color}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{sector.name}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(sector.createdAt).toLocaleDateString("pt-BR")}
@@ -219,8 +277,11 @@ export default function AdminSectors() {
         <SheetContent className="flex flex-col sm:max-w-lg p-0" data-testid="sheet-sector-form">
           <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-                <Building2 className="h-5 w-5" />
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-lg shrink-0 transition-colors"
+                style={{ backgroundColor: `${formColor}20` }}
+              >
+                <Building2 className="h-5 w-5" style={{ color: formColor }} />
               </div>
               <div>
                 <SheetTitle>
@@ -228,7 +289,7 @@ export default function AdminSectors() {
                 </SheetTitle>
                 <SheetDescription>
                   {editingSector
-                    ? "Altere o nome do setor"
+                    ? "Altere o nome e a cor do setor"
                     : "Crie um novo setor para a organização"}
                 </SheetDescription>
               </div>
@@ -248,6 +309,14 @@ export default function AdminSectors() {
                     placeholder="Ex: Tecnologia"
                     data-testid="input-sector-name"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Cor identificadora</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Usada na barra lateral dos chamados deste setor
+                  </p>
+                  <ColorPicker value={formColor} onChange={setFormColor} />
                 </div>
               </div>
             </div>
