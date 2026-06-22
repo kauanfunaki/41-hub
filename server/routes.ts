@@ -419,6 +419,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
 
+    // ticket_reopen_requests table
+    await pool.query(`CREATE TABLE IF NOT EXISTS ticket_reopen_requests (
+      id            VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id     VARCHAR(36) NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      requested_by  VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+      reason        TEXT NOT NULL,
+      status        VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+      decided_by    VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+      decision_note TEXT,
+      requested_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      decided_at    TIMESTAMPTZ
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_reopen_requests_ticket ON ticket_reopen_requests(ticket_id)`);
+
     console.info("[startup] Schema bootstrap OK");
   } catch (e: any) {
     console.error("[startup] Schema bootstrap error (non-fatal):", e?.message ?? e);
@@ -2479,6 +2493,159 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Error rejecting ticket:", error);
       res.status(500).json({ error: error.message || "Failed to reject ticket" });
+    }
+  });
+
+  // ==================== TICKET REOPEN REQUEST ROUTES ====================
+
+  app.get("/api/tickets/:id/reopen-request", requireAuth, requireTicketAccess, async (req, res) => {
+    try {
+      const ticket = await storage.getTicketDetail(req.params.id, req.user!);
+      if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
+      const reopenRequest = await storage.getLatestReopenRequest(req.params.id);
+      res.json({ reopenRequest: reopenRequest ?? null });
+    } catch (error: any) {
+      console.error("Error fetching reopen request:", error);
+      res.status(500).json({ error: "Failed to fetch reopen request" });
+    }
+  });
+
+  app.post("/api/tickets/:id/request-reopen", requireAuth, requireTicketAccess, async (req, res) => {
+    try {
+      const bodySchema = z.object({ reason: z.string().min(1, "Motivo é obrigatório").max(2000) });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Informe o motivo da reabertura" });
+      }
+
+      const ticket = await storage.getTicketDetail(req.params.id, req.user!);
+      if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
+
+      if (ticket.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: "Apenas o requerente do chamado pode solicitar a reabertura" });
+      }
+      if (ticket.status !== "RESOLVIDO") {
+        return res.status(400).json({ error: "Apenas chamados resolvidos podem ser reabertos" });
+      }
+      if (await storage.hasPendingReopenRequest(req.params.id)) {
+        return res.status(400).json({ error: "Já existe uma solicitação de reabertura pendente para este chamado" });
+      }
+
+      const reopenRequest = await storage.createReopenRequest(req.params.id, req.user!.id, parsed.data.reason);
+
+      // Public comment so the request is visible in the timeline (bypasses the
+      // non-admin comment guard since the ticket is RESOLVIDO).
+      await pool.query(
+        `INSERT INTO ticket_comments (id, ticket_id, author_id, body, is_internal, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, false, NOW())`,
+        [req.params.id, req.user!.id, `🔄 Solicitação de reabertura: ${parsed.data.reason}`]
+      );
+
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "ticket_reopen_request",
+        targetType: "ticket",
+        targetId: req.params.id,
+        metadata: { reason: parsed.data.reason },
+      });
+
+      try {
+        const enabled = await storage.isNotificationEnabled("ticket_status");
+        if (enabled) {
+          const admins = await storage.getAdminUserIds();
+          const assignees = await storage.getTicketAssigneeIds(req.params.id);
+          const recipients = [...admins, ...assignees].filter(
+            (id, i, arr) => id !== req.user!.id && arr.indexOf(id) === i
+          );
+          if (recipients.length > 0) {
+            await storage.createNotifications(recipients, {
+              type: "ticket_status",
+              title: "Solicitação de reabertura",
+              message: `${req.user!.name} solicitou a reabertura do chamado "${ticket.title}"`,
+              linkUrl: `/tickets/${ticket.id}`,
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error("Error dispatching reopen-request notification:", notifErr);
+      }
+
+      res.status(201).json({ message: "Solicitação de reabertura enviada", reopenRequest });
+    } catch (error: any) {
+      console.error("Error requesting reopen:", error);
+      res.status(500).json({ error: error.message || "Failed to request reopen" });
+    }
+  });
+
+  app.post("/api/tickets/:id/reopen-request/decision", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const bodySchema = z.object({
+        action: z.enum(["accept", "reject"]),
+        note: z.string().max(2000).optional(),
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      }
+      const { action, note } = parsed.data;
+
+      if (action === "reject" && !note?.trim()) {
+        return res.status(400).json({ error: "Informe o motivo da recusa" });
+      }
+
+      const ticket = await storage.getTicketDetail(req.params.id, req.user!);
+      if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
+
+      const pending = await storage.getLatestReopenRequest(req.params.id);
+      if (!pending || pending.status !== "PENDING") {
+        return res.status(400).json({ error: "Não há solicitação de reabertura pendente" });
+      }
+
+      if (action === "accept") {
+        await storage.decideReopenRequest(pending.id, req.user!.id, "ACCEPTED", note);
+        await storage.adminUpdateTicket(req.params.id, { status: "EM_ANDAMENTO" }, req.user!);
+        await pool.query(
+          `INSERT INTO ticket_comments (id, ticket_id, author_id, body, is_internal, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, false, NOW())`,
+          [req.params.id, req.user!.id, `🔄 Reabertura aceita${note?.trim() ? `: ${note.trim()}` : "."} — chamado reaberto para andamento.`]
+        );
+      } else {
+        await storage.decideReopenRequest(pending.id, req.user!.id, "REJECTED", note);
+        await pool.query(
+          `INSERT INTO ticket_comments (id, ticket_id, author_id, body, is_internal, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, false, NOW())`,
+          [req.params.id, req.user!.id, `🔴 Solicitação de reabertura recusada: ${note!.trim()}`]
+        );
+      }
+
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: action === "accept" ? "ticket_reopen_accept" : "ticket_reopen_reject",
+        targetType: "ticket",
+        targetId: req.params.id,
+        metadata: { note: note ?? null },
+      });
+
+      try {
+        const enabled = await storage.isNotificationEnabled("ticket_status");
+        if (enabled && pending.requestedBy && pending.requestedBy !== req.user!.id) {
+          await storage.createNotifications([pending.requestedBy], {
+            type: "ticket_status",
+            title: action === "accept" ? "Reabertura aceita" : "Reabertura recusada",
+            message: action === "accept"
+              ? `Sua solicitação de reabertura do chamado "${ticket.title}" foi aceita`
+              : `Sua solicitação de reabertura do chamado "${ticket.title}" foi recusada: ${note!.trim()}`,
+            linkUrl: `/tickets/${ticket.id}`,
+          });
+        }
+      } catch (notifErr) {
+        console.error("Error dispatching reopen-decision notification:", notifErr);
+      }
+
+      res.json({ message: action === "accept" ? "Chamado reaberto" : "Solicitação de reabertura recusada" });
+    } catch (error: any) {
+      console.error("Error deciding reopen request:", error);
+      res.status(500).json({ error: error.message || "Failed to decide reopen request" });
     }
   });
 

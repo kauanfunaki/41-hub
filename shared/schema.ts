@@ -284,6 +284,19 @@ export const ticketApprovals = pgTable("ticket_approvals", {
   unique().on(t.ticketId, t.cycleNumber),
 ]);
 
+// Ticket reopen requests (requester asks to reopen a resolved ticket; admin accepts/rejects)
+export const ticketReopenRequests = pgTable("ticket_reopen_requests", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id", { length: 36 }).notNull().references(() => tickets.id, { onDelete: "cascade" }),
+  requestedBy: varchar("requested_by", { length: 36 }).references(() => users.id, { onDelete: "set null" }),
+  reason: text("reason").notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("PENDING"),
+  decidedBy: varchar("decided_by", { length: 36 }).references(() => users.id, { onDelete: "set null" }),
+  decisionNote: text("decision_note"),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  decidedAt: timestamp("decided_at"),
+});
+
 // Ticket SLA alert dedup
 export const ticketAlertsDedup = pgTable("ticket_alerts_dedup", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -460,6 +473,8 @@ export type TicketEvent = typeof ticketEvents.$inferSelect;
 
 export type TicketApproval = typeof ticketApprovals.$inferSelect;
 export type InsertTicketApproval = z.infer<typeof insertTicketApprovalSchema>;
+
+export type TicketReopenRequest = typeof ticketReopenRequests.$inferSelect;
 
 export type TicketAlertDedup = typeof ticketAlertsDedup.$inferSelect;
 
