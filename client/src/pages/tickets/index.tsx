@@ -22,6 +22,28 @@ import {
 import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
+// ── Sector colours ───────────────────────────────────────────────────────────
+
+const SECTOR_COLORS = [
+  "bg-violet-500/10 text-violet-700 dark:text-violet-300 border border-violet-500/20",
+  "bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20",
+  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20",
+  "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20",
+  "bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20",
+  "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-500/20",
+  "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20",
+  "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20",
+];
+
+function getSectorColor(name: string | undefined | null): string {
+  if (!name) return SECTOR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  }
+  return SECTOR_COLORS[Math.abs(hash) % SECTOR_COLORS.length];
+}
+
 // ── Labels / colours ────────────────────────────────────────────────────────
 
 const statusLabels: Record<string, string> = {
@@ -168,6 +190,11 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
               >
                 <Clock className="h-3 w-3" />
                 {sla.label}
+              </span>
+            )}
+            {ticket.requesterSectorName && (
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getSectorColor(ticket.requesterSectorName)}`}>
+                {ticket.requesterSectorName}
               </span>
             )}
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${priorityColors[ticket.priority]}`}>

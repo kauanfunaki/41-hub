@@ -629,15 +629,17 @@ export default function TicketsDetail() {
                   onClick={() => {
                     const input = document.createElement("input");
                     input.type = "file";
-                    input.accept = ".jpg,.jpeg,.png,.pdf,.mp4";
+                    input.multiple = true;
+                    input.accept = ".jpg,.jpeg,.png,.pdf,.mp4,.zip,.rar,.7z,.docx,.xlsx,.txt,.csv";
                     input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (!file) return;
-                      if (file.size > 100 * 1024 * 1024) {
-                        toast({ title: "Arquivo muito grande", description: "O arquivo excede o limite de 100 MB.", variant: "destructive" });
-                        return;
+                      const files = Array.from((e.target as HTMLInputElement).files || []);
+                      for (const file of files) {
+                        if (file.size > 100 * 1024 * 1024) {
+                          toast({ title: "Arquivo muito grande", description: `"${file.name}" excede o limite de 100 MB.`, variant: "destructive" });
+                          continue;
+                        }
+                        uploadMutation.mutate(file);
                       }
-                      uploadMutation.mutate(file);
                     };
                     input.click();
                   }}

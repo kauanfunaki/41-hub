@@ -398,6 +398,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       WHERE slug = 'watcher-er-dias' AND folder_output IS NULL
     `);
 
+    // platform_feedback table
+    await pool.query(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'feedback_type') THEN
+        CREATE TYPE feedback_type AS ENUM ('BUG','SUGESTAO','MELHORIA','OUTRO');
+      END IF;
+    END $$`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS platform_feedback (
+      id         VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id    VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+      type       feedback_type NOT NULL,
+      title      VARCHAR(200) NOT NULL,
+      message    TEXT NOT NULL,
+      is_read    BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+
     console.info("[startup] Schema bootstrap OK");
   } catch (e: any) {
     console.error("[startup] Schema bootstrap error (non-fatal):", e?.message ?? e);
@@ -4670,6 +4686,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err: any) {
       console.error("[diagnostics/health] error:", err);
       res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ── Platform Feedback ────────────────────────────────────────────────────
+  app.post("/api/feedback", requireAuth, async (req, res) => {
+    try {
+      const { type, title, message } = req.body;
+      if (!type || !title || !message) {
+        return res.status(400).json({ error: "type, title e message são obrigatórios" });
+      }
+      const item = await storage.createFeedback({
+        userId: (req as any).user?.id ?? null,
+        type,
+        title,
+        message,
+      });
+      res.json(item);
+    } catch (err: any) {
+      console.error("[feedback] error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/feedback", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const items = await storage.listFeedback(200);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/feedback/:id/read", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      await storage.markFeedbackRead(req.params.id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
