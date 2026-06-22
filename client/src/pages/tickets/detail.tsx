@@ -69,6 +69,7 @@ import {
   Lock,
   Trash2,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -206,6 +207,14 @@ interface DirectoryUser {
   id: string; name: string; email: string;
   roles?: Array<{ sectorId: string; sectorName: string; roleName: string }>;
   isAdmin?: boolean;
+}
+interface ReopenRequest {
+  id: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  reason: string;
+  decisionNote: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -384,6 +393,11 @@ export default function TicketsDetail() {
   const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
   const [approvalNote, setApprovalNote] = useState("");
   const [queueOrderInput, setQueueOrderInput] = useState<string>("");
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenDecisionOpen, setReopenDecisionOpen] = useState(false);
+  const [reopenDecisionAction, setReopenDecisionAction] = useState<"accept" | "reject">("accept");
+  const [reopenDecisionNote, setReopenDecisionNote] = useState("");
 
   const { data: ticket, isLoading } = useQuery<TicketWithDetails>({
     queryKey: ["/api/tickets", ticketId],
@@ -420,6 +434,12 @@ export default function TicketsDetail() {
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/approval`, { credentials: "include" }); if (!r.ok) throw new Error("Failed"); return r.json(); },
     enabled: !!ticketId,
   });
+  const { data: reopenData } = useQuery<{ reopenRequest: ReopenRequest | null }>({
+    queryKey: ["/api/tickets", ticketId, "reopen-request"],
+    queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/reopen-request`, { credentials: "include" }); if (!r.ok) throw new Error("Failed"); return r.json(); },
+    enabled: !!ticketId,
+  });
+  const reopenRequest = reopenData?.reopenRequest ?? null;
 
   const assignableUsers = (() => {
     if (!ticket || !allUsers.length) return [];
@@ -474,6 +494,37 @@ export default function TicketsDetail() {
   const approvalMutation = useMutation({
     mutationFn: async ({ action, note }: { action: "approve" | "reject"; note: string }) => { const r = await apiRequest("POST", `/api/tickets/${ticketId}/${action === "approve" ? "approve" : "reject"}`, { note }); return r.json(); },
     onSuccess: (data: any) => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "approval"] }); setApprovalDialogOpen(false); setApprovalNote(""); toast({ title: data.message || "Decisão registrada" }); },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+  const requestReopenMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/tickets/${ticketId}/request-reopen`, { reason: reopenReason });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || "Falha ao solicitar reabertura"); }
+      return r.json();
+    },
+    onSuccess: () => {
+      setReopenDialogOpen(false); setReopenReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "reopen-request"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] });
+      toast({ title: "Solicitação de reabertura enviada" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+  const reopenDecisionMutation = useMutation({
+    mutationFn: async ({ action, note }: { action: "accept" | "reject"; note: string }) => {
+      const r = await apiRequest("POST", `/api/tickets/${ticketId}/reopen-request/decision`, { action, note });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || "Falha ao registrar decisão"); }
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      setReopenDecisionOpen(false); setReopenDecisionNote("");
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "reopen-request"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] });
+      toast({ title: data.message || "Decisão registrada" });
+    },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
@@ -989,6 +1040,61 @@ export default function TicketsDetail() {
             </div>
           )}
 
+          {/* Reopen request — admin decision */}
+          {isAdmin && reopenRequest?.status === "PENDING" && (
+            <div className="p-4">
+              <SectionLabel>Solicitação de reabertura</SectionLabel>
+              <p className="text-xs text-muted-foreground mb-2">
+                O requerente solicitou reabrir este chamado:
+              </p>
+              <div className="rounded-lg border bg-muted/40 p-2.5 text-xs whitespace-pre-wrap mb-3" data-testid="reopen-request-reason">
+                {reopenRequest.reason}
+              </div>
+              <div className="space-y-2">
+                <Button size="sm" className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => { setReopenDecisionAction("accept"); setReopenDecisionNote(""); setReopenDecisionOpen(true); }}
+                  data-testid="button-accept-reopen">
+                  <RotateCcw className="h-3.5 w-3.5" />Aceitar reabertura
+                </Button>
+                <Button size="sm" variant="destructive" className="w-full gap-2"
+                  onClick={() => { setReopenDecisionAction("reject"); setReopenDecisionNote(""); setReopenDecisionOpen(true); }}
+                  data-testid="button-reject-reopen">
+                  <XCircle className="h-3.5 w-3.5" />Recusar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Reopen request — requester (creator) */}
+          {isCreator && !isAdmin && ticket.status === "RESOLVIDO" && (
+            <div className="p-4">
+              <SectionLabel>Reabertura</SectionLabel>
+              {reopenRequest?.status === "PENDING" ? (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-2.5 text-xs" data-testid="reopen-pending-notice">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">Solicitação enviada</p>
+                  <p className="text-muted-foreground mt-1">Aguardando análise de um administrador.</p>
+                </div>
+              ) : (
+                <>
+                  {reopenRequest?.status === "REJECTED" && (
+                    <div className="rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-2.5 text-xs mb-2.5">
+                      <p className="font-semibold text-red-700 dark:text-red-400">Solicitação anterior recusada</p>
+                      {reopenRequest.decisionNote && <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{reopenRequest.decisionNote}</p>}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mb-2.5">
+                    A solução não resolveu o seu problema? Solicite a reabertura do chamado.
+                  </p>
+                  <Button size="sm" variant="outline" className="w-full gap-2"
+                    onClick={() => { setReopenReason(""); setReopenDialogOpen(true); }}
+                    data-testid="button-request-reopen">
+                    <RotateCcw className="h-3.5 w-3.5" />Solicitar reabertura
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Approval pending */}
           {ticket.status === "AGUARDANDO_APROVACAO" && (
             <div className="p-4">
@@ -1196,6 +1302,56 @@ export default function TicketsDetail() {
             <Button onClick={() => approvalMutation.mutate({ action: approvalAction, note: approvalNote })} disabled={approvalMutation.isPending || (approvalAction === "reject" && !approvalNote.trim())}
               className={approvalAction === "approve" ? "bg-emerald-600 hover:bg-emerald-700" : ""} variant={approvalAction === "reject" ? "destructive" : "default"} data-testid="button-confirm-approval">
               {approvalMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : approvalAction === "approve" ? "Confirmar Aprovação" : "Confirmar Rejeição"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reopen request dialog (requester) */}
+      <Dialog open={reopenDialogOpen} onOpenChange={setReopenDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Solicitar reabertura do chamado</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Explique por que a solução não foi satisfatória. Um administrador vai analisar e decidir se reabre o chamado.
+            </p>
+            <div className="space-y-2">
+              <Label>Motivo da reabertura</Label>
+              <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="Descreva o que ainda não foi resolvido..." rows={4} data-testid="input-reopen-reason" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReopenDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => requestReopenMutation.mutate()} disabled={!reopenReason.trim() || requestReopenMutation.isPending} data-testid="button-confirm-reopen-request">
+              {requestReopenMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar solicitação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reopen decision dialog (admin) */}
+      <Dialog open={reopenDecisionOpen} onOpenChange={setReopenDecisionOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{reopenDecisionAction === "accept" ? "Aceitar reabertura" : "Recusar reabertura"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {reopenDecisionAction === "accept"
+                ? "O chamado será reaberto e movido para Em Andamento."
+                : "O chamado permanecerá como Resolvido. Informe o motivo da recusa."}
+            </p>
+            <div className="space-y-2">
+              <Label>{reopenDecisionAction === "accept" ? "Observação (opcional)" : "Motivo da recusa"}</Label>
+              <Textarea value={reopenDecisionNote} onChange={(e) => setReopenDecisionNote(e.target.value)} placeholder={reopenDecisionAction === "accept" ? "Observação sobre a reabertura..." : "Informe por que a reabertura foi recusada..."} rows={3} data-testid="input-reopen-decision-note" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReopenDecisionOpen(false)}>Cancelar</Button>
+            <Button onClick={() => reopenDecisionMutation.mutate({ action: reopenDecisionAction, note: reopenDecisionNote })}
+              disabled={reopenDecisionMutation.isPending || (reopenDecisionAction === "reject" && !reopenDecisionNote.trim())}
+              className={reopenDecisionAction === "accept" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+              variant={reopenDecisionAction === "reject" ? "destructive" : "default"}
+              data-testid="button-confirm-reopen-decision">
+              {reopenDecisionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : reopenDecisionAction === "accept" ? "Confirmar reabertura" : "Confirmar recusa"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -81,7 +81,7 @@ type RequiredAttachment = {
   required?: boolean;
 };
 
-const STEP_LABELS = ["Categoria", "Detalhes", "Formulário"];
+const STEP_LABELS = ["Categoria", "Formulário", "Detalhes"];
 
 const BRANCH_COLORS = [
   "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
@@ -459,11 +459,6 @@ export default function TicketsNew() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    createMutation.mutate();
-  };
-
   // Category search filtering
   const searchLower = categorySearch.toLowerCase();
   const filteredBranches = categories
@@ -487,8 +482,6 @@ export default function TicketsNew() {
 
   const canProceedStep1 = !!categoryId;
 
-  const canProceedStep2 = !!title && !!description && !!effectiveSectorId;
-
   // Required attachment slots that still have no file selected
   const missingRequiredAttachments = selectedRequiredAttachments.filter(
     (att) => att.required && !attachmentFiles[att.key]
@@ -498,6 +491,10 @@ export default function TicketsNew() {
   const missingRequiredFields = selectedFormSchema.filter(
     (field) => field.required && !requestData[field.key]?.trim()
   );
+
+  // Step "Formulário" (passo 2): só avança quando os campos e anexos obrigatórios estão completos
+  const canProceedFormStep =
+    missingRequiredAttachments.length === 0 && missingRequiredFields.length === 0;
 
   const canSubmit =
     !!title &&
@@ -701,8 +698,8 @@ export default function TicketsNew() {
             </div>
           )}
 
-          {/* ── PASSO 2: Detalhes ──────────────────────────────────────────── */}
-          {step === 2 && (
+          {/* ── PASSO 3: Detalhes ──────────────────────────────────────────── */}
+          {step === 3 && (
             <div className="grid gap-6 lg:grid-cols-[1fr_280px] items-start">
 
               {/* LEFT — Campos básicos */}
@@ -790,10 +787,9 @@ export default function TicketsNew() {
 
                 {/* Mobile navigation */}
                 <div className="flex justify-end gap-3 lg:hidden">
-                  <Button type="button" variant="outline" onClick={() => setStep(1)}>Voltar</Button>
-                  <Button type="button" onClick={() => setStep(3)} disabled={!canProceedStep2} data-testid="button-next-step-2">
-                    Próximo
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button type="button" variant="outline" onClick={() => setStep(2)}>Voltar</Button>
+                  <Button type="button" onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !canSubmit} data-testid="button-submit-ticket-mobile">
+                    {createMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{Object.keys(attachmentFiles).length > 0 ? "Enviando..." : "Criando..."}</> : "Criar Chamado"}
                   </Button>
                 </div>
               </div>
@@ -833,19 +829,29 @@ export default function TicketsNew() {
                     </div>
                   </div>
 
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-2.5 text-xs">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-amber-800 dark:text-amber-200 leading-relaxed">
+                      Informações incompletas podem impactar o SLA do chamado.
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     <Button
                       type="button"
                       className="w-full"
-                      onClick={() => setStep(3)}
-                      disabled={!canProceedStep2}
-                      data-testid="button-next-step-2-desktop"
+                      onClick={() => createMutation.mutate()}
+                      disabled={createMutation.isPending || !canSubmit}
+                      data-testid="button-submit-ticket"
                     >
-                      Próximo
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                      {createMutation.isPending ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{Object.keys(attachmentFiles).length > 0 ? "Enviando..." : "Criando..."}</>
+                      ) : (
+                        "Criar Chamado"
+                      )}
                     </Button>
-                    <Button type="button" variant="outline" className="w-full" onClick={() => setStep(1)}>
-                      ← Alterar categoria
+                    <Button type="button" variant="outline" className="w-full" onClick={() => setStep(2)}>
+                      ← Voltar ao formulário
                     </Button>
                   </div>
                 </div>
@@ -853,9 +859,9 @@ export default function TicketsNew() {
             </div>
           )}
 
-          {/* ── PASSO 3: Formulário + Anexos ───────────────────────────────── */}
-          {step === 3 && (
-            <form onSubmit={handleSubmit}>
+          {/* ── PASSO 2: Formulário + Anexos ───────────────────────────────── */}
+          {step === 2 && (
+            <div>
               <div className="grid gap-6 lg:grid-cols-[1fr_280px] items-start">
 
                 {/* LEFT — Campos dinâmicos + anexos */}
@@ -1120,42 +1126,34 @@ export default function TicketsNew() {
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-2.5 text-xs">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
-                      <p className="text-amber-800 dark:text-amber-200 leading-relaxed">
-                        Informações incompletas podem impactar o SLA do chamado.
-                      </p>
-                    </div>
-
                     <div className="space-y-2">
                       <Button
-                        type="submit"
+                        type="button"
                         className="w-full"
-                        disabled={createMutation.isPending || !canSubmit}
-                        data-testid="button-submit-ticket"
+                        onClick={() => setStep(3)}
+                        disabled={!canProceedFormStep}
+                        data-testid="button-next-step-2-desktop"
                       >
-                        {createMutation.isPending ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{Object.keys(attachmentFiles).length > 0 ? "Enviando..." : "Criando..."}</>
-                        ) : (
-                          "Criar Chamado"
-                        )}
+                        Próximo
+                        <ArrowRight className="ml-2 h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" onClick={() => setStep(2)}>
-                        ← Alterar detalhes
+                      <Button type="button" variant="outline" className="w-full" onClick={() => setStep(1)}>
+                        ← Alterar categoria
                       </Button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Mobile submit */}
+              {/* Mobile navigation */}
               <div className="flex justify-end gap-3 mt-6 lg:hidden">
-                <Button type="button" variant="outline" onClick={() => setStep(2)}>Voltar</Button>
-                <Button type="submit" disabled={createMutation.isPending || !canSubmit} data-testid="button-submit-ticket-mobile">
-                  {createMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{Object.keys(attachmentFiles).length > 0 ? "Enviando..." : "Criando..."}</> : "Criar Chamado"}
+                <Button type="button" variant="outline" onClick={() => setStep(1)}>Voltar</Button>
+                <Button type="button" onClick={() => setStep(3)} disabled={!canProceedFormStep} data-testid="button-next-step-2">
+                  Próximo
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
-            </form>
+            </div>
           )}
         </>
       )}

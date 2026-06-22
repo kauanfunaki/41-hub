@@ -67,6 +67,8 @@ import {
   type TicketChecklistItem,
   ticketApprovals,
   type TicketApproval,
+  ticketReopenRequests,
+  type TicketReopenRequest,
   ticketAlertsDedup,
   typingTexts,
   typingSessions,
@@ -1966,6 +1968,39 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(ticketApprovals)
       .where(and(eq(ticketApprovals.ticketId, ticketId), eq(ticketApprovals.cycleNumber, cycleNumber)));
     return row;
+  }
+
+  // ── Ticket reopen requests ──────────────────────────────────────────────────
+
+  async createReopenRequest(ticketId: string, requestedBy: string, reason: string): Promise<TicketReopenRequest> {
+    const [row] = await db.insert(ticketReopenRequests).values({
+      ticketId, requestedBy, reason,
+    }).returning();
+    return row;
+  }
+
+  async getLatestReopenRequest(ticketId: string): Promise<TicketReopenRequest | undefined> {
+    const [row] = await db.select().from(ticketReopenRequests)
+      .where(eq(ticketReopenRequests.ticketId, ticketId))
+      .orderBy(desc(ticketReopenRequests.requestedAt))
+      .limit(1);
+    return row;
+  }
+
+  async hasPendingReopenRequest(ticketId: string): Promise<boolean> {
+    const [row] = await db.select({ id: ticketReopenRequests.id }).from(ticketReopenRequests)
+      .where(and(eq(ticketReopenRequests.ticketId, ticketId), eq(ticketReopenRequests.status, "PENDING")))
+      .limit(1);
+    return !!row;
+  }
+
+  async decideReopenRequest(id: string, decidedBy: string, status: "ACCEPTED" | "REJECTED", decisionNote?: string): Promise<void> {
+    await db.update(ticketReopenRequests).set({
+      status,
+      decidedBy,
+      decisionNote: decisionNote ?? null,
+      decidedAt: new Date(),
+    }).where(eq(ticketReopenRequests.id, id));
   }
 
   async resolveApprovers(ticket: Ticket, category: TicketCategory): Promise<string[]> {
