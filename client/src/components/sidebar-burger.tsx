@@ -7,8 +7,13 @@ import { cn } from "@/lib/utils";
  * into an X when the sidebar is expanded/open.
  */
 export function SidebarBurger({ className }: { className?: string }) {
-  const { state, openMobile, isMobile, toggleSidebar } = useSidebar();
-  const open = isMobile ? openMobile : state === "expanded";
+  const { openMobile, isMobile, toggleSidebar } = useSidebar();
+
+  // The sidebar no longer collapses on desktop — the toggle is kept only on
+  // mobile, where it is the way to open/close the navigation drawer.
+  if (!isMobile) return null;
+
+  const open = openMobile;
 
   return (
     <label

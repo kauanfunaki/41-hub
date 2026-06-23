@@ -30,6 +30,7 @@ interface TicketRow {
   createdAt: string;
   closedAt: string | null;
   targetSector: string;
+  requesterSector: string;
   category: string | null;
   resolutionMinutes: number | null;
   assignees: string;
@@ -94,7 +95,7 @@ const PRIORITY_COLOR: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string) {
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(iso));
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
 }
 
 function fmtDuration(minutes: number | null) {
@@ -398,7 +399,7 @@ export default function AdminTicketsAnalytics() {
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {t.targetSector}
+                          {t.requesterSector || "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-[120px]">
                           {t.assignees && t.assignees !== "—" ? (

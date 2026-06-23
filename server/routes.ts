@@ -4010,7 +4010,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const vals: any[] = [];
       if (from)       { vals.push(from);       conds.push(`t.created_at >= $${vals.length}::date`); }
       if (to)         { vals.push(to);         conds.push(`t.created_at <= ($${vals.length}::date + interval '1 day')`); }
-      if (sectorId)   { vals.push(sectorId);   conds.push(`t.target_sector_id = $${vals.length}`); }
+      if (sectorId)   { vals.push(sectorId);   conds.push(`t.requester_sector_id = $${vals.length}`); }
       if (priority)   { vals.push(priority);   conds.push(`t.priority = $${vals.length}`); }
       if (assigneeId) { vals.push(assigneeId); conds.push(`EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id = t.id AND ta.user_id = $${vals.length})`); }
 
