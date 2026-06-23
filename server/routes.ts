@@ -1908,24 +1908,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
       }
 
-      // Capture old status before update so the event records the transition
-      let oldStatus: string | undefined;
-      if (ticketPatch.status) {
-        const ticketBeforeUpdate = await storage.getTicketDetail(req.params.id, req.user!);
-        oldStatus = ticketBeforeUpdate?.status;
-      }
-
       const updated = await storage.adminUpdateTicket(req.params.id, ticketPatch, req.user!);
       if (!updated) return res.status(404).json({ error: "Chamado não encontrado" });
 
-      // Record status change in the ticket_events timeline
-      if (ticketPatch.status) {
-        await pool.query(
-          `INSERT INTO ticket_events (id, ticket_id, actor_user_id, type, data, created_at)
-           VALUES (gen_random_uuid(), $1, $2, 'status_changed', $3, NOW())`,
-          [req.params.id, req.user!.id, JSON.stringify({ from: oldStatus ?? null, to: ticketPatch.status })]
-        );
-      }
+      // NOTE: the status_changed timeline event is recorded inside
+      // storage.adminUpdateTicket (single source of truth). Do not insert it
+      // here as well, or the activity feed shows the change twice.
 
       if (ticketPatch.status) {
         try {
@@ -2528,8 +2516,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (ticket.status !== "RESOLVIDO") {
         return res.status(400).json({ error: "Apenas chamados resolvidos podem ser reabertos" });
       }
-      if (await storage.hasPendingReopenRequest(req.params.id)) {
+      const latestReopen = await storage.getLatestReopenRequest(req.params.id);
+      if (latestReopen?.status === "PENDING") {
         return res.status(400).json({ error: "Já existe uma solicitação de reabertura pendente para este chamado" });
+      }
+      if (latestReopen?.status === "REJECTED") {
+        return res.status(400).json({ error: "A reabertura deste chamado já foi recusada e não pode ser solicitada novamente" });
       }
 
       const reopenRequest = await storage.createReopenRequest(req.params.id, req.user!.id, parsed.data.reason);
