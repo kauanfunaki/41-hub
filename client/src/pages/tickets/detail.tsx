@@ -398,6 +398,9 @@ export default function TicketsDetail() {
   const [reopenDecisionOpen, setReopenDecisionOpen] = useState(false);
   const [reopenDecisionAction, setReopenDecisionAction] = useState<"accept" | "reject">("accept");
   const [reopenDecisionNote, setReopenDecisionNote] = useState("");
+  const [statusChangeOpen, setStatusChangeOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [conclusionMessage, setConclusionMessage] = useState("");
 
   const { data: ticket, isLoading } = useQuery<TicketWithDetails>({
     queryKey: ["/api/tickets", ticketId],
@@ -448,7 +451,7 @@ export default function TicketsDetail() {
 
   const updateMutation = useMutation({
     mutationFn: async (patch: Record<string, any>) => { const r = await apiRequest("PATCH", `/api/tickets/${ticketId}`, patch); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); toast({ title: "Chamado atualizado" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] }); toast({ title: "Chamado atualizado" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
   const assignMutation = useMutation({
@@ -531,6 +534,25 @@ export default function TicketsDetail() {
   const canComment = isAdmin || isCoordinator;
   const isCreator = !!ticket && ticket.createdBy === user?.id;
   const canUpload = canComment || isCreator;
+
+  // ── Status change flow (confirmation + optional conclusion note) ──────────────
+  const assigneeCount = ticket?.assignees?.length ?? 0;
+  const statusNeedsConclusion = (s: string | null) =>
+    s === "RESOLVIDO" || s === "CANCELADO" || s === "STANDBY";
+  const requestStatusChange = (newStatus: string) => {
+    if (!ticket || newStatus === ticket.status) return;
+    setPendingStatus(newStatus);
+    setConclusionMessage("");
+    setStatusChangeOpen(true);
+  };
+  const blockResolveNoAssignee = pendingStatus === "RESOLVIDO" && assigneeCount === 0;
+  const confirmStatusChange = () => {
+    if (!pendingStatus || blockResolveNoAssignee) return;
+    updateMutation.mutate(
+      { status: pendingStatus, ...(conclusionMessage.trim() ? { conclusionMessage: conclusionMessage.trim() } : {}) },
+      { onSuccess: () => { setStatusChangeOpen(false); setPendingStatus(null); setConclusionMessage(""); } },
+    );
+  };
 
   const imageAttachments = attachments.filter(a => a.mimeType?.startsWith("image/"));
 
@@ -1008,7 +1030,7 @@ export default function TicketsDetail() {
               <div className="space-y-2">
                 {(ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
                   <Button size="sm" className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                    onClick={() => updateMutation.mutate({ status: "EM_ANDAMENTO" })} disabled={updateMutation.isPending} data-testid="button-quick-start">
+                    onClick={() => requestStatusChange("EM_ANDAMENTO")} disabled={updateMutation.isPending} data-testid="button-quick-start">
                     <ArrowRight className="h-3.5 w-3.5" />Iniciar atendimento
                   </Button>
                 )}
@@ -1020,19 +1042,19 @@ export default function TicketsDetail() {
                 )}
                 {(ticket.status === "AGUARDANDO_REQUERENTE" || ticket.status === "AGUARDANDO_USUARIO" || ticket.status === "STANDBY") && (
                   <Button size="sm" variant="outline" className="w-full gap-2"
-                    onClick={() => updateMutation.mutate({ status: "EM_ANDAMENTO" })} disabled={updateMutation.isPending} data-testid="button-quick-resume">
+                    onClick={() => requestStatusChange("EM_ANDAMENTO")} disabled={updateMutation.isPending} data-testid="button-quick-resume">
                     <ArrowRight className="h-3.5 w-3.5" />Retomar atendimento
                   </Button>
                 )}
                 {(ticket.status === "EM_ANDAMENTO" || ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
                   <Button size="sm" variant="outline" className="w-full gap-2"
-                    onClick={() => updateMutation.mutate({ status: "STANDBY" })} disabled={updateMutation.isPending} data-testid="button-quick-standby">
+                    onClick={() => requestStatusChange("STANDBY")} disabled={updateMutation.isPending} data-testid="button-quick-standby">
                     <Clock className="h-3.5 w-3.5" />Colocar em Pausa
                   </Button>
                 )}
                 {(ticket.status === "EM_ANDAMENTO" || ticket.status === "AGUARDANDO_USUARIO" || ticket.status === "AGUARDANDO_REQUERENTE" || ticket.status === "STANDBY") && (
                   <Button size="sm" className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => updateMutation.mutate({ status: "RESOLVIDO" })} disabled={updateMutation.isPending} data-testid="button-quick-resolve">
+                    onClick={() => requestStatusChange("RESOLVIDO")} disabled={updateMutation.isPending} data-testid="button-quick-resolve">
                     <CheckCircle2 className="h-3.5 w-3.5" />Concluir chamado
                   </Button>
                 )}
@@ -1231,7 +1253,7 @@ export default function TicketsDetail() {
               <SectionLabel>Configurações</SectionLabel>
               <div className="space-y-1.5">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Status</Label>
-                <Select value={ticket.status} onValueChange={(v) => updateMutation.mutate({ status: v })}>
+                <Select value={ticket.status} onValueChange={(v) => requestStatusChange(v)}>
                   <SelectTrigger className="h-8 text-xs" data-testid="admin-select-status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ABERTO">Aberto</SelectItem>
@@ -1352,6 +1374,49 @@ export default function TicketsDetail() {
               variant={reopenDecisionAction === "reject" ? "destructive" : "default"}
               data-testid="button-confirm-reopen-decision">
               {reopenDecisionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : reopenDecisionAction === "accept" ? "Confirmar reabertura" : "Confirmar recusa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status change confirmation (with optional conclusion note) */}
+      <Dialog open={statusChangeOpen} onOpenChange={(v) => { setStatusChangeOpen(v); if (!v) { setPendingStatus(null); setConclusionMessage(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirmar alteração de status</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Alterar status de{" "}
+              <span className="font-medium text-foreground">{statusLabels[ticket.status] ?? ticket.status}</span>{" "}
+              para{" "}
+              <span className="font-medium text-foreground">{statusLabels[pendingStatus ?? ""] ?? pendingStatus}</span>?
+            </p>
+            {blockResolveNoAssignee ? (
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs flex gap-2" data-testid="resolve-no-assignee-warning">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <span className="text-amber-800 dark:text-amber-200">
+                  Atribua um responsável ao chamado antes de concluí-lo.
+                </span>
+              </div>
+            ) : statusNeedsConclusion(pendingStatus) && (
+              <div className="space-y-2">
+                <Label>
+                  {pendingStatus === "RESOLVIDO" ? "Mensagem de conclusão (opcional)"
+                    : pendingStatus === "CANCELADO" ? "Motivo do cancelamento (opcional)"
+                    : "Motivo da pausa (opcional)"}
+                </Label>
+                <Textarea value={conclusionMessage} onChange={(e) => setConclusionMessage(e.target.value)}
+                  placeholder={pendingStatus === "RESOLVIDO" ? "Descreva como o chamado foi solucionado..."
+                    : pendingStatus === "CANCELADO" ? "Descreva o motivo do cancelamento..."
+                    : "Descreva o motivo da pausa..."}
+                  rows={3} data-testid="input-conclusion-message" />
+                <p className="text-[11px] text-muted-foreground">A mensagem será registrada na Atividade do chamado.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusChangeOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmStatusChange} disabled={updateMutation.isPending || blockResolveNoAssignee} data-testid="button-confirm-status-change">
+              {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>
