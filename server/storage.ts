@@ -1543,12 +1543,15 @@ export class DatabaseStorage implements IStorage {
           ticketId, actorUserId: actorUser.id, type: "reopened",
           data: {},
         });
-      } else {
-        await db.insert(ticketEvents).values({
-          ticketId, actorUserId: actorUser.id, type: "status_changed",
-          data: { from: existing.status, to: patch.status },
-        });
       }
+
+      // Single source of truth for the transition shown in the timeline.
+      // The route handler must NOT insert its own status_changed event, or the
+      // activity feed shows the change twice.
+      await db.insert(ticketEvents).values({
+        ticketId, actorUserId: actorUser.id, type: "status_changed",
+        data: { from: existing.status, to: patch.status },
+      });
 
       const [slaCycle] = await db.select().from(ticketSlaCycles)
         .where(eq(ticketSlaCycles.ticketId, ticketId))

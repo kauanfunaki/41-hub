@@ -1074,14 +1074,14 @@ export default function TicketsDetail() {
                   <p className="font-semibold text-amber-700 dark:text-amber-400">Solicitação enviada</p>
                   <p className="text-muted-foreground mt-1">Aguardando análise de um administrador.</p>
                 </div>
+              ) : reopenRequest?.status === "REJECTED" ? (
+                <div className="rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-2.5 text-xs" data-testid="reopen-rejected-notice">
+                  <p className="font-semibold text-red-700 dark:text-red-400">Solicitação de reabertura recusada</p>
+                  {reopenRequest.decisionNote && <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{reopenRequest.decisionNote}</p>}
+                  <p className="text-muted-foreground mt-1">Não é possível solicitar uma nova reabertura para este chamado.</p>
+                </div>
               ) : (
                 <>
-                  {reopenRequest?.status === "REJECTED" && (
-                    <div className="rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-2.5 text-xs mb-2.5">
-                      <p className="font-semibold text-red-700 dark:text-red-400">Solicitação anterior recusada</p>
-                      {reopenRequest.decisionNote && <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{reopenRequest.decisionNote}</p>}
-                    </div>
-                  )}
                   <p className="text-xs text-muted-foreground mb-2.5">
                     A solução não resolveu o seu problema? Solicite a reabertura do chamado.
                   </p>
