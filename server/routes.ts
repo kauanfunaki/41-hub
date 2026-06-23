@@ -1873,6 +1873,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         resolutionDueAtManual: z.string().optional(),
         resolutionDueAtManualReason: z.string().optional(),
         queueOrder: z.number().int().positive().nullable().optional(),
+        // Optional note tied to a status change (GLPI-style "solution"/conclusion)
+        conclusionMessage: z.string().max(2000).optional(),
       });
 
       const parsed = patchSchema.safeParse(req.body);
@@ -1880,7 +1882,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
       }
 
-      const { resolutionDueAtManual, resolutionDueAtManualReason, ...ticketPatch } = parsed.data;
+      const { resolutionDueAtManual, resolutionDueAtManualReason, conclusionMessage, ...ticketPatch } = parsed.data;
+
+      // A ticket cannot be resolved without a responsible assignee.
+      if (ticketPatch.status === "RESOLVIDO") {
+        const assigneeIds = await storage.getTicketAssigneeIds(req.params.id);
+        if (assigneeIds.length === 0) {
+          return res.status(400).json({ error: "Atribua um responsável antes de concluir o chamado" });
+        }
+      }
 
       if (resolutionDueAtManual) {
         // Fetch old deadline for the event record
@@ -1914,6 +1924,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // NOTE: the status_changed timeline event is recorded inside
       // storage.adminUpdateTicket (single source of truth). Do not insert it
       // here as well, or the activity feed shows the change twice.
+
+      // Optional conclusion/solution note tied to the status change. Posted as a
+      // public comment so it appears in the activity timeline (GLPI-style).
+      if (ticketPatch.status && conclusionMessage?.trim()) {
+        const prefix: Record<string, string> = {
+          RESOLVIDO: "✅ Conclusão",
+          CANCELADO: "🚫 Cancelamento",
+          STANDBY: "⏸️ Pausa",
+        };
+        const label = prefix[ticketPatch.status] ?? "📝 Observação";
+        await pool.query(
+          `INSERT INTO ticket_comments (id, ticket_id, author_id, body, is_internal, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, false, NOW())`,
+          [req.params.id, req.user!.id, `${label}: ${conclusionMessage.trim()}`]
+        );
+      }
 
       if (ticketPatch.status) {
         try {
