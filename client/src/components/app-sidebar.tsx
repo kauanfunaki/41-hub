@@ -49,7 +49,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -240,28 +239,6 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-
-              {/* Alertas */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location === "/alerts"}
-                  data-testid="nav-alertas"
-                >
-                  <Link href="/alerts">
-                    <Bell className="h-4 w-4" />
-                    <span>Alertas</span>
-                    {alertCount > 0 && (
-                      <Badge
-                        variant="destructive"
-                        className="ml-auto h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center"
-                      >
-                        {alertCount > 99 ? "99+" : alertCount}
-                      </Badge>
-                    )}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -297,6 +274,28 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {/* Alertas */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/alerts"}
+                  data-testid="nav-alertas"
+                >
+                  <Link href="/alerts">
+                    <Bell className="h-4 w-4" />
+                    <span>Alertas</span>
+                    {alertCount > 0 && (
+                      <Badge
+                        variant="destructive"
+                        className="ml-auto h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center"
+                      >
+                        {alertCount > 99 ? "99+" : alertCount}
+                      </Badge>
+                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -318,6 +317,22 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {/* Analytics — admin only (moved out of the Admin panel) */}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location.startsWith("/admin/analytics")}
+                    data-testid="nav-analytics"
+                  >
+                    <Link href="/admin/analytics">
+                      <BarChart3 className="h-4 w-4" />
+                      <span>Analytics</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
 
               {/* Admin — single entry point for all admin settings */}
               {isAdmin && (
@@ -393,16 +408,6 @@ export function AppSidebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
-              <Link href="/profile">
-                <DropdownMenuItem
-                  data-testid="menu-profile"
-                  className="cursor-pointer"
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Perfil</span>
-                </DropdownMenuItem>
-              </Link>
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={logout}
                 className="text-destructive focus:text-destructive"
