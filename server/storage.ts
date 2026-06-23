@@ -1328,6 +1328,7 @@ export class DatabaseStorage implements IStorage {
     q?: string;
     includeClosed?: boolean;
     assignedToMe?: boolean;
+    pendingReopen?: boolean;
   }): Promise<TicketWithDetails[]> {
     const conditions: any[] = [];
 
@@ -1355,7 +1356,13 @@ export class DatabaseStorage implements IStorage {
       conditions.push(inArray(tickets.id, assignedSub));
     }
 
-    if (filters.status) {
+    if (filters.pendingReopen) {
+      // Tickets with a pending reopen request — regardless of status (they are RESOLVIDO)
+      const reopenSub = db.select({ ticketId: ticketReopenRequests.ticketId })
+        .from(ticketReopenRequests)
+        .where(eq(ticketReopenRequests.status, "PENDING"));
+      conditions.push(inArray(tickets.id, reopenSub));
+    } else if (filters.status) {
       conditions.push(eq(tickets.status, filters.status as any));
     } else if (filters.includeClosed) {
       conditions.push(inArray(tickets.status, ["RESOLVIDO", "CANCELADO"]));
