@@ -1643,6 +1643,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         q: req.query.q as string | undefined,
         includeClosed: req.query.includeClosed === "true",
         assignedToMe: req.query.assignedToMe === "true",
+        pendingReopen: req.query.pendingReopen === "true",
       };
       const ticketList = await storage.listTicketsForUser(req.user!, filters);
       res.json(ticketList);

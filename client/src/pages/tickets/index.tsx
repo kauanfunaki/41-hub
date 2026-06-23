@@ -19,6 +19,7 @@ import {
   Search,
   Clock,
   UserCheck,
+  RotateCcw,
 } from "lucide-react";
 import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -238,6 +239,19 @@ export default function TicketsIndex() {
     },
   });
 
+  // ── Solicitações de reabertura pendentes (admin). Sempre buscado para o badge.
+  const { data: reopenTickets = [], isLoading: loadingReopen } = useQuery<
+    TicketWithDetails[]
+  >({
+    queryKey: ["/api/tickets", { tab: "solicitacoes" }],
+    queryFn: async () => {
+      const res = await fetch(`/api/tickets?pendingReopen=true`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tickets");
+      return res.json();
+    },
+    enabled: user?.isAdmin === true,
+  });
+
   // ── Status buckets ──────────────────────────────────────────────────────
   const ATIVOS_STATUSES = ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_APROVACAO"];
   const AGUARDANDO_STATUSES = ["AGUARDANDO_REQUERENTE", "AGUARDANDO_USUARIO"];
@@ -252,6 +266,7 @@ export default function TicketsIndex() {
   const countHistorico = allTickets.filter(
     (t) => t.status === "RESOLVIDO" || t.status === "CANCELADO"
   ).length;
+  const countSolicitacoes = reopenTickets.length;
 
   // Apply priority filter for the displayed list only
   const matchesPriority = (t: TicketWithDetails) =>
@@ -264,10 +279,13 @@ export default function TicketsIndex() {
       ? activeTickets.filter((t) => inBucket(t, AGUARDANDO_STATUSES))
       : tab === "standby"
       ? activeTickets.filter((t) => t.status === "STANDBY")
+      : tab === "solicitacoes"
+      ? reopenTickets
       : allTickets.filter((t) => t.status === "RESOLVIDO" || t.status === "CANCELADO")
   ).filter(matchesPriority);
 
-  const isLoading = tab === "historico" ? loadingAll : loadingActive;
+  const isLoading =
+    tab === "historico" ? loadingAll : tab === "solicitacoes" ? loadingReopen : loadingActive;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -373,24 +391,47 @@ export default function TicketsIndex() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Histórico — separado à direita */}
-          <button
-            onClick={() => setTab("historico")}
-            data-testid="tab-history"
-            className={cn(
-              "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors border",
-              tab === "historico"
-                ? "bg-background text-foreground shadow-sm border-border"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          {/* Ações à direita — Solicitações (reabertura) + Histórico */}
+          <div className="flex items-center gap-2">
+            {/* Solicitações de reabertura — só aparece se houver pendência (admin) */}
+            {user?.isAdmin && countSolicitacoes > 0 && (
+              <button
+                onClick={() => setTab("solicitacoes")}
+                data-testid="tab-reopen-requests"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors border",
+                  tab === "solicitacoes"
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 shadow-sm"
+                    : "border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                )}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Solicitações
+                <Badge className="ml-0.5 px-1.5 h-4 text-[10px] bg-amber-500 text-white hover:bg-amber-500">
+                  {countSolicitacoes}
+                </Badge>
+              </button>
             )}
-          >
-            Histórico
-            {countHistorico > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1.5 h-4 text-[10px]">
-                {countHistorico}
-              </Badge>
-            )}
-          </button>
+
+            {/* Histórico */}
+            <button
+              onClick={() => setTab("historico")}
+              data-testid="tab-history"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors border",
+                tab === "historico"
+                  ? "bg-background text-foreground shadow-sm border-border"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              Histórico
+              {countHistorico > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 h-4 text-[10px]">
+                  {countHistorico}
+                </Badge>
+              )}
+            </button>
+          </div>
         </div>
 
         <TabsContent value={tab} className="mt-4">
@@ -404,6 +445,8 @@ export default function TicketsIndex() {
                 ? "Nenhum chamado aguardando o usuário"
                 : tab === "standby"
                 ? "Nenhum chamado em pausa"
+                : tab === "solicitacoes"
+                ? "Nenhuma solicitação de reabertura pendente"
                 : "Nenhum chamado encontrado"}
             </div>
           ) : (
