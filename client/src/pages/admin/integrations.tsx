@@ -30,6 +30,8 @@ import {
   Loader2,
   X,
   ArrowLeft,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -522,6 +524,155 @@ function EndpointGroup({
   );
 }
 
+// ── Slack Settings Panel ─────────────────────────────────────────────────────
+
+function SlackSettingsPanel() {
+  const { toast } = useToast();
+  const [techUrl, setTechUrl] = useState("");
+  const [grupo41Url, setGrupo41Url] = useState("");
+
+  const { isLoading } = useQuery({
+    queryKey: ["/api/admin/settings/slack"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/settings/slack");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setTechUrl(data.webhookTech ?? "");
+      setGrupo41Url(data.webhookGrupo41 ?? "");
+    },
+  } as any);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/admin/settings/slack", {
+        webhookTech: techUrl,
+        webhookGrupo41: grupo41Url,
+      });
+      if (!res.ok) throw new Error("Falha ao salvar");
+    },
+    onSuccess: () => {
+      toast({ title: "Configurações salvas", description: "Webhooks Slack atualizados." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const sendMetricsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/slack/send-weekly-metrics", {});
+      if (!res.ok) throw new Error("Falha ao enviar");
+    },
+    onSuccess: () => toast({ title: "Enviado", description: "Relatório semanal enviado ao #41-tech." }),
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  const sendTypingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/slack/send-monthly-typing", {});
+      if (!res.ok) throw new Error("Falha ao enviar");
+    },
+    onSuccess: () => toast({ title: "Enviado", description: "Ranking de digitação enviado ao #grupo-41." }),
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            Webhooks Slack
+          </CardTitle>
+          <CardDescription>
+            Configure os Incoming Webhooks para que o sistema envie notificações automáticas aos canais do Slack.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="slack-tech">URL do canal #41-tech</Label>
+            <Input
+              id="slack-tech"
+              type="url"
+              placeholder="https://hooks.slack.com/services/..."
+              value={techUrl}
+              onChange={(e) => setTechUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Recebe notificações de solicitações de reabertura e relatórios semanais.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="slack-grupo41">URL do canal #grupo-41</Label>
+            <Input
+              id="slack-grupo41"
+              type="url"
+              placeholder="https://hooks.slack.com/services/..."
+              value={grupo41Url}
+              onChange={(e) => setGrupo41Url(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Recebe o ranking mensal de digitação.
+            </p>
+          </div>
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            size="sm"
+          >
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Salvar webhooks
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Send className="h-4 w-4 text-muted-foreground" />
+            Envio manual
+          </CardTitle>
+          <CardDescription>
+            Acione relatórios manualmente para testar a integração ou cobrir envios perdidos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => sendMetricsMutation.mutate()}
+            disabled={sendMetricsMutation.isPending || !techUrl}
+          >
+            {sendMetricsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+            Enviar métricas semanais → #41-tech
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => sendTypingMutation.mutate()}
+            disabled={sendTypingMutation.isPending || !grupo41Url}
+          >
+            {sendTypingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+            Enviar ranking digitação → #grupo-41
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminIntegrations() {
   const { toast } = useToast();
   const isDesktop = useIsDesktop();
@@ -591,6 +742,10 @@ export default function AdminIntegrations() {
           <TabsTrigger value="docs">
             <Code2 className="h-4 w-4 mr-2" />
             Documentação
+          </TabsTrigger>
+          <TabsTrigger value="slack">
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Slack
           </TabsTrigger>
         </TabsList>
 
@@ -981,6 +1136,11 @@ X-Hub-Event: ticket_created
 
         </div>{/* end grid */}
         </ExplorerContext.Provider>
+        </TabsContent>
+
+        {/* ===== SLACK TAB ===== */}
+        <TabsContent value="slack" className="mt-4">
+          <SlackSettingsPanel />
         </TabsContent>
       </Tabs>
 
