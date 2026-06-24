@@ -255,8 +255,8 @@ async function requireNewsToken(req: Request, res: Response, next: NextFunction)
       return res.status(401).json({ error: "Invalid or revoked token" });
     }
     const scopes: string[] = result.rows[0].scopes ?? [];
-    if (!scopes.includes("news")) {
-      return res.status(403).json({ error: "Token does not have 'news' scope" });
+    if (!scopes.includes("news") && !scopes.includes("write")) {
+      return res.status(403).json({ error: "Token does not have 'news' or 'write' scope" });
     }
     next();
   } catch (err) {
