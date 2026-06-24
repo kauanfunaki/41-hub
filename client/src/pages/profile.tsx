@@ -14,6 +14,7 @@ import {
   Mail,
   Building2,
   Upload,
+  Trash2,
   Clock,
   Star,
   ExternalLink,
@@ -58,6 +59,7 @@ export default function Profile() {
   const [, setLocation] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
   const [photoLoadError, setPhotoLoadError] = useState(false);
 
   const [showAllSectors, setShowAllSectors] = useState(false);
@@ -105,6 +107,25 @@ export default function Profile() {
     queryKey: ["/api/typing/me"],
     enabled: !!user,
   });
+
+  const handleRemovePhoto = async () => {
+    setIsRemovingPhoto(true);
+    try {
+      const response = await fetch("/api/users/me/photo", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Remove failed");
+      await refreshUser();
+      queryClient.invalidateQueries({ queryKey: ["/api/users/directory"] });
+      setPhotoLoadError(false);
+      toast({ title: "Foto removida", description: "Voltando ao avatar padrão." });
+    } catch {
+      toast({ title: "Erro", description: "Não foi possível remover a foto.", variant: "destructive" });
+    } finally {
+      setIsRemovingPhoto(false);
+    }
+  };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -187,7 +208,7 @@ export default function Profile() {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingPhoto}
+              disabled={isUploadingPhoto || isRemovingPhoto}
               data-testid="button-upload-photo"
             >
               {isUploadingPhoto ? (
@@ -197,6 +218,23 @@ export default function Profile() {
               )}
               Alterar foto
             </Button>
+            {user.photoUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRemovePhoto}
+                disabled={isRemovingPhoto || isUploadingPhoto}
+                className="text-muted-foreground hover:text-destructive"
+                data-testid="button-remove-photo"
+              >
+                {isRemovingPhoto ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Remover foto
+              </Button>
+            )}
           </div>
 
           {/* Info */}
