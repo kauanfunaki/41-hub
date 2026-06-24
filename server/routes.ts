@@ -238,6 +238,61 @@ async function requireOpsToken(req: Request, res: Response, next: NextFunction) 
   }
 }
 
+// Token-based auth for n8n → News ingest (requires "news" scope)
+async function requireNewsToken(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing Bearer token" });
+  }
+  const rawToken = authHeader.slice(7);
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  try {
+    const result = await pool.query(
+      `SELECT id, scopes FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL`,
+      [tokenHash]
+    );
+    if (!result.rows.length) {
+      return res.status(401).json({ error: "Invalid or revoked token" });
+    }
+    const scopes: string[] = result.rows[0].scopes ?? [];
+    if (!scopes.includes("news")) {
+      return res.status(403).json({ error: "Token does not have 'news' scope" });
+    }
+    next();
+  } catch (err) {
+    console.error("[requireNewsToken] error:", err);
+    return res.status(500).json({ error: "Internal error" });
+  }
+}
+
+// Category → sector name mapping (used during news ingest)
+const CATEGORY_TO_SECTORS: Record<string, string[]> = {
+  "IA": ["Tech"],
+  "Programação": ["Tech"],
+  "Cloud": ["Tech"],
+  "DevOps": ["Tech"],
+  "Segurança": ["Tech"],
+  "Banco de Dados": ["Tech"],
+  "Tecnologia Geral": ["Tech", "BPO"],
+  "Tributário": ["Fiscal", "Contábil", "Financeiro", "BPO"],
+  "Legislação Fiscal": ["Fiscal", "Contábil"],
+  "Contabilidade": ["Contábil", "Fiscal", "BPO"],
+  "Finanças": ["Financeiro"],
+  "Mercado Financeiro": ["Financeiro"],
+  "Direito Empresarial": ["Societário"],
+  "Legislação": ["Societário", "Departamento Pessoal"],
+  "Societário": ["Societário"],
+  "Legislação Trabalhista": ["Departamento Pessoal", "Recursos Humanos"],
+  "eSocial": ["Departamento Pessoal"],
+  "RH": ["Recursos Humanos", "Departamento Pessoal", "Recrutamento", "BPO"],
+  "Gestão de Pessoas": ["Recursos Humanos"],
+  "Talent Acquisition": ["Recrutamento"],
+  "Mercado de Trabalho": ["Recrutamento", "Recursos Humanos"],
+  "Vendas": ["Comercial"],
+  "Mercado": ["Comercial"],
+  "Negócios": ["Comercial"],
+};
+
 // Helper to check if coordinator can manage a sector
 function canCoordinatorManageSector(user: UserWithRoles, sectorId: string): boolean {
   if (user.isAdmin) return true;
@@ -4911,6 +4966,225 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: "Falha ao salvar setores do watcher" });
+    }
+  });
+
+  // ============ News / Radar ============
+
+  // POST /api/news/ingest — called by n8n (requires "news" API token)
+  app.post("/api/news/ingest", requireNewsToken, async (req, res) => {
+    try {
+      const articleSchema = z.object({
+        title: z.string().min(1),
+        summary: z.string().min(1),
+        why_matters: z.string().optional(),
+        impact_level: z.enum(["BAIXO", "MÉDIO", "ALTO"]).optional().default("MÉDIO"),
+        source_name: z.string().optional(),
+        source_url: z.string().url(),
+        category: z.string().min(1),
+        batch_slot: z.string().optional(),
+        published_at: z.string().optional(),
+      });
+      const bodySchema = z.object({ articles: z.array(articleSchema).min(1).max(20) });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+
+      const today = new Date().toISOString().slice(0, 10);
+      let inserted = 0;
+
+      for (const art of parsed.data.articles) {
+        const sectorTags = CATEGORY_TO_SECTORS[art.category] ?? ["Tech"];
+        await pool.query(
+          `INSERT INTO news_articles
+             (id, title, summary, why_matters, impact_level, source_name, source_url,
+              category, sector_tags, batch_slot, fetched_date, published_at, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+           ON CONFLICT DO NOTHING`,
+          [
+            art.title, art.summary, art.why_matters ?? null, art.impact_level ?? "MÉDIO",
+            art.source_name ?? null, art.source_url, art.category,
+            sectorTags, art.batch_slot ?? null, today,
+            art.published_at ? new Date(art.published_at) : null,
+          ]
+        );
+        inserted++;
+      }
+
+      // Cleanup: delete articles older than 7 days that have no favorites
+      await pool.query(
+        `DELETE FROM news_articles
+         WHERE fetched_date < CURRENT_DATE - INTERVAL '7 days'
+           AND id NOT IN (SELECT DISTINCT article_id FROM news_favorites)`
+      );
+
+      res.json({ ok: true, inserted });
+    } catch (e) {
+      console.error("[POST /api/news/ingest]", e);
+      res.status(500).json({ error: "Falha ao ingerir notícias" });
+    }
+  });
+
+  // GET /api/news — list articles for the authenticated user
+  // Query params: sector (sector name | "todos"), date (YYYY-MM-DD), favorites (true/false)
+  app.get("/api/news", requireAuth, async (req, res) => {
+    try {
+      const sectorFilter = (req.query.sector as string) || null;
+      const dateFilter = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const favoritesOnly = req.query.favorites === "true";
+
+      let sectorCondition = "";
+      const params: any[] = [req.user!.id, dateFilter];
+
+      if (favoritesOnly) {
+        sectorCondition = "";
+      } else if (!sectorFilter || sectorFilter === "todos") {
+        sectorCondition = "";
+      } else {
+        params.push(sectorFilter);
+        sectorCondition = `AND $${params.length} = ANY(na.sector_tags)`;
+      }
+
+      const favoritesCondition = favoritesOnly
+        ? `AND nf_self.user_id IS NOT NULL`
+        : `AND (na.fetched_date >= $2::date - INTERVAL '7 days' OR nf_self.user_id IS NOT NULL)`;
+
+      const result = await pool.query(
+        `SELECT
+           na.*,
+           CASE WHEN nf_self.user_id IS NOT NULL THEN true ELSE false END AS "isFavorited",
+           ns.shared_by_name AS "sharedByName",
+           ns.message AS "shareMessage"
+         FROM news_articles na
+         LEFT JOIN news_favorites nf_self
+           ON nf_self.article_id = na.id AND nf_self.user_id = $1
+         LEFT JOIN LATERAL (
+           SELECT u.name AS shared_by_name, nsh.message
+           FROM news_shares nsh
+           JOIN users u ON u.id = nsh.shared_by_id
+           WHERE nsh.article_id = na.id
+             AND (nsh.shared_to_user_id = $1
+                  OR nsh.shared_to_sector_id IN (
+                    SELECT sector_id FROM user_sector_roles WHERE user_id = $1
+                  ))
+           ORDER BY nsh.created_at DESC
+           LIMIT 1
+         ) ns ON true
+         WHERE na.fetched_date = $2::date
+           ${sectorCondition}
+           ${favoritesCondition}
+         ORDER BY na.batch_slot ASC, na.created_at DESC`,
+        params
+      );
+
+      res.json(result.rows);
+    } catch (e) {
+      console.error("[GET /api/news]", e);
+      res.status(500).json({ error: "Falha ao buscar notícias" });
+    }
+  });
+
+  // GET /api/news/dates — available dates with articles (last 7 days)
+  app.get("/api/news/dates", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT DISTINCT fetched_date::text AS date
+         FROM news_articles
+         WHERE fetched_date >= CURRENT_DATE - INTERVAL '7 days'
+         ORDER BY date DESC`
+      );
+      res.json(result.rows.map((r: any) => r.date));
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao buscar datas" });
+    }
+  });
+
+  // POST /api/news/:id/favorite — add to favorites
+  app.post("/api/news/:id/favorite", requireAuth, async (req, res) => {
+    try {
+      await pool.query(
+        `INSERT INTO news_favorites (id, user_id, article_id, created_at)
+         VALUES (gen_random_uuid(), $1, $2, NOW())
+         ON CONFLICT (user_id, article_id) DO NOTHING`,
+        [req.user!.id, req.params.id]
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao favoritar" });
+    }
+  });
+
+  // DELETE /api/news/:id/favorite — remove from favorites
+  app.delete("/api/news/:id/favorite", requireAuth, async (req, res) => {
+    try {
+      await pool.query(
+        `DELETE FROM news_favorites WHERE user_id = $1 AND article_id = $2`,
+        [req.user!.id, req.params.id]
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: "Falha ao desfavoritar" });
+    }
+  });
+
+  // POST /api/news/:id/share — share with a user or a sector
+  app.post("/api/news/:id/share", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        sharedToUserId: z.string().optional(),
+        sharedToSectorId: z.string().optional(),
+        message: z.string().max(500).optional(),
+      }).refine(d => d.sharedToUserId || d.sharedToSectorId, {
+        message: "Informe um destinatário (usuário ou setor)",
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+
+      const { sharedToUserId, sharedToSectorId, message } = parsed.data;
+      const articleId = req.params.id;
+
+      // Verify article exists
+      const articleResult = await pool.query(
+        `SELECT id, title FROM news_articles WHERE id = $1`,
+        [articleId]
+      );
+      if (!articleResult.rows.length) return res.status(404).json({ error: "Notícia não encontrada" });
+      const article = articleResult.rows[0];
+
+      // Insert share record
+      await pool.query(
+        `INSERT INTO news_shares (id, article_id, shared_by_id, shared_to_user_id, shared_to_sector_id, message, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW())`,
+        [articleId, req.user!.id, sharedToUserId ?? null, sharedToSectorId ?? null, message ?? null]
+      );
+
+      // Collect recipient user IDs
+      let recipientIds: string[] = [];
+      if (sharedToUserId) {
+        recipientIds = [sharedToUserId];
+      } else if (sharedToSectorId) {
+        const usersResult = await pool.query(
+          `SELECT DISTINCT user_id FROM user_sector_roles WHERE sector_id = $1`,
+          [sharedToSectorId]
+        );
+        recipientIds = usersResult.rows.map((r: any) => r.user_id);
+      }
+
+      // Create notifications (exclude sender)
+      const targets = recipientIds.filter(id => id !== req.user!.id);
+      if (targets.length > 0) {
+        await storage.createNotifications(targets, {
+          type: "alert",
+          title: "Notícia compartilhada com você",
+          message: `${req.user!.name} compartilhou: "${article.title}"`,
+          linkUrl: "/news",
+          data: { subtype: "news_shared", articleId, sharedByName: req.user!.name } as any,
+        });
+      }
+
+      res.json({ ok: true, notified: targets.length });
+    } catch (e) {
+      console.error("[POST /api/news/:id/share]", e);
+      res.status(500).json({ error: "Falha ao compartilhar" });
     }
   });
 
