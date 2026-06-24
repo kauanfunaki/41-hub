@@ -18,6 +18,7 @@ import {
   Activity,
   GraduationCap,
   MessageSquarePlus,
+  Newspaper,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemeLogo } from "@/components/theme-logo";
@@ -236,6 +237,20 @@ export function AppSidebar() {
                   <Link href="/typing">
                     <Keyboard className="h-4 w-4" />
                     <span>Digitação</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {/* Notícias */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith("/news")}
+                  data-testid="nav-noticias"
+                >
+                  <Link href="/news">
+                    <Newspaper className="h-4 w-4" />
+                    <span>Notícias</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

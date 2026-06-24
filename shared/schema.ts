@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, integer, jsonb, pgEnum, unique, numeric, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, integer, jsonb, pgEnum, unique, numeric, primaryKey, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -720,3 +720,42 @@ export type OpsWatcher = typeof opsWatchers.$inferSelect;
 export type OpsEvent = typeof opsEvents.$inferSelect;
 export type InsertOpsEvent = z.infer<typeof insertOpsEventSchema>;
 export type OpsWatcherSector = typeof opsWatcherSectors.$inferSelect;
+
+// ============ News / Radar ============
+
+export const newsArticles = pgTable("news_articles", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  whyMatters: text("why_matters"),
+  impactLevel: varchar("impact_level", { length: 10 }).default("MÉDIO"),
+  sourceName: varchar("source_name", { length: 255 }),
+  sourceUrl: text("source_url").notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  sectorTags: text("sector_tags").array().notNull().default(sql`ARRAY[]::text[]`),
+  batchSlot: varchar("batch_slot", { length: 10 }),
+  fetchedDate: date("fetched_date").notNull().default(sql`CURRENT_DATE`),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const newsFavorites = pgTable("news_favorites", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  articleId: varchar("article_id", { length: 36 }).notNull().references(() => newsArticles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [unique().on(t.userId, t.articleId)]);
+
+export const newsShares = pgTable("news_shares", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id", { length: 36 }).notNull().references(() => newsArticles.id, { onDelete: "cascade" }),
+  sharedById: varchar("shared_by_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  sharedToUserId: varchar("shared_to_user_id", { length: 36 }).references(() => users.id, { onDelete: "cascade" }),
+  sharedToSectorId: varchar("shared_to_sector_id", { length: 36 }).references(() => sectors.id, { onDelete: "cascade" }),
+  message: text("message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type NewsArticle = typeof newsArticles.$inferSelect;
+export type NewsFavorite = typeof newsFavorites.$inferSelect;
+export type NewsShare = typeof newsShares.$inferSelect;
