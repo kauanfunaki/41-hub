@@ -94,7 +94,7 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
   const [kbTags, setKbTags] = useState("");
   const [autoAwaitOnMissing, setAutoAwaitOnMissing] = useState(false);
   const [requiresApproval, setRequiresApproval] = useState(false);
-  const [approvalMode, setApprovalMode] = useState("REQUESTER_COORDINATOR");
+  const [approvalMode, setApprovalMode] = useState("DESTINATION_COORDINATOR");
   const [approvalUserIds, setApprovalUserIds] = useState<string[]>([]);
 
   const { data: categories = [], isLoading } = useQuery<TicketCategory[]>({
@@ -194,7 +194,7 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
     setKbTags("");
     setAutoAwaitOnMissing(false);
     setRequiresApproval(false);
-    setApprovalMode("REQUESTER_COORDINATOR");
+    setApprovalMode("DESTINATION_COORDINATOR");
     setApprovalUserIds([]);
   }
 
@@ -675,8 +675,9 @@ export default function AdminTicketCategories(props: { embedded?: boolean } & Re
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="DESTINATION_COORDINATOR">Coordenador do setor de destino</SelectItem>
                             <SelectItem value="REQUESTER_COORDINATOR">Coordenador do setor do solicitante</SelectItem>
-                            <SelectItem value="TI_ADMIN">Admin do setor de destino (TI)</SelectItem>
+                            <SelectItem value="TI_ADMIN">Admin do setor de destino</SelectItem>
                             <SelectItem value="SPECIFIC_USERS">Usuários específicos</SelectItem>
                           </SelectContent>
                         </Select>

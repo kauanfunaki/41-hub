@@ -3012,7 +3012,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         kbTags: z.array(z.string()).nullable().optional(),
         autoAwaitOnMissing: z.boolean().optional(),
         requiresApproval: z.boolean().optional(),
-        approvalMode: z.enum(["REQUESTER_COORDINATOR", "TI_ADMIN", "SPECIFIC_USERS"]).optional(),
+        approvalMode: z.enum(["REQUESTER_COORDINATOR", "TI_ADMIN", "DESTINATION_COORDINATOR", "SPECIFIC_USERS"]).optional(),
         approvalUserIds: z.array(z.string()).optional(),
       });
       const parsed = schema.safeParse(req.body);

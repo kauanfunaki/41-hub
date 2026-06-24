@@ -1479,12 +1479,11 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (existing.status === "AGUARDANDO_APROVACAO" && patch.status !== "CANCELADO" && patch.status !== "AGUARDANDO_APROVACAO") {
-        const [cycle] = await db.select().from(ticketSlaCycles)
-          .where(eq(ticketSlaCycles.ticketId, ticketId))
-          .orderBy(desc(ticketSlaCycles.cycleNumber))
+        const [latestApproval] = await db.select().from(ticketApprovals)
+          .where(eq(ticketApprovals.ticketId, ticketId))
+          .orderBy(desc(ticketApprovals.cycleNumber))
           .limit(1);
-        const approval = cycle ? await this.getTicketApproval(ticketId, cycle.cycleNumber) : null;
-        if (!approval || approval.status !== "APPROVED") {
+        if (!latestApproval || latestApproval.status !== "APPROVED") {
           throw new Error("APPROVAL_REQUIRED");
         }
       }
@@ -2029,6 +2028,17 @@ export class DatabaseStorage implements IStorage {
         ));
       return [...new Set(rows.map(r => r.userId))];
     }
+    if (mode === "DESTINATION_COORDINATOR") {
+      const rows = await db.select({ userId: userSectorRoles.userId })
+        .from(userSectorRoles)
+        .innerJoin(users, and(eq(userSectorRoles.userId, users.id), eq(users.isActive, true)))
+        .where(and(
+          eq(userSectorRoles.sectorId, ticket.targetSectorId),
+          eq(userSectorRoles.roleName, "Coordenador"),
+        ));
+      return [...new Set(rows.map(r => r.userId))];
+    }
+    // REQUESTER_COORDINATOR (default)
     const rows = await db.select({ userId: userSectorRoles.userId })
       .from(userSectorRoles)
       .innerJoin(users, and(eq(userSectorRoles.userId, users.id), eq(users.isActive, true)))
