@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Activity,
   CheckCircle2,
@@ -15,12 +17,23 @@ import {
   Copy,
   Check,
   HelpCircle,
+  MessageSquarePlus,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -322,10 +335,55 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
 
 export default function OpsCenter() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [filterWatcher, setFilterWatcher] = useState<string>("all");
   const [filterStatus,  setFilterStatus]  = useState<string>("all");
   const [filterDate,    setFilterDate]    = useState<string>("");
   const [page, setPage] = useState(0);
+
+  // Report instability dialog
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportWatcherSlug, setReportWatcherSlug] = useState("");
+  const [reportCategoryId, setReportCategoryId] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+
+  const isCoordinator = user?.roles?.some((r) => r.roleName === "Coordenador");
+  const coordinatorSectorId = user?.roles?.find((r) => r.roleName === "Coordenador")?.sectorId ?? "";
+
+  const categoriesQuery = useQuery<{ id: string; name: string; parentId: string | null }[]>({
+    queryKey: ["/api/tickets/categories"],
+    select: (data: any[]) =>
+      data.flatMap((root: any) =>
+        root.children?.length > 0
+          ? root.children.map((c: any) => ({ id: c.id, name: `${root.name} / ${c.name}`, parentId: root.id }))
+          : [{ id: root.id, name: root.name, parentId: null }]
+      ),
+    enabled: reportOpen,
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: async () => {
+      const watcher = watchers.find((w) => w.slug === reportWatcherSlug);
+      const res = await apiRequest("POST", "/api/tickets", {
+        title: `Instabilidade: ${watcher?.name ?? reportWatcherSlug}`,
+        description: reportDescription,
+        categoryId: reportCategoryId,
+        requesterSectorId: coordinatorSectorId,
+        priority: "ALTA",
+      });
+      return res.json();
+    },
+    onSuccess: (ticket) => {
+      toast({ title: "Chamado aberto", description: `#${ticket.ticketNumber ?? ticket.id.slice(0, 8)} registrado com sucesso.` });
+      setReportOpen(false);
+      setReportWatcherSlug("");
+      setReportCategoryId("");
+      setReportDescription("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao abrir chamado", description: err.message, variant: "destructive" });
+    },
+  });
 
   const summaryQuery = useQuery<OpsSummary>({
     queryKey: ["/api/ops/summary"],
@@ -406,9 +464,22 @@ export default function OpsCenter() {
             Monitoramento em tempo real dos Watchers de documentos
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <RefreshCw className="h-3 w-3" />
-          Atualiza a cada 30s
+        <div className="flex items-center gap-3">
+          {isCoordinator && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReportOpen(true)}
+              data-testid="button-report-instability"
+            >
+              <MessageSquarePlus className="h-4 w-4 mr-2" />
+              Reportar instabilidade
+            </Button>
+          )}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RefreshCw className="h-3 w-3" />
+            Atualiza a cada 30s
+          </div>
         </div>
       </div>
 
@@ -600,6 +671,76 @@ export default function OpsCenter() {
           </div>
         )}
       </div>
+
+      {/* Reportar instabilidade dialog */}
+      <Dialog open={reportOpen} onOpenChange={(o) => { if (!reportMutation.isPending) setReportOpen(o); }}>
+        <DialogContent className="sm:max-w-lg" data-testid="dialog-report-instability">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquarePlus className="h-5 w-5 text-amber-500" />
+              Reportar instabilidade
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="report-watcher">Watcher</Label>
+              <Select value={reportWatcherSlug} onValueChange={setReportWatcherSlug}>
+                <SelectTrigger id="report-watcher" data-testid="select-report-watcher">
+                  <SelectValue placeholder="Selecione o watcher afetado" />
+                </SelectTrigger>
+                <SelectContent>
+                  {watchers.map((w) => (
+                    <SelectItem key={w.slug} value={w.slug}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="report-category">Categoria do chamado</Label>
+              <Select value={reportCategoryId} onValueChange={setReportCategoryId}>
+                <SelectTrigger id="report-category" data-testid="select-report-category">
+                  <SelectValue placeholder="Selecione a categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(categoriesQuery.data ?? []).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="report-desc">Descrição do problema</Label>
+              <Textarea
+                id="report-desc"
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="Descreva o que está acontecendo..."
+                rows={4}
+                data-testid="textarea-report-description"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportOpen(false)} disabled={reportMutation.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => reportMutation.mutate()}
+              disabled={reportMutation.isPending || !reportWatcherSlug || !reportCategoryId || !reportDescription.trim()}
+              data-testid="button-submit-report"
+            >
+              {reportMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Abrir chamado
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
