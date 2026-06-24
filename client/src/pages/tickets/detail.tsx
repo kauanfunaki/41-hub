@@ -70,6 +70,7 @@ import {
   Trash2,
   X,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -398,6 +399,10 @@ export default function TicketsDetail() {
   const [reopenDecisionOpen, setReopenDecisionOpen] = useState(false);
   const [reopenDecisionAction, setReopenDecisionAction] = useState<"accept" | "reject">("accept");
   const [reopenDecisionNote, setReopenDecisionNote] = useState("");
+  const [statusChangeOpen, setStatusChangeOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [conclusionMessage, setConclusionMessage] = useState("");
+  const [formExpanded, setFormExpanded] = useState(false);
 
   const { data: ticket, isLoading } = useQuery<TicketWithDetails>({
     queryKey: ["/api/tickets", ticketId],
@@ -448,7 +453,7 @@ export default function TicketsDetail() {
 
   const updateMutation = useMutation({
     mutationFn: async (patch: Record<string, any>) => { const r = await apiRequest("PATCH", `/api/tickets/${ticketId}`, patch); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); toast({ title: "Chamado atualizado" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] }); toast({ title: "Chamado atualizado" }); },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
   const assignMutation = useMutation({
@@ -532,9 +537,41 @@ export default function TicketsDetail() {
   const isCreator = !!ticket && ticket.createdBy === user?.id;
   const canUpload = canComment || isCreator;
 
+  // ── Status change flow (confirmation + optional conclusion note) ──────────────
+  const assigneeCount = ticket?.assignees?.length ?? 0;
+  const statusNeedsConclusion = (s: string | null) =>
+    s === "RESOLVIDO" || s === "CANCELADO" || s === "STANDBY";
+  const requestStatusChange = (newStatus: string) => {
+    if (!ticket || newStatus === ticket.status) return;
+    setPendingStatus(newStatus);
+    setConclusionMessage("");
+    setStatusChangeOpen(true);
+  };
+  const blockResolveNoAssignee = pendingStatus === "RESOLVIDO" && assigneeCount === 0;
+  const confirmStatusChange = () => {
+    if (!pendingStatus || blockResolveNoAssignee) return;
+    updateMutation.mutate(
+      { status: pendingStatus, ...(conclusionMessage.trim() ? { conclusionMessage: conclusionMessage.trim() } : {}) },
+      { onSuccess: () => { setStatusChangeOpen(false); setPendingStatus(null); setConclusionMessage(""); } },
+    );
+  };
+
   const imageAttachments = attachments.filter(a => a.mimeType?.startsWith("image/"));
 
+  // The ticket's opening description is shown as the first entry in the activity
+  // timeline (the standalone "Descrição" section was removed).
+  const descriptionItem = ticket?.description?.trim()
+    ? [{
+        _kind: "description" as const,
+        _date: new Date(ticket.createdAt),
+        body: ticket.description,
+        authorName: ticket.creatorName,
+        createdAt: ticket.createdAt,
+      }]
+    : [];
+
   const timeline = [
+    ...descriptionItem,
     ...comments.map(c => ({ ...c, _kind: "comment" as const, _date: new Date(c.createdAt) })),
     ...slaEvents.map(e => ({ ...e, _kind: "sla_event" as const, _date: new Date(e.createdAt) })),
     ...imageAttachments.map(a => ({ ...a, _kind: "image_attachment" as const, _date: new Date(a.createdAt) })),
@@ -607,69 +644,11 @@ export default function TicketsDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-0">
 
         {/* ── LEFT COLUMN ── */}
-        <div className="border-r min-h-full">
+        {/* Visual order is controlled via flex `order-*`: Atividade → Anexos → Dados do Formulário → Checklist */}
+        <div className="border-r min-h-full flex flex-col">
 
-          {/* Description */}
-          <section className="px-6 py-5 border-b">
-            <SectionLabel>Descrição</SectionLabel>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-              {ticket.description}
-            </p>
-          </section>
-
-          {/* Form data — shown only when the ticket has filled form fields */}
-          {ticket.requestData && Object.keys(ticket.requestData).length > 0 && (() => {
-            const schemaMap = new Map((ticket.categoryFormSchema ?? []).map(f => [f.key, f.label]));
-            return (
-              <section className="px-6 py-5 border-b">
-                <SectionLabel>Dados do formulário</SectionLabel>
-                <div className="space-y-3">
-                  {Object.entries(ticket.requestData).map(([key, value]) => (
-                    <div key={key}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
-                        {schemaMap.get(key) ?? key}
-                      </p>
-                      <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`request-data-${key}`}>
-                        {String(value)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })()}
-
-          {/* Checklist */}
-          {checklist.length > 0 && (
-            <section className="px-6 py-5 border-b">
-              <div className="flex items-center justify-between mb-3">
-                <SectionLabel>Checklist</SectionLabel>
-                <span className="text-[10px] text-muted-foreground">{doneCount}/{checklist.length} concluídos</span>
-              </div>
-              {/* Progress bar */}
-              <div className="h-1 bg-muted rounded-full mb-4 overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${checklistProgress}%` }} />
-              </div>
-              <div className="space-y-2">
-                {checklist.map(item => (
-                  <label key={item.id} className="flex items-center gap-2.5 text-sm cursor-pointer group" data-testid={`checklist-${item.key}`}>
-                    <Checkbox
-                      checked={item.isDone}
-                      onCheckedChange={(checked) => { if (isAdmin) checklistMutation.mutate({ itemId: item.id, isDone: checked === true }); }}
-                      disabled={!isAdmin}
-                      className="shrink-0"
-                    />
-                    <span className={`transition-all ${item.isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                      {item.label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Attachments */}
-          <section className="px-6 py-5 border-b">
+          {/* Attachments — rendered after Activity via order-2 */}
+          <section className="px-6 py-5 border-b order-2">
             <div className="flex items-center justify-between mb-3">
               <SectionLabel>Anexos {attachments.length > 0 && `· ${attachments.length}`}</SectionLabel>
               {canUpload && (
@@ -745,8 +724,8 @@ export default function TicketsDetail() {
             )}
           </section>
 
-          {/* Timeline / Comments */}
-          <section className="px-6 py-5">
+          {/* Timeline / Comments — rendered first via order-1 */}
+          <section className="px-6 py-5 border-b order-1">
             <div className="flex items-center gap-2 mb-4">
               <SectionLabel>Atividade</SectionLabel>
               {comments.length > 0 && (
@@ -800,6 +779,28 @@ export default function TicketsDetail() {
                             </div>
                             <span className="text-[10px] text-muted-foreground shrink-0">{formatDate(att.createdAt)}</span>
                           </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (item._kind === "description") {
+                    const d = item as { _kind: "description"; _date: Date; body: string; authorName?: string; createdAt: string | Date };
+                    const dInitials = (d.authorName || "?")
+                      .split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+                    return (
+                      <div key="ticket-description" className="flex gap-3" data-testid="ticket-description-message">
+                        <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                          {dInitials}
+                        </div>
+                        <div className="flex-1 rounded-xl px-3.5 py-2.5 text-sm bg-muted/50 border border-border/60">
+                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span className="text-xs font-semibold text-foreground">{d.authorName || "Requerente"}</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 rounded px-1.5 py-0.5">
+                              Abertura do chamado
+                            </span>
+                            <span className="text-[10px] text-muted-foreground ml-auto">{formatDate(d.createdAt)}</span>
+                          </div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/85">{d.body}</p>
                         </div>
                       </div>
                     );
@@ -946,6 +947,71 @@ export default function TicketsDetail() {
               </div>
             )}
           </section>
+
+          {/* Form data — collapsed by default, expandable (order-3) */}
+          {ticket.requestData && Object.keys(ticket.requestData).length > 0 && (() => {
+            const schemaMap = new Map((ticket.categoryFormSchema ?? []).map(f => [f.key, f.label]));
+            const fieldCount = Object.keys(ticket.requestData).length;
+            return (
+              <section className="px-6 py-5 border-b order-3">
+                <button
+                  type="button"
+                  onClick={() => setFormExpanded(v => !v)}
+                  className="flex items-center justify-between w-full group"
+                  data-testid="button-toggle-form-data"
+                >
+                  <span className="flex items-center gap-2">
+                    <SectionLabel>Dados do formulário</SectionLabel>
+                    <span className="text-[10px] text-muted-foreground -mt-3">· {fieldCount} campo{fieldCount !== 1 ? "s" : ""}</span>
+                  </span>
+                  <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", formExpanded && "rotate-180")} />
+                </button>
+                {formExpanded && (
+                  <div className="space-y-3 mt-1">
+                    {Object.entries(ticket.requestData).map(([key, value]) => (
+                      <div key={key}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
+                          {schemaMap.get(key) ?? key}
+                        </p>
+                        <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`request-data-${key}`}>
+                          {String(value)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
+          {/* Checklist (order-4) */}
+          {checklist.length > 0 && (
+            <section className="px-6 py-5 border-b order-4">
+              <div className="flex items-center justify-between mb-3">
+                <SectionLabel>Checklist</SectionLabel>
+                <span className="text-[10px] text-muted-foreground">{doneCount}/{checklist.length} concluídos</span>
+              </div>
+              {/* Progress bar */}
+              <div className="h-1 bg-muted rounded-full mb-4 overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${checklistProgress}%` }} />
+              </div>
+              <div className="space-y-2">
+                {checklist.map(item => (
+                  <label key={item.id} className="flex items-center gap-2.5 text-sm cursor-pointer group" data-testid={`checklist-${item.key}`}>
+                    <Checkbox
+                      checked={item.isDone}
+                      onCheckedChange={(checked) => { if (isAdmin) checklistMutation.mutate({ itemId: item.id, isDone: checked === true }); }}
+                      disabled={!isAdmin}
+                      className="shrink-0"
+                    />
+                    <span className={`transition-all ${item.isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                      {item.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* ── RIGHT SIDEBAR ── */}
@@ -1008,7 +1074,7 @@ export default function TicketsDetail() {
               <div className="space-y-2">
                 {(ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
                   <Button size="sm" className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                    onClick={() => updateMutation.mutate({ status: "EM_ANDAMENTO" })} disabled={updateMutation.isPending} data-testid="button-quick-start">
+                    onClick={() => requestStatusChange("EM_ANDAMENTO")} disabled={updateMutation.isPending} data-testid="button-quick-start">
                     <ArrowRight className="h-3.5 w-3.5" />Iniciar atendimento
                   </Button>
                 )}
@@ -1020,19 +1086,19 @@ export default function TicketsDetail() {
                 )}
                 {(ticket.status === "AGUARDANDO_REQUERENTE" || ticket.status === "AGUARDANDO_USUARIO" || ticket.status === "STANDBY") && (
                   <Button size="sm" variant="outline" className="w-full gap-2"
-                    onClick={() => updateMutation.mutate({ status: "EM_ANDAMENTO" })} disabled={updateMutation.isPending} data-testid="button-quick-resume">
+                    onClick={() => requestStatusChange("EM_ANDAMENTO")} disabled={updateMutation.isPending} data-testid="button-quick-resume">
                     <ArrowRight className="h-3.5 w-3.5" />Retomar atendimento
                   </Button>
                 )}
                 {(ticket.status === "EM_ANDAMENTO" || ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
                   <Button size="sm" variant="outline" className="w-full gap-2"
-                    onClick={() => updateMutation.mutate({ status: "STANDBY" })} disabled={updateMutation.isPending} data-testid="button-quick-standby">
+                    onClick={() => requestStatusChange("STANDBY")} disabled={updateMutation.isPending} data-testid="button-quick-standby">
                     <Clock className="h-3.5 w-3.5" />Colocar em Pausa
                   </Button>
                 )}
                 {(ticket.status === "EM_ANDAMENTO" || ticket.status === "AGUARDANDO_USUARIO" || ticket.status === "AGUARDANDO_REQUERENTE" || ticket.status === "STANDBY") && (
                   <Button size="sm" className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => updateMutation.mutate({ status: "RESOLVIDO" })} disabled={updateMutation.isPending} data-testid="button-quick-resolve">
+                    onClick={() => requestStatusChange("RESOLVIDO")} disabled={updateMutation.isPending} data-testid="button-quick-resolve">
                     <CheckCircle2 className="h-3.5 w-3.5" />Concluir chamado
                   </Button>
                 )}
@@ -1231,7 +1297,7 @@ export default function TicketsDetail() {
               <SectionLabel>Configurações</SectionLabel>
               <div className="space-y-1.5">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Status</Label>
-                <Select value={ticket.status} onValueChange={(v) => updateMutation.mutate({ status: v })}>
+                <Select value={ticket.status} onValueChange={(v) => requestStatusChange(v)}>
                   <SelectTrigger className="h-8 text-xs" data-testid="admin-select-status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ABERTO">Aberto</SelectItem>
@@ -1352,6 +1418,49 @@ export default function TicketsDetail() {
               variant={reopenDecisionAction === "reject" ? "destructive" : "default"}
               data-testid="button-confirm-reopen-decision">
               {reopenDecisionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : reopenDecisionAction === "accept" ? "Confirmar reabertura" : "Confirmar recusa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status change confirmation (with optional conclusion note) */}
+      <Dialog open={statusChangeOpen} onOpenChange={(v) => { setStatusChangeOpen(v); if (!v) { setPendingStatus(null); setConclusionMessage(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirmar alteração de status</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Alterar status de{" "}
+              <span className="font-medium text-foreground">{statusLabels[ticket.status] ?? ticket.status}</span>{" "}
+              para{" "}
+              <span className="font-medium text-foreground">{statusLabels[pendingStatus ?? ""] ?? pendingStatus}</span>?
+            </p>
+            {blockResolveNoAssignee ? (
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs flex gap-2" data-testid="resolve-no-assignee-warning">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <span className="text-amber-800 dark:text-amber-200">
+                  Atribua um responsável ao chamado antes de concluí-lo.
+                </span>
+              </div>
+            ) : statusNeedsConclusion(pendingStatus) && (
+              <div className="space-y-2">
+                <Label>
+                  {pendingStatus === "RESOLVIDO" ? "Mensagem de conclusão (opcional)"
+                    : pendingStatus === "CANCELADO" ? "Motivo do cancelamento (opcional)"
+                    : "Motivo da pausa (opcional)"}
+                </Label>
+                <Textarea value={conclusionMessage} onChange={(e) => setConclusionMessage(e.target.value)}
+                  placeholder={pendingStatus === "RESOLVIDO" ? "Descreva como o chamado foi solucionado..."
+                    : pendingStatus === "CANCELADO" ? "Descreva o motivo do cancelamento..."
+                    : "Descreva o motivo da pausa..."}
+                  rows={3} data-testid="input-conclusion-message" />
+                <p className="text-[11px] text-muted-foreground">A mensagem será registrada na Atividade do chamado.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusChangeOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmStatusChange} disabled={updateMutation.isPending || blockResolveNoAssignee} data-testid="button-confirm-status-change">
+              {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>

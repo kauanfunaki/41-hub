@@ -9,6 +9,7 @@ import {
   Ticket,
   Bell,
   LineChart,
+  BookOpen,
   Keyboard,
   Download,
   Puzzle,
@@ -51,14 +52,6 @@ const adminGroups: AdminGroup[] = [
         href: "/admin/reports",
         color: "text-chart-5",
         bgColor: "bg-chart-5/10",
-      },
-      {
-        title: "Analytics",
-        description: "Métricas, SLA e painel de operações TI",
-        icon: LineChart,
-        href: "/admin/analytics",
-        color: "text-chart-4",
-        bgColor: "bg-chart-4/10",
       },
       {
         title: "Auditoria",
