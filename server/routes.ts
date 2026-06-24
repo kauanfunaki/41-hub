@@ -13,6 +13,7 @@ import { storage } from "./storage";
 import { pool } from "./db";
 import type { UserWithRoles } from "@shared/schema";
 import { emitEvent } from "./lib/webhooks";
+import { sendSlack, getSlackWebhookUrl } from "./lib/slack";
 import { isEntraConfigured, getMsalClient } from "./lib/entra";
 
 // ── Web Push (VAPID) setup ──────────────────────────────────────────────────
@@ -2589,6 +2590,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("Error dispatching reopen-request notification:", notifErr);
       }
 
+      // Slack notification → canal 41-tech
+      try {
+        const slackUrl = await getSlackWebhookUrl("SLACK_WEBHOOK_TECH");
+        if (slackUrl) {
+          const appBase = process.env.APP_BASE_URL || "";
+          await sendSlack(
+            slackUrl,
+            `🔄 *Solicitação de reabertura pendente*\n• *Chamado:* ${ticket.title}\n• *Solicitante:* ${req.user!.name}\n• *Motivo:* ${parsed.data.reason}\n• <${appBase}/tickets/${ticket.id}|Ver chamado>`
+          );
+        }
+      } catch (slackErr) {
+        console.error("Slack reopen notification failed:", slackErr);
+      }
+
       res.status(201).json({ message: "Solicitação de reabertura enviada", reopenRequest });
     } catch (error: any) {
       console.error("Error requesting reopen:", error);
@@ -2710,6 +2725,120 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error updating webhook settings:", error);
       res.status(500).json({ error: "Failed to update webhook settings" });
+    }
+  });
+
+  // ==================== SLACK SETTINGS & REPORTS ====================
+
+  app.get("/api/admin/settings/slack", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const [techRow, grupo41Row] = await Promise.all([
+        storage.getSetting("SLACK_WEBHOOK_TECH"),
+        storage.getSetting("SLACK_WEBHOOK_GRUPO41"),
+      ]);
+      res.json({
+        webhookTech: techRow?.value || "",
+        webhookGrupo41: grupo41Row?.value || "",
+      });
+    } catch (error) {
+      console.error("Error fetching Slack settings:", error);
+      res.status(500).json({ error: "Failed to fetch Slack settings" });
+    }
+  });
+
+  app.put("/api/admin/settings/slack", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        webhookTech: z.string(),
+        webhookGrupo41: z.string(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos" });
+
+      await Promise.all([
+        storage.setSetting("SLACK_WEBHOOK_TECH", parsed.data.webhookTech),
+        storage.setSetting("SLACK_WEBHOOK_GRUPO41", parsed.data.webhookGrupo41),
+      ]);
+
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "slack_settings_update",
+        targetType: "settings",
+        targetId: "slack",
+        metadata: { webhookTech: !!parsed.data.webhookTech, webhookGrupo41: !!parsed.data.webhookGrupo41 },
+        ip: req.ip || req.socket?.remoteAddress,
+      });
+
+      res.json({ message: "Configurações Slack atualizadas" });
+    } catch (error) {
+      console.error("Error updating Slack settings:", error);
+      res.status(500).json({ error: "Failed to update Slack settings" });
+    }
+  });
+
+  // Send weekly metrics report to Slack (#41-tech)
+  app.post("/api/admin/slack/send-weekly-metrics", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const slackUrl = await getSlackWebhookUrl("SLACK_WEBHOOK_TECH");
+      if (!slackUrl) return res.status(400).json({ error: "URL do webhook 41-tech não configurada" });
+
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const fmt = (d: Date) =>
+        d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+
+      const [opened, resolved, avgRes] = await Promise.all([
+        pool.query(`SELECT COUNT(*) FROM tickets WHERE created_at >= $1`, [weekAgo]),
+        pool.query(`SELECT COUNT(*) FROM tickets WHERE closed_at >= $1 AND status = 'RESOLVIDO'`, [weekAgo]),
+        pool.query(
+          `SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - created_at)) / 3600), 1) as avg_h
+           FROM tickets WHERE closed_at >= $1 AND status = 'RESOLVIDO'`,
+          [weekAgo]
+        ),
+      ]);
+
+      const totalOpened = opened.rows[0].count;
+      const totalResolved = resolved.rows[0].count;
+      const avgHours = avgRes.rows[0].avg_h ?? "—";
+
+      const text = `📊 *Métricas semanais de chamados (${fmt(weekAgo)} – ${fmt(now)})*\n• Abertos: *${totalOpened}*\n• Resolvidos: *${totalResolved}*\n• Tempo médio de resolução: *${avgHours}h*`;
+      await sendSlack(slackUrl, text);
+      res.json({ message: "Relatório enviado", text });
+    } catch (error) {
+      console.error("Error sending weekly Slack metrics:", error);
+      res.status(500).json({ error: "Failed to send weekly metrics" });
+    }
+  });
+
+  // Send monthly typing ranking to Slack (#grupo-41)
+  app.post("/api/admin/slack/send-monthly-typing", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const slackUrl = await getSlackWebhookUrl("SLACK_WEBHOOK_GRUPO41");
+      if (!slackUrl) return res.status(400).json({ error: "URL do webhook grupo-41 não configurada" });
+
+      const now = new Date();
+      const targetMonth = (req.body?.month as string) ||
+        `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}`; // previous month by default
+      const leaderboard = await storage.getTypingLeaderboard({ monthKey: targetMonth, limit: 10 });
+
+      const medals = ["🥇", "🥈", "🥉"];
+      const rows = leaderboard.map((entry: any, i: number) => {
+        const medal = medals[i] || `${i + 1}.`;
+        return `${medal} *${entry.userName || entry.name || "—"}* — ${entry.wpm} PPM`;
+      });
+
+      const monthLabel = new Date(`${targetMonth}-01`).toLocaleDateString("pt-BR", {
+        month: "long", year: "numeric",
+      });
+      const text = rows.length > 0
+        ? `⌨️ *Ranking de digitação — ${monthLabel}*\n${rows.join("\n")}`
+        : `⌨️ Nenhum resultado de digitação para ${monthLabel}`;
+
+      await sendSlack(slackUrl, text);
+      res.json({ message: "Ranking enviado", text });
+    } catch (error) {
+      console.error("Error sending monthly typing Slack:", error);
+      res.status(500).json({ error: "Failed to send monthly typing ranking" });
     }
   });
 
