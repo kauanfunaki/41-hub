@@ -2617,9 +2617,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const slackUrl = await getSlackWebhookUrl("SLACK_WEBHOOK_TECH");
         if (slackUrl) {
           const appBase = process.env.APP_BASE_URL || "";
+          const ticketUrl = `${appBase}/tickets/${ticket.id}`;
           await sendSlack(
             slackUrl,
-            `🔄 *Solicitação de reabertura pendente*\n• *Chamado:* ${ticket.title}\n• *Solicitante:* ${req.user!.name}\n• *Motivo:* ${parsed.data.reason}\n• <${appBase}/tickets/${ticket.id}|Ver chamado>`
+            `🔄 Solicitação de reabertura pendente — ${ticket.title}`,
+            [
+              {
+                type: "header",
+                text: { type: "plain_text", text: "🔄 Solicitação de reabertura pendente", emoji: true },
+              },
+              {
+                type: "section",
+                fields: [
+                  { type: "mrkdwn", text: `*Chamado:*\n${ticket.title}` },
+                  { type: "mrkdwn", text: `*Solicitante:*\n${req.user!.name}` },
+                ],
+              },
+              {
+                type: "section",
+                text: { type: "mrkdwn", text: `*Motivo:*\n_${parsed.data.reason}_` },
+              },
+              {
+                type: "actions",
+                elements: [
+                  {
+                    type: "button",
+                    text: { type: "plain_text", text: "Ver chamado →", emoji: true },
+                    url: ticketUrl,
+                    style: "primary",
+                  },
+                ],
+              },
+              {
+                type: "context",
+                elements: [{ type: "mrkdwn", text: "41 Hub · Chamados" }],
+              },
+            ]
           );
         }
       } catch (slackErr) {
@@ -2807,25 +2840,72 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const fmt = (d: Date) =>
-        d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+        d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
 
-      const [opened, resolved, avgRes] = await Promise.all([
+      const [opened, resolved, avgRes, highPrio, totalOpen] = await Promise.all([
         pool.query(`SELECT COUNT(*) FROM tickets WHERE created_at >= $1`, [weekAgo]),
         pool.query(`SELECT COUNT(*) FROM tickets WHERE closed_at >= $1 AND status = 'RESOLVIDO'`, [weekAgo]),
         pool.query(
-          `SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - created_at)) / 3600), 1) as avg_h
+          `SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - created_at)) / 3600), 1) AS avg_h
            FROM tickets WHERE closed_at >= $1 AND status = 'RESOLVIDO'`,
           [weekAgo]
         ),
+        pool.query(
+          `SELECT COUNT(*) FROM tickets WHERE created_at >= $1 AND priority IN ('ALTA', 'URGENTE')`,
+          [weekAgo]
+        ),
+        pool.query(
+          `SELECT COUNT(*) FROM tickets WHERE status NOT IN ('RESOLVIDO', 'CANCELADO')`
+        ),
       ]);
 
-      const totalOpened = opened.rows[0].count;
-      const totalResolved = resolved.rows[0].count;
-      const avgHours = avgRes.rows[0].avg_h ?? "—";
+      const nOpened   = Number(opened.rows[0].count);
+      const nResolved = Number(resolved.rows[0].count);
+      const avgHours  = avgRes.rows[0].avg_h != null
+        ? String(avgRes.rows[0].avg_h).replace(".", ",") + "h"
+        : "—";
+      const nHighPrio = Number(highPrio.rows[0].count);
+      const nOpen     = Number(totalOpen.rows[0].count);
+      const resRate   = nOpened > 0 ? Math.round((nResolved / nOpened) * 100) + "%" : "—";
 
-      const text = `📊 *Métricas semanais de chamados (${fmt(weekAgo)} – ${fmt(now)})*\n• Abertos: *${totalOpened}*\n• Resolvidos: *${totalResolved}*\n• Tempo médio de resolução: *${avgHours}h*`;
-      await sendSlack(slackUrl, text);
-      res.json({ message: "Relatório enviado", text });
+      const periodLabel = `${fmt(weekAgo)} – ${fmt(now)}`;
+      const fallbackText = `📊 Relatório Semanal de Chamados  |  ${periodLabel}`;
+
+      const blocks = [
+        {
+          type: "header",
+          text: { type: "plain_text", text: "📊 Relatório Semanal de Chamados", emoji: true },
+        },
+        {
+          type: "context",
+          elements: [{ type: "mrkdwn", text: `📅  *${periodLabel}*  ·  41 Hub` }],
+        },
+        { type: "divider" },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `🎫  *Abertos na semana*\n\`${nOpened}\`` },
+            { type: "mrkdwn", text: `✅  *Resolvidos na semana*\n\`${nResolved}\`` },
+            { type: "mrkdwn", text: `⏱️  *Tempo médio de resolução*\n\`${avgHours}\`` },
+            { type: "mrkdwn", text: `📈  *Taxa de resolução*\n\`${resRate}\`` },
+          ],
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `🚨  *Alta/Urgente abertos*\n\`${nHighPrio}\`` },
+            { type: "mrkdwn", text: `🕐  *Em aberto agora*\n\`${nOpen}\`` },
+          ],
+        },
+        { type: "divider" },
+        {
+          type: "context",
+          elements: [{ type: "mrkdwn", text: "41 Hub  ·  _Gerado automaticamente_" }],
+        },
+      ];
+
+      await sendSlack(slackUrl, fallbackText, blocks);
+      res.json({ message: "Relatório enviado" });
     } catch (error) {
       console.error("Error sending weekly Slack metrics:", error);
       res.status(500).json({ error: "Failed to send weekly metrics" });
@@ -2843,21 +2923,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}`; // previous month by default
       const leaderboard = await storage.getTypingLeaderboard({ monthKey: targetMonth, limit: 10 });
 
-      const medals = ["🥇", "🥈", "🥉"];
-      const rows = leaderboard.map((entry: any, i: number) => {
-        const medal = medals[i] || `${i + 1}.`;
-        return `${medal} *${entry.userName || entry.name || "—"}* — ${entry.wpm} PPM`;
-      });
-
       const monthLabel = new Date(`${targetMonth}-01`).toLocaleDateString("pt-BR", {
         month: "long", year: "numeric",
       });
-      const text = rows.length > 0
-        ? `⌨️ *Ranking de digitação — ${monthLabel}*\n${rows.join("\n")}`
-        : `⌨️ Nenhum resultado de digitação para ${monthLabel}`;
+      // Capitalize first letter (pt-BR returns lowercase month)
+      const monthTitle = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
-      await sendSlack(slackUrl, text);
-      res.json({ message: "Ranking enviado", text });
+      const fallbackText = `⌨️ Ranking de Digitação — ${monthTitle}`;
+
+      if (leaderboard.length === 0) {
+        await sendSlack(slackUrl, `⌨️ Nenhum resultado de digitação para ${monthTitle}`);
+        return res.json({ message: "Ranking enviado (sem resultados)" });
+      }
+
+      const medals = ["🥇", "🥈", "🥉"];
+
+      // Top 3 — prominent
+      const top3 = leaderboard.slice(0, 3).map((e: any, i: number) => {
+        const acc = Number(e.accuracy).toFixed(0);
+        return `${medals[i]}  *${e.userName}*  —  ${e.wpm} PPM  ·  ${acc}% de precisão`;
+      }).join("\n");
+
+      // Positions 4–10 — condensed
+      const rest = leaderboard.slice(3).map((e: any, i: number) => {
+        const acc = Number(e.accuracy).toFixed(0);
+        return `*${i + 4}º*  ${e.userName}  —  ${e.wpm} PPM  ·  ${acc}%`;
+      }).join("\n");
+
+      const blocks: object[] = [
+        {
+          type: "header",
+          text: { type: "plain_text", text: `⌨️ Ranking de Digitação — ${monthTitle}`, emoji: true },
+        },
+        {
+          type: "context",
+          elements: [{ type: "mrkdwn", text: `Melhores resultados do mês  ·  41 Hub` }],
+        },
+        { type: "divider" },
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: top3 },
+        },
+      ];
+
+      if (rest) {
+        blocks.push({ type: "divider" });
+        blocks.push({
+          type: "section",
+          text: { type: "mrkdwn", text: rest },
+        });
+      }
+
+      blocks.push({ type: "divider" });
+      blocks.push({
+        type: "context",
+        elements: [{ type: "mrkdwn", text: "41 Hub  ·  Teste de Digitação" }],
+      });
+
+      await sendSlack(slackUrl, fallbackText, blocks);
+      res.json({ message: "Ranking enviado" });
     } catch (error) {
       console.error("Error sending monthly typing Slack:", error);
       res.status(500).json({ error: "Failed to send monthly typing ranking" });

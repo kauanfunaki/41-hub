@@ -9,15 +9,21 @@ export async function getSlackWebhookUrl(key: SlackChannel): Promise<string> {
   return row?.value || "";
 }
 
-export async function sendSlack(webhookUrl: string, text: string): Promise<void> {
+export async function sendSlack(
+  webhookUrl: string,
+  text: string,
+  blocks?: object[]
+): Promise<void> {
   if (!webhookUrl) return;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
+    const body: Record<string, unknown> = { text };
+    if (blocks?.length) body.blocks = blocks;
     await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     clearTimeout(timer);
