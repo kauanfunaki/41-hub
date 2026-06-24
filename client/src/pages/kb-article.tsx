@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MarkdownContent } from "@/components/markdown-content";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -31,24 +32,6 @@ interface KbArticleFull {
   isPublished: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-/** Very lightweight markdown → HTML renderer (no external deps) */
-function renderMarkdown(md: string): string {
-  return md
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/_(.+?)_/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
-    .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
-    .replace(/^---$/gm, "<hr />")
-    .replace(/\n{2,}/g, "</p><p>")
-    .replace(/\n/g, "<br />");
 }
 
 export default function KbArticle() {
@@ -121,8 +104,6 @@ export default function KbArticle() {
     );
   }
 
-  const html = renderMarkdown(article.body);
-
   return (
     <PageContainer className="flex flex-col gap-4 py-6 max-w-3xl">
       {/* Breadcrumb nav */}
@@ -192,23 +173,7 @@ export default function KbArticle() {
 
         {/* Body */}
         <div className="p-6">
-          <div
-            className="
-              prose prose-sm dark:prose-invert max-w-none text-foreground
-              [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:leading-tight
-              [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5
-              [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-1.5 [&_h3]:mt-4
-              [&_p]:mb-4 [&_p]:leading-relaxed [&_p]:text-foreground/90
-              [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4 [&_ul]:space-y-1
-              [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-4
-              [&_li]:leading-relaxed
-              [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-xs [&_code]:font-mono [&_code]:border [&_code]:border-border
-              [&_strong]:font-semibold
-              [&_em]:italic
-              [&_hr]:border-border [&_hr]:my-5
-            "
-            dangerouslySetInnerHTML={{ __html: `<p>${html}</p>` }}
-          />
+          <MarkdownContent content={article.body} />
         </div>
 
         {/* Feedback */}
