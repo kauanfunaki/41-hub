@@ -2612,18 +2612,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("Error dispatching reopen-request notification:", notifErr);
       }
 
-      // Slack notification → canal 41-tech
+      // Emit webhook event → n8n handles Slack notification
       try {
-        const slackUrl = await getSlackWebhookUrl("SLACK_WEBHOOK_TECH");
-        if (slackUrl) {
-          const appBase = process.env.APP_BASE_URL || "";
-          await sendSlack(
-            slackUrl,
-            `🔄 *Solicitação de reabertura pendente*\n• *Chamado:* ${ticket.title}\n• *Solicitante:* ${req.user!.name}\n• *Motivo:* ${parsed.data.reason}\n• <${appBase}/tickets/${ticket.id}|Ver chamado>`
-          );
-        }
-      } catch (slackErr) {
-        console.error("Slack reopen notification failed:", slackErr);
+        await emitEvent("ticket_reopen_requested", {
+          ticketId: ticket.id,
+          title: ticket.title,
+          linkUrl: `/tickets/${ticket.id}`,
+          requester: {
+            id: req.user!.id,
+            name: req.user!.name,
+          },
+          reason: parsed.data.reason,
+        });
+      } catch (eventErr) {
+        console.error("ticket_reopen_requested event failed:", eventErr);
       }
 
       res.status(201).json({ message: "Solicitação de reabertura enviada", reopenRequest });
