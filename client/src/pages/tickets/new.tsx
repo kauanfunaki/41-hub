@@ -42,6 +42,7 @@ import {
   CheckCircle2,
   Search,
   X,
+  ChevronDown,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -228,6 +229,7 @@ export default function TicketsNew() {
   const [requesterSectorId, setRequesterSectorId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categorySearch, setCategorySearch] = useState("");
+  const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set());
   const [priority, setPriority] = useState("MEDIA");
   const [showTemplateConfirm, setShowTemplateConfirm] = useState(false);
   const pendingTemplate = useRef("");
@@ -375,6 +377,15 @@ export default function TicketsNew() {
     (selectedCategory as any)?.formSchema || [];
   const selectedRequiredAttachments: RequiredAttachment[] =
     (selectedCategory as any)?.requiredAttachments || [];
+
+  function toggleBranch(id: string) {
+    setExpandedBranches((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function handleCategoryChange(newCategoryId: string) {
     setCategoryId(newCategoryId);
@@ -603,51 +614,67 @@ export default function TicketsNew() {
                       <button type="button" onClick={() => setCategorySearch("")} className="text-xs text-primary mt-1 hover:underline">Limpar busca</button>
                     </div>
                   ) : (
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       {filteredBranches.map(({ root, leaves }, branchIdx) => {
                         const branchColor = BRANCH_COLORS[branchIdx % BRANCH_COLORS.length];
                         const initial = root.name.charAt(0).toUpperCase();
+                        const hasSelected = leaves.some((c) => c.id === categoryId);
+                        const showLeaves = categorySearch.length > 0 || expandedBranches.has(root.id);
                         return (
                           <div key={root.id}>
-                            {/* Branch header */}
-                            <div className="flex items-center gap-2.5 mb-3">
+                            {/* Branch header — click to expand/collapse */}
+                            <button
+                              type="button"
+                              onClick={() => toggleBranch(root.id)}
+                              className="flex items-center gap-2.5 w-full text-left mb-2"
+                            >
                               <div className={cn("flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold border shrink-0", branchColor)}>
                                 {initial}
                               </div>
-                              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                                 {root.name}
                               </span>
-                              <div className="flex-1 h-px bg-border" />
-                            </div>
-                            {/* Leaf cards */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {leaves.map((cat) => {
-                                const isSelected = categoryId === cat.id;
-                                return (
-                                  <button
-                                    key={cat.id}
-                                    type="button"
-                                    onClick={() => handleCategoryChange(cat.id)}
-                                    data-testid={`category-card-${cat.id}`}
-                                    className={cn(
-                                      "rounded-xl border-2 px-3 py-3 text-left transition-all group",
-                                      isSelected
-                                        ? "border-primary bg-primary/5"
-                                        : "border-border hover:border-muted-foreground/40 hover:bg-muted/40"
-                                    )}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <p className={cn("text-sm font-medium leading-snug", isSelected ? "text-primary" : "")}>
-                                        {cat.name}
-                                      </p>
-                                      {isSelected && (
-                                        <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                              <div className="flex-1 h-px bg-border mx-1" />
+                              {hasSelected && !showLeaves && (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                              )}
+                              <ChevronDown className={cn(
+                                "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0",
+                                showLeaves ? "rotate-0" : "-rotate-90"
+                              )} />
+                            </button>
+
+                            {/* Leaf cards — only when expanded */}
+                            {showLeaves && (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pb-2">
+                                {leaves.map((cat) => {
+                                  const isSelected = categoryId === cat.id;
+                                  return (
+                                    <button
+                                      key={cat.id}
+                                      type="button"
+                                      onClick={() => handleCategoryChange(cat.id)}
+                                      data-testid={`category-card-${cat.id}`}
+                                      className={cn(
+                                        "rounded-xl border-2 px-3 py-3 text-left transition-all group",
+                                        isSelected
+                                          ? "border-primary bg-primary/5"
+                                          : "border-border hover:border-muted-foreground/40 hover:bg-muted/40"
                                       )}
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className={cn("text-sm font-medium leading-snug", isSelected ? "text-primary" : "")}>
+                                          {cat.name}
+                                        </p>
+                                        {isSelected && (
+                                          <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
