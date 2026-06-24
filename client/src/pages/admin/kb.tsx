@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -354,10 +354,10 @@ export default function AdminKb() {
                 <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conteúdo</Label>
                 <div className="space-y-2">
                   <Label htmlFor="kb-body">Texto do artigo</Label>
-                  <Textarea
+                  <MarkdownEditor
                     id="kb-body"
                     value={formBody}
-                    onChange={(e) => setFormBody(e.target.value)}
+                    onChange={setFormBody}
                     placeholder="Conteúdo do artigo..."
                     rows={12}
                     data-testid="input-article-body"
