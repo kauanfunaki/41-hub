@@ -652,6 +652,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Remove user photo (return to default avatar)
+  app.delete("/api/users/me/photo", requireAuth, async (req, res) => {
+    try {
+      await storage.updateUser(req.user!.id, { photoUrl: null });
+
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "user_remove_photo",
+        targetType: "user",
+        targetId: req.user!.id,
+        metadata: {},
+        ip: req.ip || req.socket.remoteAddress,
+      });
+
+      const userWithRoles = await storage.getUserWithRoles(req.user!.id);
+      res.json({ user: userWithRoles });
+    } catch (error) {
+      console.error("Error removing photo:", error);
+      res.status(500).json({ error: "Failed to remove photo" });
+    }
+  });
+
   // Get team members (same sector)
   app.get("/api/users/team", requireAuth, async (req, res) => {
     try {

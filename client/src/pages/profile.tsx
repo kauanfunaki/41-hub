@@ -11,14 +11,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Mail, 
-  Building2, 
-  Phone, 
-  Save, 
-  Upload, 
-  Users, 
-  Clock, 
+import {
+  Mail,
+  Building2,
+  Phone,
+  Save,
+  Upload,
+  Trash2,
+  Users,
+  Clock,
   Star,
   ExternalLink,
   Loader2,
@@ -55,6 +56,7 @@ export default function Profile() {
   const [whatsapp, setWhatsapp] = useState(user?.whatsapp || "");
   const [isEditingWhatsapp, setIsEditingWhatsapp] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
 
   const [showAllSectors, setShowAllSectors] = useState(false);
   const [selectedSectorId, setSelectedSectorId] = useState<string>("all");
@@ -149,6 +151,24 @@ export default function Profile() {
     },
   });
 
+  const handleRemovePhoto = async () => {
+    setIsRemovingPhoto(true);
+    try {
+      const response = await fetch("/api/users/me/photo", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Remove failed");
+      await refreshUser();
+      queryClient.invalidateQueries({ queryKey: ["/api/users/directory"] });
+      toast({ title: "Foto removida", description: "Voltando ao avatar padrão." });
+    } catch {
+      toast({ title: "Erro", description: "Não foi possível remover a foto.", variant: "destructive" });
+    } finally {
+      setIsRemovingPhoto(false);
+    }
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -239,7 +259,7 @@ export default function Profile() {
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isUploadingPhoto}
+                disabled={isUploadingPhoto || isRemovingPhoto}
                 data-testid="button-upload-photo"
               >
                 {isUploadingPhoto ? (
@@ -249,6 +269,23 @@ export default function Profile() {
                 )}
                 Alterar foto
               </Button>
+              {user.photoUrl && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemovePhoto}
+                  disabled={isRemovingPhoto || isUploadingPhoto}
+                  className="text-muted-foreground hover:text-destructive"
+                  data-testid="button-remove-photo"
+                >
+                  {isRemovingPhoto ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Remover foto
+                </Button>
+              )}
             </div>
 
             <div className="flex-1 space-y-4">
