@@ -136,7 +136,7 @@ const statusBadge: Record<string, string> = {
   CANCELADO:            "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200",
 };
 
-const REFETCH_INTERVAL = 30_000;
+const REFETCH_INTERVAL = 10_000;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

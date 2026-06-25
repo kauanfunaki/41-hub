@@ -109,7 +109,7 @@ function KpiCard({
   );
 }
 
-const REFETCH_INTERVAL = 30_000;
+const REFETCH_INTERVAL = 10_000;
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
