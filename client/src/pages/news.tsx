@@ -371,10 +371,38 @@ export default function NewsPage() {
     staleTime: 5 * 60_000,
   });
 
-  const triviaQuery = useQuery<{ dollar: string | null; worldDay: string | null }>({
+  const triviaQuery = useQuery<{ worldDay: string | null }>({
     queryKey: ["/api/geral/trivia", targetDate],
     queryFn: () =>
       fetch(`/api/geral/trivia?date=${targetDate}`, { credentials: "include" }).then((r) => r.json()),
+    staleTime: 30 * 60_000,
+  });
+
+  const dollarQuery = useQuery<string | null>({
+    queryKey: ["/external/dollar", targetDate],
+    queryFn: async () => {
+      const now = new Date();
+      const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      try {
+        if (targetDate >= todayLocal) {
+          const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL");
+          const data = await r.json();
+          const bid = parseFloat(data?.USDBRL?.bid ?? "0");
+          return bid > 0 ? bid.toFixed(2).replace(".", ",") : null;
+        } else {
+          const endCompact = targetDate.replace(/-/g, "");
+          const startDate = new Date(`${targetDate}T12:00:00`);
+          startDate.setDate(startDate.getDate() - 7);
+          const startCompact = startDate.toISOString().slice(0, 10).replace(/-/g, "");
+          const r = await fetch(`https://economia.awesomeapi.com.br/json/daily/USD-BRL/1?start_date=${startCompact}&end_date=${endCompact}`);
+          const data = await r.json();
+          const item = Array.isArray(data) ? data[0] : null;
+          return item?.bid ? parseFloat(item.bid).toFixed(2).replace(".", ",") : null;
+        }
+      } catch {
+        return null;
+      }
+    },
     staleTime: 30 * 60_000,
   });
 
@@ -514,8 +542,8 @@ export default function NewsPage() {
           </span>
         )}
 
-        {/* Geral trivia — direita da barra de data */}
-        {(triviaQuery.data?.dollar || triviaQuery.data?.worldDay) && (
+        {/* Trivia — direita da barra de data */}
+        {(dollarQuery.data || triviaQuery.data?.worldDay) && (
           <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
             {triviaQuery.data?.worldDay && (
               <span className="flex items-center gap-1.5">
@@ -523,13 +551,13 @@ export default function NewsPage() {
                 <span>Hoje é {triviaQuery.data.worldDay}</span>
               </span>
             )}
-            {triviaQuery.data?.worldDay && triviaQuery.data?.dollar && (
+            {triviaQuery.data?.worldDay && dollarQuery.data && (
               <span className="text-border">·</span>
             )}
-            {triviaQuery.data?.dollar && (
+            {dollarQuery.data && (
               <span className="flex items-center gap-1.5">
                 <TrendingUp className="h-3 w-3 text-emerald-500 shrink-0" />
-                <span>Dólar hoje <strong className="text-foreground">R$ {triviaQuery.data.dollar}</strong></span>
+                <span>Dólar hoje <strong className="text-foreground">R$ {dollarQuery.data}</strong></span>
               </span>
             )}
           </div>

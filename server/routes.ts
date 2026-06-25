@@ -5495,35 +5495,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const dow = new Date(`${date}T12:00:00`).getDay();
     const worldDay = specificDay ?? DOW_FALLBACKS[dow];
 
-    let dollar: string | null = null;
-    try {
-      // Usa horário BRT (UTC-3) para comparar com a data solicitada
-      const nowBRT = new Date(Date.now() - 3 * 60 * 60 * 1000);
-      const todayBRT = nowBRT.toISOString().slice(0, 10);
-      let raw: any;
-      if (date >= todayBRT) {
-        const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL");
-        raw = await r.json();
-        const bid = parseFloat(raw?.USDBRL?.bid ?? "0");
-        if (bid > 0) dollar = bid.toFixed(2).replace(".", ",");
-      } else {
-        // Expande para 7 dias atrás para cobrir fins de semana e feriados
-        const endCompact = date.replace(/-/g, "");
-        const startDate = new Date(`${date}T12:00:00`);
-        startDate.setDate(startDate.getDate() - 7);
-        const startCompact = startDate.toISOString().slice(0, 10).replace(/-/g, "");
-        const r = await fetch(
-          `https://economia.awesomeapi.com.br/json/daily/USD-BRL/1?start_date=${startCompact}&end_date=${endCompact}`
-        );
-        raw = await r.json();
-        const item = Array.isArray(raw) ? raw[0] : null;
-        if (item?.bid) dollar = parseFloat(item.bid).toFixed(2).replace(".", ",");
-      }
-    } catch {
-      // ignorar falha no câmbio
-    }
-
-    res.json({ dollar, worldDay });
+    res.json({ worldDay });
   });
 
   // GET /api/news — list articles for the authenticated user
