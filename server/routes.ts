@@ -282,6 +282,12 @@ const CATEGORY_TO_SECTORS: Record<string, string[]> = {
   "Direito Empresarial": ["Societário"],
   "Legislação": ["Societário", "Departamento Pessoal"],
   "Societário": ["Societário"],
+  // Geral — aparece para todos os setores
+  "Ciência & Saúde": ["Tech", "BPO", "Fiscal", "Contábil", "Financeiro", "Societário", "Departamento Pessoal"],
+  "Finanças Pessoais": ["Tech", "BPO", "Fiscal", "Contábil", "Financeiro", "Societário", "Departamento Pessoal"],
+  "Comportamento": ["Tech", "BPO", "Fiscal", "Contábil", "Financeiro", "Societário", "Departamento Pessoal"],
+  "Cultura & Curiosidades": ["Tech", "BPO", "Fiscal", "Contábil", "Financeiro", "Societário", "Departamento Pessoal"],
+  "Mundo": ["Tech", "BPO", "Fiscal", "Contábil", "Financeiro", "Societário", "Departamento Pessoal"],
   "Legislação Trabalhista": ["Departamento Pessoal", "Recursos Humanos"],
   "eSocial": ["Departamento Pessoal"],
   "RH": ["Recursos Humanos", "Departamento Pessoal", "Recrutamento", "BPO"],

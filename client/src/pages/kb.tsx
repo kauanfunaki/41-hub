@@ -43,8 +43,33 @@ function readingTime(body: string): string {
   return `${minutes} min`;
 }
 
-function stripMarkdown(text: string): string {
-  return text.replace(/[#*`_\[\]]/g, "").slice(0, 140);
+function stripMarkdown(text: string, maxLen = 140): string {
+  const lines = text.split("\n");
+  const chunks: string[] = [];
+
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    // skip table rows and separators
+    if (/^\|/.test(t) || /^[\|\s\-:=+]+$/.test(t)) continue;
+    // skip headings, code fences, horizontal rules, blockquote markers alone
+    if (/^#{1,6}\s/.test(t) || /^```/.test(t) || /^[-*_]{3,}$/.test(t)) continue;
+
+    const clean = t
+      .replace(/`[^`]*`/g, "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\*{1,3}([^*\n]*)\*{1,3}/g, "$1")
+      .replace(/_{1,3}([^_\n]*)_{1,3}/g, "$1")
+      .replace(/^>\s*/, "")
+      .trim();
+
+    if (clean) chunks.push(clean);
+    if (chunks.join(" ").length >= maxLen) break;
+  }
+
+  const result = chunks.join(" ").slice(0, maxLen);
+  return result || text.replace(/\s+/g, " ").slice(0, maxLen);
 }
 
 export default function Kb() {
