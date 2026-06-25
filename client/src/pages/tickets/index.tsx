@@ -110,7 +110,7 @@ function toSentenceCase(str: string): string {
   return str;
 }
 
-const REFETCH_INTERVAL = 30_000;
+const REFETCH_INTERVAL = 10_000;
 
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
