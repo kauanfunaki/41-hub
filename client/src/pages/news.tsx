@@ -375,7 +375,6 @@ export default function NewsPage() {
     queryKey: ["/api/geral/trivia", targetDate],
     queryFn: () =>
       fetch(`/api/geral/trivia?date=${targetDate}`, { credentials: "include" }).then((r) => r.json()),
-    enabled: geralOnly,
     staleTime: 30 * 60_000,
   });
 
@@ -516,7 +515,7 @@ export default function NewsPage() {
         )}
 
         {/* Geral trivia — direita da barra de data */}
-        {geralOnly && (triviaQuery.data?.dollar || triviaQuery.data?.worldDay) && (
+        {(triviaQuery.data?.dollar || triviaQuery.data?.worldDay) && (
           <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
             {triviaQuery.data?.worldDay && (
               <span className="flex items-center gap-1.5">
