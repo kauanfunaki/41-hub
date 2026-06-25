@@ -5115,7 +5115,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const result = await pool.query(
         `SELECT
-           na.*,
+           na.id,
+           na.title,
+           na.summary,
+           na.why_matters AS "whyMatters",
+           na.impact_level AS "impactLevel",
+           na.source_name AS "sourceName",
+           na.source_url AS "sourceUrl",
+           na.category,
+           na.sector_tags AS "sectorTags",
+           na.batch_slot AS "batchSlot",
+           na.fetched_date::text AS "fetchedDate",
+           na.published_at AS "publishedAt",
+           na.created_at AS "createdAt",
            CASE WHEN nf_self.user_id IS NOT NULL THEN true ELSE false END AS "isFavorited",
            ns.shared_by_name AS "sharedByName",
            ns.message AS "shareMessage"
