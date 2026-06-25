@@ -136,6 +136,8 @@ const statusBadge: Record<string, string> = {
   CANCELADO:            "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200",
 };
 
+const REFETCH_INTERVAL = 30_000;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(dateStr: string | Date | null | undefined): string {
@@ -408,21 +410,25 @@ export default function TicketsDetail() {
     queryKey: ["/api/tickets", ticketId],
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}`, { credentials: "include" }); if (!r.ok) throw new Error("Failed"); return r.json(); },
     enabled: !!ticketId,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const { data: comments = [] } = useQuery<CommentWithAuthor[]>({
     queryKey: ["/api/tickets", ticketId, "comments"],
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/comments`, { credentials: "include" }); if (!r.ok) throw new Error("Failed"); return r.json(); },
     enabled: !!ticketId,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const { data: slaEvents = [] } = useQuery<TicketEventWithActor[]>({
     queryKey: ["/api/tickets", ticketId, "events"],
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/events`, { credentials: "include" }); if (!r.ok) return []; return r.json(); },
     enabled: !!ticketId,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const { data: attachments = [] } = useQuery<AttachmentWithUploader[]>({
     queryKey: ["/api/tickets", ticketId, "attachments"],
     queryFn: async () => { const r = await fetch(`/api/tickets/${ticketId}/attachments`, { credentials: "include" }); if (!r.ok) throw new Error("Failed"); return r.json(); },
     enabled: !!ticketId,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const { data: allUsers = [] } = useQuery<DirectoryUser[]>({
     queryKey: ["/api/users/directory", "all"],

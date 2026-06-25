@@ -109,6 +109,8 @@ function KpiCard({
   );
 }
 
+const REFETCH_INTERVAL = 30_000;
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -126,12 +128,14 @@ export default function Home() {
   const { data: ticketStats } = useQuery<{ tickets: TicketStats }>({
     queryKey: ["/api/admin/analytics/stats"],
     enabled: user?.isAdmin === true,
+    refetchInterval: REFETCH_INTERVAL,
   });
 
   const { data: myTicketsRaw } = useQuery<MyTicket[] | unknown>({
     queryKey: ["/api/tickets?assignedToMe=true"],
     queryFn: () => fetch("/api/tickets?assignedToMe=true", { credentials: "include" }).then(r => r.json()),
     retry: false,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const myTickets: MyTicket[] = Array.isArray(myTicketsRaw) ? myTicketsRaw.filter((t: MyTicket) =>
     ["ABERTO", "NA_FILA", "EM_ANDAMENTO", "AGUARDANDO_USUARIO", "AGUARDANDO_APROVACAO", "AGUARDANDO_REQUERENTE", "STANDBY"].includes(t.status)
@@ -142,6 +146,7 @@ export default function Home() {
     queryFn: () => fetch("/api/ops/stats", { credentials: "include" }).then(r => r.json()),
     enabled: user?.isAdmin === true,
     retry: false,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const opsStats = opsStatsRaw && typeof opsStatsRaw === "object" && "totalToday" in (opsStatsRaw as object)
     ? (opsStatsRaw as OpsStats) : null;
@@ -153,6 +158,7 @@ export default function Home() {
         r.json(),
       ),
     retry: false,
+    refetchInterval: REFETCH_INTERVAL,
   });
   const alerts: AlertItem[] = Array.isArray(alertsRaw) ? alertsRaw : [];
 

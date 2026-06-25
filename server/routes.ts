@@ -5147,8 +5147,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       "06-20": "Dia Mundial do Refugiado",
       "06-21": "Dia Mundial da Música 🎵",
       "06-23": "Dia Olímpico 🏅",
-      "06-25": "Dia Mundial de Apoio às Vítimas de Tortura",
-      "06-26": "Dia Internacional contra o Tráfico de Drogas",
+      "06-26": "Dia Mundial de Apoio às Vítimas de Tortura",
       // Julho
       "07-11": "Dia Mundial da População",
       "07-17": "Dia Mundial do Emoji 🎉",

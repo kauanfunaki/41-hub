@@ -110,6 +110,8 @@ function toSentenceCase(str: string): string {
   return str;
 }
 
+const REFETCH_INTERVAL = 30_000;
+
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -222,6 +224,7 @@ export default function TicketsIndex() {
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
+    refetchInterval: REFETCH_INTERVAL,
   });
 
   // ── Histórico: RESOLVIDO + CANCELADO. Always fetched for the count badge.
@@ -237,6 +240,7 @@ export default function TicketsIndex() {
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
+    refetchInterval: REFETCH_INTERVAL,
   });
 
   // ── Solicitações de reabertura pendentes (admin). Sempre buscado para o badge.
@@ -250,6 +254,7 @@ export default function TicketsIndex() {
       return res.json();
     },
     enabled: user?.isAdmin === true,
+    refetchInterval: REFETCH_INTERVAL,
   });
 
   // ── Status buckets ──────────────────────────────────────────────────────
