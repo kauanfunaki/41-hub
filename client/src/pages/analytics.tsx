@@ -12,6 +12,7 @@ import {
   X,
   BarChart2,
   ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -200,9 +201,10 @@ export default function Analytics() {
           </span>
           <div className="flex-1 h-px bg-border" />
           <Link href="/admin/analytics/tickets">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0">
+            <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
               <BarChart2 className="h-3.5 w-3.5" />
               Ver detalhamento
+              <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </Link>
         </div>
