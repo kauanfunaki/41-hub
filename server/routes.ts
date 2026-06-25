@@ -5095,14 +5095,176 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // GET /api/geral/trivia — dollar rate + world day for the Geral view
+  app.get("/api/geral/trivia", requireAuth, async (req, res) => {
+    const WORLD_DAYS: Record<string, string> = {
+      // Janeiro
+      "01-01": "Ano Novo 🎊",
+      "01-04": "Dia Mundial do Braille",
+      "01-20": "Dia de Conscientização do Pinguim 🐧",
+      "01-21": "Dia Internacional do Abraço 🤗",
+      "01-24": "Dia Internacional da Educação",
+      "01-27": "Dia em Memória das Vítimas do Holocausto",
+      "01-28": "Dia Internacional da Proteção de Dados 🔒",
+      // Fevereiro
+      "02-04": "Dia Mundial do Câncer",
+      "02-11": "Dia Internacional da Mulher na Ciência 🔬",
+      "02-13": "Dia Mundial do Rádio 📻",
+      "02-14": "Valentine's Day 💑",
+      "02-20": "Dia Mundial da Justiça Social",
+      "02-21": "Dia Internacional da Língua Materna 🗣️",
+      // Março
+      "03-08": "Dia Internacional da Mulher 👩",
+      "03-14": "Dia do Pi (π = 3,14...) 🔢",
+      "03-20": "Dia Internacional da Felicidade 😊",
+      "03-21": "Dia Internacional da Poesia 📝",
+      "03-22": "Dia Mundial da Água 💧",
+      "03-23": "Dia Meteorológico Mundial 🌤️",
+      "03-27": "Dia Mundial do Teatro 🎭",
+      // Abril
+      "04-01": "Dia da Mentira 🤥",
+      "04-02": "Dia Mundial de Conscientização do Autismo",
+      "04-07": "Dia Mundial da Saúde 🏥",
+      "04-22": "Dia da Terra 🌍",
+      "04-23": "Dia Mundial do Livro 📚",
+      "04-26": "Dia Mundial da Propriedade Intelectual",
+      // Maio
+      "05-03": "Dia Mundial da Liberdade de Imprensa",
+      "05-04": "Star Wars Day ⚡ — Que a Força esteja com você!",
+      "05-05": "Dia Mundial da Higiene das Mãos 🙌",
+      "05-08": "Dia Mundial da Cruz Vermelha ❤️",
+      "05-15": "Dia Internacional da Família 👨‍👩‍👧",
+      "05-17": "Dia Mundial das Telecomunicações 📡",
+      "05-22": "Dia Internacional da Biodiversidade 🌿",
+      "05-25": "Dia do Orgulho Nerd 🤓",
+      "05-31": "Dia Mundial sem Tabaco 🚭",
+      // Junho
+      "06-01": "Dia Internacional das Crianças 👧",
+      "06-05": "Dia Mundial do Meio Ambiente 🌿",
+      "06-08": "Dia Mundial dos Oceanos 🌊",
+      "06-14": "Dia Mundial do Doador de Sangue 🩸",
+      "06-17": "Dia Mundial de Combate à Desertificação 🏜️",
+      "06-20": "Dia Mundial do Refugiado",
+      "06-21": "Dia Mundial da Música 🎵",
+      "06-23": "Dia Olímpico 🏅",
+      "06-25": "Dia Mundial de Apoio às Vítimas de Tortura",
+      "06-26": "Dia Internacional contra o Tráfico de Drogas",
+      // Julho
+      "07-11": "Dia Mundial da População",
+      "07-17": "Dia Mundial do Emoji 🎉",
+      "07-20": "Dia Internacional do Xadrez ♟️",
+      "07-28": "Dia Mundial da Hepatite",
+      "07-30": "Dia Mundial da Amizade 🤝",
+      // Agosto
+      "08-08": "Dia Mundial do Gato 🐱",
+      "08-12": "Dia Internacional da Juventude",
+      "08-19": "Dia Mundial da Fotografia 📷",
+      "08-26": "Dia Internacional da Igualdade das Mulheres 👩‍⚖️",
+      // Setembro
+      "09-08": "Dia Mundial da Alfabetização 📖",
+      "09-10": "Dia Mundial de Prevenção ao Suicídio",
+      "09-16": "Dia Internacional da Camada de Ozônio 🌐",
+      "09-21": "Dia Internacional da Paz ☮️",
+      "09-22": "Dia Mundial sem Carro 🚶",
+      "09-28": "Dia Mundial do Acesso Universal à Informação",
+      // Outubro
+      "10-01": "Dia Internacional dos Idosos 👴",
+      "10-04": "Dia Mundial do Animal 🐾",
+      "10-05": "Dia Mundial dos Professores 🍎",
+      "10-10": "Dia Mundial da Saúde Mental 🧠",
+      "10-11": "Dia Internacional da Menina 👧",
+      "10-16": "Dia Mundial da Alimentação 🍽️",
+      "10-31": "Halloween 🎃",
+      // Novembro
+      "11-13": "Dia Mundial da Gentileza 💛",
+      "11-14": "Dia Mundial do Diabetes",
+      "11-19": "Dia Mundial do Vaso Sanitário 🚽",
+      "11-20": "Dia Universal das Crianças / Consciência Negra",
+      // Dezembro
+      "12-01": "Dia Mundial de Combate à AIDS 🎗️",
+      "12-03": "Dia Internacional das Pessoas com Deficiência",
+      "12-05": "Dia Mundial do Solo 🌱",
+      "12-10": "Dia Internacional dos Direitos Humanos",
+      "12-21": "Dia Internacional do Yoga 🧘",
+      "12-25": "Natal 🎄",
+    };
+
+    const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+    const [, month, day] = date.split("-");
+    const worldDay = WORLD_DAYS[`${month}-${day}`] ?? null;
+
+    let dollar: string | null = null;
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      let raw: any;
+      if (date >= today) {
+        const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL");
+        raw = await r.json();
+        const bid = parseFloat(raw?.USDBRL?.bid ?? "0");
+        if (bid > 0) dollar = bid.toFixed(2).replace(".", ",");
+      } else {
+        const dateCompact = date.replace(/-/g, "");
+        const r = await fetch(`https://economia.awesomeapi.com.br/json/daily/USD-BRL/1?start_date=${dateCompact}&end_date=${dateCompact}`);
+        raw = await r.json();
+        const item = Array.isArray(raw) ? raw[0] : null;
+        if (item?.bid) dollar = parseFloat(item.bid).toFixed(2).replace(".", ",");
+      }
+    } catch {
+      // ignorar falha no câmbio
+    }
+
+    res.json({ dollar, worldDay });
+  });
+
   // GET /api/news — list articles for the authenticated user
-  // Query params: sector (sector name | "todos"), date (YYYY-MM-DD), favorites (true/false), geral (true/false)
+  // Query params: sector, date, favorites, geral, shared
   app.get("/api/news", requireAuth, async (req, res) => {
     try {
       const sectorFilter = (req.query.sector as string) || null;
       const dateFilter = (req.query.date as string) || new Date().toISOString().slice(0, 10);
       const favoritesOnly = req.query.favorites === "true";
       const geralOnly = req.query.geral === "true";
+      const sharedOnly = req.query.shared === "true";
+
+      if (sharedOnly) {
+        const result = await pool.query(
+          `SELECT
+             na.id,
+             na.title,
+             na.summary,
+             na.why_matters AS "whyMatters",
+             na.impact_level AS "impactLevel",
+             na.source_name AS "sourceName",
+             na.source_url AS "sourceUrl",
+             na.category,
+             na.sector_tags AS "sectorTags",
+             na.batch_slot AS "batchSlot",
+             na.fetched_date::text AS "fetchedDate",
+             na.published_at AS "publishedAt",
+             na.created_at AS "createdAt",
+             CASE WHEN nf_self.user_id IS NOT NULL THEN true ELSE false END AS "isFavorited",
+             ns.shared_by_name AS "sharedByName",
+             ns.message AS "shareMessage"
+           FROM news_articles na
+           LEFT JOIN news_favorites nf_self
+             ON nf_self.article_id = na.id AND nf_self.user_id = $1
+           JOIN LATERAL (
+             SELECT u.name AS shared_by_name, nsh.message, nsh.created_at AS shared_at
+             FROM news_shares nsh
+             JOIN users u ON u.id = nsh.shared_by_id
+             WHERE nsh.article_id = na.id
+               AND (nsh.shared_to_user_id = $1
+                    OR nsh.shared_to_sector_id IN (
+                      SELECT sector_id FROM user_sector_roles WHERE user_id = $1
+                    ))
+             ORDER BY nsh.created_at DESC
+             LIMIT 1
+           ) ns ON true
+           ORDER BY ns.shared_at DESC`,
+          [req.user!.id]
+        );
+        return res.json(result.rows);
+      }
 
       const GERAL_CATEGORIES = ["Ciência & Saúde", "Finanças Pessoais", "Comportamento", "Cultura & Curiosidades", "Mundo"];
 

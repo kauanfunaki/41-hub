@@ -33,6 +33,8 @@ import {
   User,
   Loader2,
   Globe,
+  TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Sector } from "@shared/schema";
@@ -350,6 +352,7 @@ export default function NewsPage() {
   const [dateOffset, setDateOffset] = useState(0); // 0 = today, 1 = yesterday, etc.
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [geralOnly, setGeralOnly] = useState(false);
+  const [sharedOnly, setSharedOnly] = useState(false);
   const [shareArticle, setShareArticle] = useState<NewsArticle | null>(null);
 
   const targetDate = useMemo(() => {
@@ -368,9 +371,20 @@ export default function NewsPage() {
     staleTime: 5 * 60_000,
   });
 
+  const triviaQuery = useQuery<{ dollar: string | null; worldDay: string | null }>({
+    queryKey: ["/api/geral/trivia", targetDate],
+    queryFn: () =>
+      fetch(`/api/geral/trivia?date=${targetDate}`, { credentials: "include" }).then((r) => r.json()),
+    enabled: geralOnly,
+    staleTime: 30 * 60_000,
+  });
+
   const newsQuery = useQuery<NewsArticle[]>({
-    queryKey: ["/api/news", { sector: selectedSector, date: targetDate, favorites: favoritesOnly, geral: geralOnly }],
+    queryKey: ["/api/news", { sector: selectedSector, date: targetDate, favorites: favoritesOnly, geral: geralOnly, shared: sharedOnly }],
     queryFn: () => {
+      if (sharedOnly) {
+        return fetch("/api/news?shared=true", { credentials: "include" }).then((r) => r.json());
+      }
       const params = new URLSearchParams({ date: targetDate });
       if (geralOnly) {
         params.set("geral", "true");
@@ -416,6 +430,7 @@ export default function NewsPage() {
               onClick={() => {
                 setGeralOnly((v) => !v);
                 setFavoritesOnly(false);
+                setSharedOnly(false);
               }}
             >
               <Globe className="h-4 w-4 mr-1.5" />
@@ -429,14 +444,29 @@ export default function NewsPage() {
               onClick={() => {
                 setFavoritesOnly((v) => !v);
                 setGeralOnly(false);
+                setSharedOnly(false);
               }}
             >
               <BookmarkCheck className="h-4 w-4 mr-1.5" />
               Favoritos
             </Button>
 
-            {/* Sector filter — oculto quando Geral está ativo */}
-            {!geralOnly && (
+            {/* Shared toggle */}
+            <Button
+              variant={sharedOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setSharedOnly((v) => !v);
+                setGeralOnly(false);
+                setFavoritesOnly(false);
+              }}
+            >
+              <Share2 className="h-4 w-4 mr-1.5" />
+              Compartilhados
+            </Button>
+
+            {/* Sector filter — oculto quando Geral, Favoritos ou Compartilhados está ativo */}
+            {!geralOnly && !favoritesOnly && !sharedOnly && (
               <Select value={selectedSector} onValueChange={setSelectedSector}>
                 <SelectTrigger className="w-[200px] h-9">
                   <SelectValue placeholder="Setor" />
@@ -458,8 +488,8 @@ export default function NewsPage() {
         </div>
       </div>
 
-      {/* Date navigation */}
-      <div className="border-b bg-muted/30 px-6 py-2 flex items-center gap-3">
+      {/* Date navigation — oculto na view Compartilhados */}
+      {!sharedOnly && <div className="border-b bg-muted/30 px-6 py-2 flex items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
@@ -484,7 +514,28 @@ export default function NewsPage() {
             {availableDates.length} dia{availableDates.length !== 1 ? "s" : ""} com notícias
           </span>
         )}
-      </div>
+
+        {/* Geral trivia — direita da barra de data */}
+        {geralOnly && (triviaQuery.data?.dollar || triviaQuery.data?.worldDay) && (
+          <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+            {triviaQuery.data?.worldDay && (
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
+                <span>Hoje é {triviaQuery.data.worldDay}</span>
+              </span>
+            )}
+            {triviaQuery.data?.worldDay && triviaQuery.data?.dollar && (
+              <span className="text-border">·</span>
+            )}
+            {triviaQuery.data?.dollar && (
+              <span className="flex items-center gap-1.5">
+                <TrendingUp className="h-3 w-3 text-emerald-500 shrink-0" />
+                <span>Dólar hoje <strong className="text-foreground">R$ {triviaQuery.data.dollar}</strong></span>
+              </span>
+            )}
+          </div>
+        )}
+      </div>}
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-6">
