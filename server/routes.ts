@@ -420,6 +420,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS folder_output TEXT`);
 
+    // Instability flag columns — set when a coordinator reports a watcher as unstable
+    await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS instability_reported_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS instability_reported_by VARCHAR(36)`);
+    await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS instability_note TEXT`);
+    await pool.query(`ALTER TABLE ops_watchers ADD COLUMN IF NOT EXISTS instability_ticket_id VARCHAR(36)`);
+
     // filename_renamed column (added after initial ops_events schema)
     await pool.query(`ALTER TABLE ops_events ADD COLUMN IF NOT EXISTS filename_renamed VARCHAR(500)`);
 
@@ -4761,6 +4767,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           w.folder_output AS "folderOutput",
           w.is_active     AS "isActive",
           w.last_heartbeat_at AS "lastHeartbeatAt",
+          w.instability_reported_at AS "instabilityReportedAt",
+          w.instability_note        AS "instabilityNote",
+          w.instability_ticket_id   AS "instabilityTicketId",
+          ru.name                   AS "instabilityReportedByName",
           e.status        AS "lastStatus",
           e.processed_at  AS "lastProcessedAt",
           e.filename      AS "lastFilename",
@@ -4769,6 +4779,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           counts.success_today  AS "successToday",
           counts.error_today    AS "errorToday"
         FROM ops_watchers w
+        LEFT JOIN users ru ON ru.id = w.instability_reported_by
         LEFT JOIN LATERAL (
           SELECT status, processed_at, filename, error_message
           FROM ops_events
@@ -4792,6 +4803,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("[ops/watchers GET] error:", error);
       res.status(500).json({ error: "Falha ao buscar watchers" });
+    }
+  });
+
+  // POST /api/ops/watchers/:slug/instability — flag a watcher as unstable (admin/coordinator)
+  app.post("/api/ops/watchers/:slug/instability", requireAuth, requireAdminOrCoordinator, async (req, res) => {
+    try {
+      const schema = z.object({
+        ticketId: z.string().optional(),
+        note: z.string().max(2000).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      }
+      const result = await pool.query(
+        `UPDATE ops_watchers
+         SET instability_reported_at = NOW(),
+             instability_reported_by = $1,
+             instability_note        = $2,
+             instability_ticket_id   = $3
+         WHERE slug = $4 AND is_active = true
+         RETURNING slug`,
+        [req.user!.id, parsed.data.note ?? null, parsed.data.ticketId ?? null, req.params.slug]
+      );
+      if (!result.rows.length) {
+        return res.status(404).json({ error: "Watcher não encontrado" });
+      }
+      res.json({ message: "Instabilidade sinalizada" });
+    } catch (error) {
+      console.error("[ops/watchers instability POST] error:", error);
+      res.status(500).json({ error: "Falha ao sinalizar instabilidade" });
+    }
+  });
+
+  // DELETE /api/ops/watchers/:slug/instability — clear the instability flag (admin/coordinator)
+  app.delete("/api/ops/watchers/:slug/instability", requireAuth, requireAdminOrCoordinator, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `UPDATE ops_watchers
+         SET instability_reported_at = NULL,
+             instability_reported_by = NULL,
+             instability_note        = NULL,
+             instability_ticket_id   = NULL
+         WHERE slug = $1
+         RETURNING slug`,
+        [req.params.slug]
+      );
+      if (!result.rows.length) {
+        return res.status(404).json({ error: "Watcher não encontrado" });
+      }
+      res.json({ message: "Sinalização removida" });
+    } catch (error) {
+      console.error("[ops/watchers instability DELETE] error:", error);
+      res.status(500).json({ error: "Falha ao remover sinalização" });
     }
   });
 

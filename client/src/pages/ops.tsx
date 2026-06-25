@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -19,6 +20,7 @@ import {
   HelpCircle,
   MessageSquarePlus,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +85,10 @@ interface OpsWatcher {
   totalToday: string;
   successToday: string;
   errorToday: string;
+  instabilityReportedAt: string | null;
+  instabilityNote: string | null;
+  instabilityTicketId: string | null;
+  instabilityReportedByName: string | null;
 }
 
 interface OpsEvent {
@@ -228,12 +234,24 @@ function SummaryCard({
 
 // ── Watcher Card ─────────────────────────────────────────────────────────────
 
-function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
+function WatcherCard({
+  watcher,
+  canManageInstability,
+  onClearInstability,
+  isClearing,
+}: {
+  watcher: OpsWatcher;
+  canManageInstability: boolean;
+  onClearInstability: (slug: string) => void;
+  isClearing: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const total   = parseInt(watcher.totalToday)   || 0;
   const success = parseInt(watcher.successToday) || 0;
   const error   = parseInt(watcher.errorToday)   || 0;
+
+  const flagged = !!watcher.instabilityReportedAt;
 
   const procStatus = getProcessStatus(watcher.lastHeartbeatAt);
   const procLabel: Record<typeof procStatus, { text: string; cls: string }> = {
@@ -246,15 +264,21 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
 
   return (
     <Card
-      className="cursor-pointer select-none transition-colors hover:bg-muted/30 overflow-hidden"
+      className={`cursor-pointer select-none transition-colors overflow-hidden ${
+        flagged
+          ? "ring-1 ring-amber-400/70 bg-amber-50/40 hover:bg-amber-50/70 dark:bg-amber-950/20 dark:hover:bg-amber-950/30"
+          : "hover:bg-muted/30"
+      }`}
       onClick={() => setExpanded((v) => !v)}
     >
       {/* Health stripe */}
       <div
         className={`h-[3px] w-full transition-all ${
-          procStatus === "running"
-            ? error > 0 ? "bg-amber-500" : "bg-green-500"
-            : procStatus === "offline" ? "bg-red-500" : "bg-muted"
+          flagged
+            ? "bg-amber-500"
+            : procStatus === "running"
+              ? error > 0 ? "bg-amber-500" : "bg-green-500"
+              : procStatus === "offline" ? "bg-red-500" : "bg-muted"
         }`}
       />
 
@@ -263,7 +287,12 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
         <div className="flex items-center gap-2">
           {watcherStatusDot(watcher.lastHeartbeatAt)}
           <span className="text-sm font-semibold leading-tight flex-1 truncate">{watcher.name}</span>
-          {!expanded && total > 0 && (
+          {flagged && (
+            <Badge variant="outline" className="text-[10px] shrink-0 gap-1 border-amber-300 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+              <AlertTriangle className="h-3 w-3" /> Instável
+            </Badge>
+          )}
+          {!expanded && !flagged && total > 0 && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 tabular-nums">
               <Activity className="h-3 w-3" /> {total} hoje
             </span>
@@ -281,6 +310,52 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
         </span>
 
       </CardHeader>
+
+      {/* Instability banner — always visible when flagged, even collapsed */}
+      {flagged && (
+        <div className="px-4 pb-3 -mt-1" onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-md border border-amber-300 bg-amber-100/60 dark:bg-amber-950/30 dark:border-amber-800 p-2.5 text-left">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  Instabilidade reportada
+                </p>
+                {watcher.instabilityNote && (
+                  <p className="text-xs text-amber-700/90 dark:text-amber-200/80 mt-0.5 whitespace-pre-wrap break-words">
+                    {watcher.instabilityNote}
+                  </p>
+                )}
+                <p className="text-[10px] text-amber-700/70 dark:text-amber-200/60 mt-1">
+                  {watcher.instabilityReportedByName ? `por ${watcher.instabilityReportedByName} · ` : ""}
+                  {formatTime(watcher.instabilityReportedAt)}
+                </p>
+                <div className="flex items-center gap-3 mt-2">
+                  {watcher.instabilityTicketId && (
+                    <Link href={`/tickets/${watcher.instabilityTicketId}`}>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 dark:text-amber-300 hover:underline">
+                        <ExternalLink className="h-3 w-3" /> Ver chamado
+                      </span>
+                    </Link>
+                  )}
+                  {canManageInstability && (
+                    <button
+                      type="button"
+                      onClick={() => onClearInstability(watcher.slug)}
+                      disabled={isClearing}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50"
+                      data-testid={`button-clear-instability-${watcher.slug}`}
+                    >
+                      {isClearing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Marcar resolvido
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Expanded details ── */}
       {expanded && (
@@ -336,6 +411,7 @@ function WatcherCard({ watcher }: { watcher: OpsWatcher }) {
 export default function OpsCenter() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [filterWatcher, setFilterWatcher] = useState<string>("all");
   const [filterStatus,  setFilterStatus]  = useState<string>("all");
   const [filterDate,    setFilterDate]    = useState<string>("");
@@ -349,6 +425,7 @@ export default function OpsCenter() {
 
   const isCoordinator = user?.roles?.some((r) => r.roleName === "Coordenador");
   const coordinatorSectorId = user?.roles?.find((r) => r.roleName === "Coordenador")?.sectorId ?? "";
+  const canManageInstability = !!user?.isAdmin || !!isCoordinator;
 
   const categoriesQuery = useQuery<{ id: string; name: string; parentId: string | null }[]>({
     queryKey: ["/api/tickets/categories"],
@@ -371,17 +448,38 @@ export default function OpsCenter() {
         requesterSectorId: coordinatorSectorId,
         priority: "ALTA",
       });
-      return res.json();
+      const ticket = await res.json();
+      // Flag the watcher on the Ops board so the instability is visible to everyone
+      await apiRequest("POST", `/api/ops/watchers/${reportWatcherSlug}/instability`, {
+        ticketId: ticket.id,
+        note: reportDescription,
+      });
+      return ticket;
     },
     onSuccess: (ticket) => {
-      toast({ title: "Chamado aberto", description: `#${ticket.ticketNumber ?? ticket.id.slice(0, 8)} registrado com sucesso.` });
+      toast({ title: "Instabilidade sinalizada", description: `Chamado #${ticket.ticketNumber ?? ticket.id.slice(0, 8)} aberto e watcher marcado.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/ops/watchers"] });
       setReportOpen(false);
       setReportWatcherSlug("");
       setReportCategoryId("");
       setReportDescription("");
     },
     onError: (err: any) => {
-      toast({ title: "Erro ao abrir chamado", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao sinalizar instabilidade", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const clearInstabilityMutation = useMutation({
+    mutationFn: async (slug: string) => {
+      await apiRequest("DELETE", `/api/ops/watchers/${slug}/instability`);
+      return slug;
+    },
+    onSuccess: () => {
+      toast({ title: "Sinalização removida", description: "Watcher marcado como estável." });
+      queryClient.invalidateQueries({ queryKey: ["/api/ops/watchers"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao remover sinalização", description: err.message, variant: "destructive" });
     },
   });
 
@@ -416,6 +514,7 @@ export default function OpsCenter() {
   const events     = eventsQuery.data?.events ?? [];
   const total      = eventsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  const flaggedCount = watchers.filter((w) => w.instabilityReportedAt).length;
 
   // Map watcher slug → watcher (for constructing full file path on copy)
   const watcherBySlug = Object.fromEntries(watchers.map((w) => [w.slug, w]));
@@ -509,6 +608,12 @@ export default function OpsCenter() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Watchers
           </h2>
+          {flaggedCount > 0 && (
+            <Badge variant="outline" className="text-[10px] gap-1 border-amber-300 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+              <AlertTriangle className="h-3 w-3" />
+              {flaggedCount} com instabilidade
+            </Badge>
+          )}
           <TooltipProvider delayDuration={80}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -534,7 +639,15 @@ export default function OpsCenter() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 items-start">
-            {watchers.map((w) => <WatcherCard key={w.slug} watcher={w} />)}
+            {watchers.map((w) => (
+              <WatcherCard
+                key={w.slug}
+                watcher={w}
+                canManageInstability={canManageInstability}
+                onClearInstability={(slug) => clearInstabilityMutation.mutate(slug)}
+                isClearing={clearInstabilityMutation.isPending && clearInstabilityMutation.variables === w.slug}
+              />
+            ))}
           </div>
         )}
       </div>

@@ -644,11 +644,11 @@ export default function TicketsDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-0">
 
         {/* ── LEFT COLUMN ── */}
-        {/* Visual order is controlled via flex `order-*`: Atividade → Anexos → Dados do Formulário → Checklist */}
+        {/* Visual order is controlled via flex `order-*`: Atividade → Dados do Formulário → Anexos → Checklist */}
         <div className="border-r min-h-full flex flex-col">
 
-          {/* Attachments — rendered after Activity via order-2 */}
-          <section className="px-6 py-5 border-b order-2">
+          {/* Attachments — rendered after Form Data via order-3 */}
+          <section className="px-6 py-5 border-b order-3">
             <div className="flex items-center justify-between mb-3">
               <SectionLabel>Anexos {attachments.length > 0 && `· ${attachments.length}`}</SectionLabel>
               {canUpload && (
@@ -953,18 +953,23 @@ export default function TicketsDetail() {
             const schemaMap = new Map((ticket.categoryFormSchema ?? []).map(f => [f.key, f.label]));
             const fieldCount = Object.keys(ticket.requestData).length;
             return (
-              <section className="px-6 py-5 border-b order-3">
+              <section className="px-6 py-5 border-b order-2">
                 <button
                   type="button"
                   onClick={() => setFormExpanded(v => !v)}
-                  className="flex items-center justify-between w-full group"
+                  className="flex items-center justify-between w-full group -mx-2 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors"
                   data-testid="button-toggle-form-data"
                 >
                   <span className="flex items-center gap-2">
                     <SectionLabel>Dados do formulário</SectionLabel>
                     <span className="text-[10px] text-muted-foreground -mt-3">· {fieldCount} campo{fieldCount !== 1 ? "s" : ""}</span>
                   </span>
-                  <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", formExpanded && "rotate-180")} />
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <span className="group-hover:underline">{formExpanded ? "Ocultar" : "Ver detalhes"}</span>
+                    <span className="flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                      <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", formExpanded && "rotate-180")} />
+                    </span>
+                  </span>
                 </button>
                 {formExpanded && (
                   <div className="space-y-3 mt-1">
