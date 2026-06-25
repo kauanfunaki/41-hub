@@ -5096,23 +5096,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // GET /api/news — list articles for the authenticated user
-  // Query params: sector (sector name | "todos"), date (YYYY-MM-DD), favorites (true/false)
+  // Query params: sector (sector name | "todos"), date (YYYY-MM-DD), favorites (true/false), geral (true/false)
   app.get("/api/news", requireAuth, async (req, res) => {
     try {
       const sectorFilter = (req.query.sector as string) || null;
       const dateFilter = (req.query.date as string) || new Date().toISOString().slice(0, 10);
       const favoritesOnly = req.query.favorites === "true";
+      const geralOnly = req.query.geral === "true";
+
+      const GERAL_CATEGORIES = ["Ciência & Saúde", "Finanças Pessoais", "Comportamento", "Cultura & Curiosidades", "Mundo"];
 
       let sectorCondition = "";
       const params: any[] = [req.user!.id, dateFilter];
 
-      if (favoritesOnly) {
-        sectorCondition = "";
+      params.push(GERAL_CATEGORIES); // always $3 — used to exclude or include Geral
+      const geralParamIndex = params.length;
+
+      if (geralOnly) {
+        sectorCondition = `AND na.category = ANY($${geralParamIndex}::text[])`;
+      } else if (favoritesOnly) {
+        sectorCondition = `AND na.category != ALL($${geralParamIndex}::text[])`;
       } else if (!sectorFilter || sectorFilter === "todos") {
-        sectorCondition = "";
+        sectorCondition = `AND na.category != ALL($${geralParamIndex}::text[])`;
       } else {
         params.push(sectorFilter);
-        sectorCondition = `AND $${params.length} = ANY(na.sector_tags)`;
+        sectorCondition = `AND $${params.length} = ANY(na.sector_tags) AND na.category != ALL($${geralParamIndex}::text[])`;
       }
 
       const favoritesCondition = favoritesOnly

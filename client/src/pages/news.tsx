@@ -32,6 +32,7 @@ import {
   Users,
   User,
   Loader2,
+  Globe,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Sector } from "@shared/schema";
@@ -348,6 +349,7 @@ export default function NewsPage() {
   const [selectedSector, setSelectedSector] = useState<string>(userSectorName || "todos");
   const [dateOffset, setDateOffset] = useState(0); // 0 = today, 1 = yesterday, etc.
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [geralOnly, setGeralOnly] = useState(false);
   const [shareArticle, setShareArticle] = useState<NewsArticle | null>(null);
 
   const targetDate = useMemo(() => {
@@ -367,11 +369,15 @@ export default function NewsPage() {
   });
 
   const newsQuery = useQuery<NewsArticle[]>({
-    queryKey: ["/api/news", { sector: selectedSector, date: targetDate, favorites: favoritesOnly }],
+    queryKey: ["/api/news", { sector: selectedSector, date: targetDate, favorites: favoritesOnly, geral: geralOnly }],
     queryFn: () => {
       const params = new URLSearchParams({ date: targetDate });
-      if (selectedSector !== "todos") params.set("sector", selectedSector);
-      if (favoritesOnly) params.set("favorites", "true");
+      if (geralOnly) {
+        params.set("geral", "true");
+      } else {
+        if (selectedSector !== "todos") params.set("sector", selectedSector);
+        if (favoritesOnly) params.set("favorites", "true");
+      }
       return fetch(`/api/news?${params}`, { credentials: "include" }).then((r) => r.json());
     },
     staleTime: 2 * 60_000,
@@ -403,33 +409,51 @@ export default function NewsPage() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Geral toggle */}
+            <Button
+              variant={geralOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setGeralOnly((v) => !v);
+                setFavoritesOnly(false);
+              }}
+            >
+              <Globe className="h-4 w-4 mr-1.5" />
+              Geral
+            </Button>
+
             {/* Favorites toggle */}
             <Button
               variant={favoritesOnly ? "default" : "outline"}
               size="sm"
-              onClick={() => setFavoritesOnly((v) => !v)}
+              onClick={() => {
+                setFavoritesOnly((v) => !v);
+                setGeralOnly(false);
+              }}
             >
               <BookmarkCheck className="h-4 w-4 mr-1.5" />
               Favoritos
             </Button>
 
-            {/* Sector filter */}
-            <Select value={selectedSector} onValueChange={setSelectedSector}>
-              <SelectTrigger className="w-[200px] h-9">
-                <SelectValue placeholder="Setor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os setores</SelectItem>
-                {sectors.map((s) => (
-                  <SelectItem key={s.id} value={s.name}>
-                    {s.name}
-                    {s.name === userSectorName && (
-                      <span className="ml-1 text-muted-foreground text-xs">(seu setor)</span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Sector filter — oculto quando Geral está ativo */}
+            {!geralOnly && (
+              <Select value={selectedSector} onValueChange={setSelectedSector}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue placeholder="Setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os setores</SelectItem>
+                  {sectors.map((s) => (
+                    <SelectItem key={s.id} value={s.name}>
+                      {s.name}
+                      {s.name === userSectorName && (
+                        <span className="ml-1 text-muted-foreground text-xs">(seu setor)</span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
       </div>
