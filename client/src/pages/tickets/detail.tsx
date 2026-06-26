@@ -404,6 +404,7 @@ export default function TicketsDetail() {
   const [statusChangeOpen, setStatusChangeOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [conclusionMessage, setConclusionMessage] = useState("");
+  const [autoAssignSelf, setAutoAssignSelf] = useState(false);
   const [formExpanded, setFormExpanded] = useState(false);
 
   const { data: ticket, isLoading } = useQuery<TicketWithDetails>({
@@ -547,18 +548,25 @@ export default function TicketsDetail() {
   const assigneeCount = ticket?.assignees?.length ?? 0;
   const statusNeedsConclusion = (s: string | null) =>
     s === "RESOLVIDO" || s === "CANCELADO" || s === "STANDBY";
-  const requestStatusChange = (newStatus: string) => {
+  const requestStatusChange = (newStatus: string, opts?: { assignSelf?: boolean }) => {
     if (!ticket || newStatus === ticket.status) return;
     setPendingStatus(newStatus);
     setConclusionMessage("");
+    setAutoAssignSelf(opts?.assignSelf ?? false);
     setStatusChangeOpen(true);
   };
   const blockResolveNoAssignee = pendingStatus === "RESOLVIDO" && assigneeCount === 0;
   const confirmStatusChange = () => {
     if (!pendingStatus || blockResolveNoAssignee) return;
+    if (autoAssignSelf && user?.id) {
+      const currentIds = (ticket?.assignees ?? []).map((a) => a.userId);
+      if (!currentIds.includes(user.id)) {
+        assignMutation.mutate([...currentIds, user.id]);
+      }
+    }
     updateMutation.mutate(
       { status: pendingStatus, ...(conclusionMessage.trim() ? { conclusionMessage: conclusionMessage.trim() } : {}) },
-      { onSuccess: () => { setStatusChangeOpen(false); setPendingStatus(null); setConclusionMessage(""); } },
+      { onSuccess: () => { setStatusChangeOpen(false); setPendingStatus(null); setConclusionMessage(""); setAutoAssignSelf(false); } },
     );
   };
 
@@ -1085,7 +1093,7 @@ export default function TicketsDetail() {
               <div className="space-y-2">
                 {(ticket.status === "ABERTO" || ticket.status === "NA_FILA") && (
                   <Button size="sm" className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                    onClick={() => requestStatusChange("EM_ANDAMENTO")} disabled={updateMutation.isPending} data-testid="button-quick-start">
+                    onClick={() => requestStatusChange("EM_ANDAMENTO", { assignSelf: true })} disabled={updateMutation.isPending} data-testid="button-quick-start">
                     <ArrowRight className="h-3.5 w-3.5" />Iniciar atendimento
                   </Button>
                 )}
@@ -1469,7 +1477,7 @@ export default function TicketsDetail() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setStatusChangeOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setStatusChangeOpen(false); setAutoAssignSelf(false); }}>Cancelar</Button>
             <Button onClick={confirmStatusChange} disabled={updateMutation.isPending || blockResolveNoAssignee} data-testid="button-confirm-status-change">
               {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
             </Button>
