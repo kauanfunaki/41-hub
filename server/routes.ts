@@ -3464,6 +3464,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Anti-cheat telemetry
         pasteAttempts: z.number().int().min(0).optional(),
         maxDeltaChars: z.number().int().min(0).optional(),
+        // Keystroke rhythm telemetry (detecta macros que digitam tecla a tecla)
+        keystrokeCount: z.number().int().min(0).optional(),
+        minIntervalMs: z.number().min(0).optional(),
+        meanIntervalMs: z.number().min(0).optional(),
+        stdIntervalMs: z.number().min(0).optional(),
       });
 
       const parsed = schema.safeParse(req.body);
@@ -3512,7 +3517,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const durationMin = finalDurationMs / 60000;
       const words = parsed.data.typed.trim().split(/\s+/).length;
       const recalcWpm = Math.round(words / durationMin);
-      const finalWpm = Math.min(recalcWpm, 300);
+
+      // ── Anti-cheat: teto físico de velocidade ────────────────────────────────
+      // Nenhum humano sustenta acima de ~15 caracteres/segundo. Uma macro que
+      // digita tecla a tecla (driblando o check de colagem) é pega aqui, pois o
+      // servidor recalcula tudo a partir do texto realmente enviado + duração.
+      const MAX_CHARS_PER_SEC = 16; // ~190 WPM padrão; folga generosa
+      const charsPerSec = parsed.data.typed.length / (finalDurationMs / 1000);
+      if (charsPerSec > MAX_CHARS_PER_SEC) {
+        return res.status(400).json({ error: "anti_cheat", message: "Velocidade de digitação fisicamente impossível detectada" });
+      }
+
+      // Backstop: WPM acima do recorde mundial humano é rejeitado (antes era só limitado a 300).
+      const MAX_HUMAN_WPM = 200;
+      if (recalcWpm > MAX_HUMAN_WPM) {
+        return res.status(400).json({ error: "anti_cheat", message: "WPM acima do humanamente possível" });
+      }
+
+      // ── Anti-cheat: ritmo robótico ───────────────────────────────────────────
+      // Macros digitam com intervalos quase idênticos entre teclas (variância ~0)
+      // ou em rajadas impossíveis. Humanos têm ritmo irregular (CV típico > 0.3).
+      const ks = parsed.data.keystrokeCount ?? 0;
+      const mean = parsed.data.meanIntervalMs ?? 0;
+      const std = parsed.data.stdIntervalMs ?? 0;
+      const minInterval = parsed.data.minIntervalMs ?? Infinity;
+      if (ks >= 25) {
+        const cv = mean > 0 ? std / mean : 1; // coeficiente de variação
+        if (cv < 0.12) {
+          return res.status(400).json({ error: "anti_cheat", message: "Ritmo de digitação robótico detectado" });
+        }
+        if (minInterval > 0 && minInterval < 12) {
+          return res.status(400).json({ error: "anti_cheat", message: "Intervalo entre teclas impossível detectado" });
+        }
+      }
+
+      const finalWpm = recalcWpm;
 
       const userSectorId = req.user!.roles?.[0]?.sectorId || null;
       const now = new Date();

@@ -64,6 +64,9 @@ export default function TypingTest() {
   const pasteAttemptsRef = useRef<number>(0);
   const maxDeltaCharsRef = useRef<number>(0);
   const prevTypedLenRef = useRef<number>(0);
+  // Ritmo entre teclas — detecta macros que digitam tecla a tecla
+  const lastKeyTimeRef = useRef<number | null>(null);
+  const keyIntervalsRef = useRef<number[]>([]);
 
   const startSessionMutation = useMutation({
     mutationFn: async () => {
@@ -81,6 +84,8 @@ export default function TypingTest() {
       pasteAttemptsRef.current = 0;
       maxDeltaCharsRef.current = 0;
       prevTypedLenRef.current = 0;
+      lastKeyTimeRef.current = null;
+      keyIntervalsRef.current = [];
       setState("ready");
       setTimeout(() => inputRef.current?.focus(), 100);
     },
@@ -104,6 +109,10 @@ export default function TypingTest() {
       level: Level;
       pasteAttempts: number;
       maxDeltaChars: number;
+      keystrokeCount: number;
+      minIntervalMs: number;
+      meanIntervalMs: number;
+      stdIntervalMs: number;
     }) => {
       const res = await apiRequest("POST", "/api/typing/submit", data);
       if (!res.ok) {
@@ -161,6 +170,17 @@ export default function TypingTest() {
     setState("finished");
 
     if (session) {
+      // Estatísticas de ritmo entre teclas (anti-macro)
+      const intervals = keyIntervalsRef.current;
+      const keystrokeCount = intervals.length;
+      let minIntervalMs = 0, meanIntervalMs = 0, stdIntervalMs = 0;
+      if (keystrokeCount > 0) {
+        minIntervalMs = Math.min(...intervals);
+        meanIntervalMs = intervals.reduce((a, b) => a + b, 0) / keystrokeCount;
+        const variance = intervals.reduce((a, b) => a + (b - meanIntervalMs) ** 2, 0) / keystrokeCount;
+        stdIntervalMs = Math.sqrt(variance);
+      }
+
       submitMutation.mutate({
         sessionId: session.id,
         nonce: session.nonce,
@@ -171,6 +191,10 @@ export default function TypingTest() {
         level,
         pasteAttempts: pasteAttemptsRef.current,
         maxDeltaChars: maxDeltaCharsRef.current,
+        keystrokeCount,
+        minIntervalMs: Math.round(minIntervalMs),
+        meanIntervalMs: Math.round(meanIntervalMs),
+        stdIntervalMs: Math.round(stdIntervalMs),
       });
     }
   }, [text, typed, session, level]);
@@ -197,6 +221,15 @@ export default function TypingTest() {
     // Anti-cheat: track max delta between consecutive key events
     const delta = Math.abs(value.length - prevTypedLenRef.current);
     if (delta > maxDeltaCharsRef.current) maxDeltaCharsRef.current = delta;
+
+    // Anti-cheat: registra o intervalo entre teclas (apenas ao avançar 1 char)
+    if (value.length === prevTypedLenRef.current + 1) {
+      const now = performance.now();
+      if (lastKeyTimeRef.current !== null) {
+        keyIntervalsRef.current.push(now - lastKeyTimeRef.current);
+      }
+      lastKeyTimeRef.current = now;
+    }
     prevTypedLenRef.current = value.length;
 
     setTyped(value);
