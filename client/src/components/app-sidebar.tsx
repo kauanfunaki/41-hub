@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/lib/theme-provider";
 import { useTutorial } from "@/hooks/use-tutorial";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,7 @@ const recursosSubItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout, isAuthenticated } = useAuth();
+  const { accentColored } = useTheme();
   const isAdmin = user?.isAdmin;
   const isUsuarioOnly =
     !isAdmin && !(user?.roles?.some((r: any) => r.roleName === "Coordenador"));
@@ -124,7 +126,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
         <div className="flex items-center justify-center">
-          <ThemeLogo className="h-10 w-auto" />
+          <ThemeLogo className="h-10 w-auto" forceWhite={accentColored} />
         </div>
       </SidebarHeader>
 
