@@ -1268,10 +1268,28 @@ export class DatabaseStorage implements IStorage {
   private async enrichTickets(rawTickets: Ticket[]): Promise<TicketWithDetails[]> {
     if (rawTickets.length === 0) return [];
 
+    // Queue position is scoped PER ASSIGNEE: a ticket's "#N" counts only the
+    // queued tickets that share at least one responsible user with it. This way
+    // Nathan's queue doesn't bump Kauan's positions. queue_order remains the
+    // global ordering key; the displayed position is derived per assignee here.
     const queueRows = await db.execute(sql`
-      SELECT id, ROW_NUMBER() OVER (ORDER BY queue_order ASC NULLS LAST, created_at ASC, id ASC) AS pos,
-             COUNT(*) OVER () AS total
-      FROM tickets WHERE status = 'NA_FILA'
+      SELECT base.id,
+        (SELECT COUNT(DISTINCT peer.id)
+           FROM tickets peer
+           JOIN ticket_assignees pa ON pa.ticket_id = peer.id
+           JOIN ticket_assignees ba ON ba.user_id = pa.user_id AND ba.ticket_id = base.id
+          WHERE peer.status = 'NA_FILA'
+            AND (COALESCE(peer.queue_order, 2147483647), peer.created_at, peer.id)
+             <= (COALESCE(base.queue_order, 2147483647), base.created_at, base.id)
+        ) AS pos,
+        (SELECT COUNT(DISTINCT peer.id)
+           FROM tickets peer
+           JOIN ticket_assignees pa ON pa.ticket_id = peer.id
+           JOIN ticket_assignees ba ON ba.user_id = pa.user_id AND ba.ticket_id = base.id
+          WHERE peer.status = 'NA_FILA'
+        ) AS total
+      FROM tickets base
+      WHERE base.status = 'NA_FILA'
     `);
     const queueMap = new Map<string, { pos: number; total: number }>();
     for (const r of (queueRows.rows ?? []) as { id: string; pos: number; total: number }[]) {
@@ -1283,8 +1301,9 @@ export class DatabaseStorage implements IStorage {
       const enriched = await this.enrichSingleTicket(t);
       if (t.status === "NA_FILA") {
         const q = queueMap.get(t.id);
-        enriched.queuePosition = q?.pos ?? null;
-        enriched.queueTotal    = q?.total ?? null;
+        const hasQueue = q != null && q.total > 0;
+        enriched.queuePosition = hasQueue ? q!.pos : null;
+        enriched.queueTotal    = hasQueue ? q!.total : null;
       }
       result.push(enriched);
     }
@@ -1409,17 +1428,28 @@ export class DatabaseStorage implements IStorage {
     const enriched = await this.enrichSingleTicket(ticket);
 
     if (ticket.status === "NA_FILA") {
+      // Per-assignee queue position (see enrichTickets for rationale).
       const rows = await db.execute(sql`
-        SELECT pos, total FROM (
-          SELECT id,
-            ROW_NUMBER() OVER (ORDER BY queue_order ASC NULLS LAST, created_at ASC, id ASC) AS pos,
-            COUNT(*) OVER () AS total
-          FROM tickets WHERE status = 'NA_FILA'
-        ) sub WHERE id = ${ticket.id}
+        SELECT
+          (SELECT COUNT(DISTINCT peer.id)
+             FROM tickets peer
+             JOIN ticket_assignees pa ON pa.ticket_id = peer.id
+             JOIN ticket_assignees ba ON ba.user_id = pa.user_id AND ba.ticket_id = ${ticket.id}
+            WHERE peer.status = 'NA_FILA'
+              AND (COALESCE(peer.queue_order, 2147483647), peer.created_at, peer.id)
+               <= (COALESCE(base.queue_order, 2147483647), base.created_at, base.id)
+          ) AS pos,
+          (SELECT COUNT(DISTINCT peer.id)
+             FROM tickets peer
+             JOIN ticket_assignees pa ON pa.ticket_id = peer.id
+             JOIN ticket_assignees ba ON ba.user_id = pa.user_id AND ba.ticket_id = ${ticket.id}
+            WHERE peer.status = 'NA_FILA'
+          ) AS total
+        FROM tickets base WHERE base.id = ${ticket.id}
       `);
       const row = rows.rows?.[0] as { pos: number; total: number } | undefined;
-      enriched.queuePosition = row ? Number(row.pos) : null;
-      enriched.queueTotal    = row ? Number(row.total) : null;
+      enriched.queuePosition = row && Number(row.total) > 0 ? Number(row.pos) : null;
+      enriched.queueTotal    = row && Number(row.total) > 0 ? Number(row.total) : null;
     }
 
     return enriched;
