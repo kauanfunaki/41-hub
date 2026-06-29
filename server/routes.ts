@@ -1974,11 +1974,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const { resolutionDueAtManual, resolutionDueAtManualReason, conclusionMessage, ...ticketPatch } = parsed.data;
 
-      // A ticket cannot be resolved without a responsible assignee.
-      if (ticketPatch.status === "RESOLVIDO") {
+      // A ticket cannot be resolved or queued without a responsible assignee.
+      // (Queue positions are scoped per assignee, so a ticket in the queue MUST
+      // belong to someone.)
+      if (ticketPatch.status === "RESOLVIDO" || ticketPatch.status === "NA_FILA") {
         const assigneeIds = await storage.getTicketAssigneeIds(req.params.id);
         if (assigneeIds.length === 0) {
-          return res.status(400).json({ error: "Atribua um responsável antes de concluir o chamado" });
+          const action = ticketPatch.status === "RESOLVIDO" ? "concluir" : "colocar na fila";
+          return res.status(400).json({ error: `Atribua um responsável antes de ${action} o chamado` });
         }
       }
 
@@ -3535,19 +3538,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // ── Anti-cheat: ritmo robótico ───────────────────────────────────────────
-      // Macros digitam com intervalos quase idênticos entre teclas (variância ~0)
-      // ou em rajadas impossíveis. Humanos têm ritmo irregular (CV típico > 0.3).
+      // Macros digitam com intervalos quase idênticos entre teclas (variância ~0).
+      // Humanos têm ritmo bem irregular (CV típico > 0.3), então um CV baixíssimo
+      // só acontece com automação. NÃO usamos o intervalo mínimo isolado: humanos
+      // produzem pares de teclas <12ms naturalmente (rollover do teclado/dígrafos),
+      // o que causava falso-positivo em testes legítimos.
       const ks = parsed.data.keystrokeCount ?? 0;
       const mean = parsed.data.meanIntervalMs ?? 0;
       const std = parsed.data.stdIntervalMs ?? 0;
-      const minInterval = parsed.data.minIntervalMs ?? Infinity;
-      if (ks >= 25) {
+      if (ks >= 30) {
         const cv = mean > 0 ? std / mean : 1; // coeficiente de variação
-        if (cv < 0.12) {
+        if (cv < 0.1) {
           return res.status(400).json({ error: "anti_cheat", message: "Ritmo de digitação robótico detectado" });
-        }
-        if (minInterval > 0 && minInterval < 12) {
-          return res.status(400).json({ error: "anti_cheat", message: "Intervalo entre teclas impossível detectado" });
         }
       }
 
