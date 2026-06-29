@@ -2,29 +2,40 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "dark" | "light";
 
-/** Cores de destaque disponíveis (estilo Slack). Só o matiz muda; a
- *  saturação/luminosidade vêm do tema em index.css, então o contraste do
- *  texto sobre o accent permanece garantido. A logo é PNG e NÃO depende
- *  do accent, então nunca é afetada. */
-export const ACCENT_PRESETS: { id: string; label: string; hue: number }[] = [
-  { id: "blue", label: "Azul", hue: 210 },
-  { id: "indigo", label: "Índigo", hue: 235 },
-  { id: "violet", label: "Roxo", hue: 265 },
-  { id: "pink", label: "Rosa", hue: 320 },
-  { id: "red", label: "Vermelho", hue: 355 },
-  { id: "orange", label: "Laranja", hue: 25 },
-  { id: "green", label: "Verde", hue: 150 },
-  { id: "teal", label: "Teal", hue: 185 },
+/** Temas de cor (estilo Slack). "Padrão" mantém a sidebar cinza-neutra; os
+ *  demais recolorem a sidebar inteira com um tom escuro/saturado da cor, além
+ *  do accent dos botões. A saturação/luminosidade da sidebar é a mesma nos dois
+ *  modos de conteúdo (claro/escuro) — só o conteúdo segue o claro/escuro. */
+export const THEME_PRESETS: { id: string; label: string; hue: number; colored: boolean }[] = [
+  { id: "default", label: "Padrão", hue: 210, colored: false },
+  { id: "blue", label: "Azul", hue: 210, colored: true },
+  { id: "indigo", label: "Índigo", hue: 235, colored: true },
+  { id: "violet", label: "Roxo", hue: 265, colored: true },
+  { id: "pink", label: "Rosa", hue: 320, colored: true },
+  { id: "red", label: "Vermelho", hue: 355, colored: true },
+  { id: "orange", label: "Laranja", hue: 25, colored: true },
+  { id: "green", label: "Verde", hue: 150, colored: true },
+  { id: "teal", label: "Teal", hue: 185, colored: true },
 ];
 
-const DEFAULT_HUE = 210;
+const SIDEBAR_VARS = [
+  "--sidebar",
+  "--sidebar-foreground",
+  "--sidebar-border",
+  "--sidebar-accent",
+  "--sidebar-accent-foreground",
+  "--sidebar-primary",
+  "--sidebar-primary-foreground",
+  "--sidebar-ring",
+];
 
 type ThemeProviderContextType = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
-  accentHue: number;
-  setAccentHue: (hue: number) => void;
+  accentId: string;
+  setAccentId: (id: string) => void;
+  accentColored: boolean;
 };
 
 const ThemeProviderContext = createContext<ThemeProviderContextType | undefined>(undefined);
@@ -50,12 +61,12 @@ export function ThemeProvider({
     return defaultTheme;
   });
 
-  const [accentHue, setAccentHueState] = useState<number>(() => {
+  const [accentId, setAccentIdState] = useState<string>(() => {
     if (typeof window !== "undefined") {
-      const stored = Number(localStorage.getItem(accentStorageKey));
-      return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_HUE;
+      const stored = localStorage.getItem(accentStorageKey);
+      if (stored && THEME_PRESETS.some((p) => p.id === stored)) return stored;
     }
-    return DEFAULT_HUE;
+    return "default";
   });
 
   useEffect(() => {
@@ -67,11 +78,31 @@ export function ThemeProvider({
   }, [theme, storageKey]);
 
   useEffect(() => {
-    // Só o matiz é dinâmico; sobrescreve --accent-hue, que index.css usa nas
-    // variáveis de accent (--primary, --ring, --sidebar-primary, --sidebar-ring).
-    document.documentElement.style.setProperty("--accent-hue", String(accentHue));
-    localStorage.setItem(accentStorageKey, String(accentHue));
-  }, [accentHue, accentStorageKey]);
+    const preset = THEME_PRESETS.find((p) => p.id === accentId) ?? THEME_PRESETS[0];
+    const s = document.documentElement.style;
+    // Accent dos botões/conteúdo (--primary etc. usam var(--accent-hue) no CSS).
+    s.setProperty("--accent-hue", String(preset.hue));
+
+    if (preset.colored) {
+      const h = preset.hue;
+      // Sidebar colorida: fundo escuro/saturado + texto claro. Mesmos valores
+      // nos dois modos de conteúdo (a sidebar é sempre escura, estilo Slack).
+      s.setProperty("--sidebar", `${h} 42% 16%`);
+      s.setProperty("--sidebar-foreground", `${h} 25% 88%`);
+      s.setProperty("--sidebar-border", `${h} 30% 24%`);
+      // Hover e item ativo usam --sidebar-accent (ver ui/sidebar): realce visível.
+      s.setProperty("--sidebar-accent", `${h} 50% 38%`);
+      s.setProperty("--sidebar-accent-foreground", `0 0% 100%`);
+      s.setProperty("--sidebar-primary", `${h} 65% 50%`);
+      s.setProperty("--sidebar-primary-foreground", `0 0% 100%`);
+      s.setProperty("--sidebar-ring", `${h} 65% 55%`);
+    } else {
+      // Padrão: remove overrides → volta ao cinza-neutro definido em index.css.
+      SIDEBAR_VARS.forEach((v) => s.removeProperty(v));
+    }
+
+    localStorage.setItem(accentStorageKey, accentId);
+  }, [accentId, accentStorageKey]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
@@ -81,12 +112,16 @@ export function ThemeProvider({
     setThemeState((prev) => (prev === "light" ? "dark" : "light"));
   };
 
-  const setAccentHue = (hue: number) => {
-    setAccentHueState(hue);
+  const setAccentId = (id: string) => {
+    setAccentIdState(id);
   };
 
+  const accentColored = (THEME_PRESETS.find((p) => p.id === accentId) ?? THEME_PRESETS[0]).colored;
+
   return (
-    <ThemeProviderContext.Provider value={{ theme, setTheme, toggleTheme, accentHue, setAccentHue }}>
+    <ThemeProviderContext.Provider
+      value={{ theme, setTheme, toggleTheme, accentId, setAccentId, accentColored }}
+    >
       {children}
     </ThemeProviderContext.Provider>
   );
