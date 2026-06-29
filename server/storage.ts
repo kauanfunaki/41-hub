@@ -2495,13 +2495,19 @@ export class DatabaseStorage implements IStorage {
     const bestByUser = new Map<string, typeof rows[0]>();
     for (const row of rows) {
       const existing = bestByUser.get(row.userId);
-      if (!existing || row.wpm > existing.wpm) {
+      // Melhor score do usuário: maior WPM e, em empate, maior precisão.
+      if (
+        !existing ||
+        row.wpm > existing.wpm ||
+        (row.wpm === existing.wpm && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
+      ) {
         bestByUser.set(row.userId, row);
       }
     }
 
     return Array.from(bestByUser.values())
-      .sort((a, b) => b.wpm - a.wpm)
+      // Desempate: WPM desc, depois precisão desc.
+      .sort((a, b) => b.wpm - a.wpm || parseFloat(b.accuracy) - parseFloat(a.accuracy))
       .slice(0, opts.limit || 20)
       .map(r => ({
         userId: r.userId,
@@ -2561,16 +2567,22 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(typingScores.wpm))
         .limit(100);
 
-      // Deduplicate by user, keep best wpm
+      // Deduplicate by user, keep best wpm (em empate, maior precisão)
       const bestByUser = new Map<string, typeof rows[0]>();
       for (const row of rows) {
-        if (!bestByUser.has(row.userId) || row.wpm > bestByUser.get(row.userId)!.wpm) {
+        const existing = bestByUser.get(row.userId);
+        if (
+          !existing ||
+          row.wpm > existing.wpm ||
+          (row.wpm === existing.wpm && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
+        ) {
           bestByUser.set(row.userId, row);
         }
       }
 
       Array.from(bestByUser.values())
-        .sort((a, b) => b.wpm - a.wpm)
+        // Desempate: WPM desc, depois precisão desc.
+        .sort((a, b) => b.wpm - a.wpm || parseFloat(b.accuracy) - parseFloat(a.accuracy))
         .slice(0, 3)
         .forEach((r, i) => {
           result.push({
