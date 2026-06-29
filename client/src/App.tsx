@@ -14,6 +14,7 @@ import {
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarBurger } from "@/components/sidebar-burger";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AccentPicker } from "@/components/accent-picker";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationProvider } from "@/providers/notification-provider";
 import { LoginLoadingScreen } from "@/components/login-loading-screen";
@@ -169,6 +170,7 @@ function AuthenticatedLayout() {
             <div className="flex items-center justify-end gap-3">
               <NotificationBell />
               <div className="w-px h-5 bg-border mx-1" />
+              <AccentPicker />
               <ThemeToggle />
             </div>
           </header>
