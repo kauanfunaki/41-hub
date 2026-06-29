@@ -3521,6 +3521,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const words = parsed.data.typed.trim().split(/\s+/).length;
       const recalcWpm = Math.round(words / durationMin);
 
+      // ── Qualidade do resultado: precisão recalculada no servidor ──────────────
+      // A precisão é recalculada aqui (não confiamos no valor do cliente),
+      // comparando caractere a caractere o texto digitado com o original — mesma
+      // fórmula da tela. Resultados com muitos erros são descartados: não fazem
+      // sentido no ranking e impedem subir só na base de digitar rápido e errado.
+      let correctChars = 0;
+      const compareLen = Math.max(parsed.data.typed.length, text.content.length);
+      for (let i = 0; i < parsed.data.typed.length; i++) {
+        if (parsed.data.typed[i] === text.content[i]) correctChars++;
+      }
+      const recalcAccuracy = compareLen > 0 ? Math.round((correctChars / compareLen) * 10000) / 100 : 0;
+      const MIN_ACCURACY = 50;
+      if (recalcAccuracy <= MIN_ACCURACY) {
+        return res.status(400).json({ error: "low_accuracy", message: "Precisão muito baixa — resultado descartado por excesso de erros" });
+      }
+
       // ── Anti-cheat: teto físico de velocidade ────────────────────────────────
       // Nenhum humano sustenta acima de ~15 caracteres/segundo. Uma macro que
       // digita tecla a tecla (driblando o check de colagem) é pega aqui, pois o
@@ -3561,7 +3577,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const score = await storage.submitTypingSession(parsed.data.sessionId, {
         wpm: finalWpm,
-        accuracy: parsed.data.accuracy.toFixed(2),
+        accuracy: recalcAccuracy.toFixed(2),
         durationMs: finalDurationMs,
         userId: req.user!.id,
         sectorId: userSectorId,

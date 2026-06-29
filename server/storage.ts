@@ -2492,22 +2492,26 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(typingScores.wpm))
       .limit((opts.limit || 20) * 10); // fetch extra rows to deduplicate per user
 
+    // Ranking por WPM EFETIVO = WPM × precisão. Assim 40 PPM/100% (efetivo 40)
+    // fica acima de 60 PPM/50% (efetivo 30): velocidade só conta se for precisa.
+    const effWpm = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
+
     const bestByUser = new Map<string, typeof rows[0]>();
     for (const row of rows) {
       const existing = bestByUser.get(row.userId);
-      // Melhor score do usuário: maior WPM e, em empate, maior precisão.
+      // Melhor score do usuário: maior WPM efetivo e, em empate, maior precisão.
       if (
         !existing ||
-        row.wpm > existing.wpm ||
-        (row.wpm === existing.wpm && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
+        effWpm(row) > effWpm(existing) ||
+        (effWpm(row) === effWpm(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
       ) {
         bestByUser.set(row.userId, row);
       }
     }
 
     return Array.from(bestByUser.values())
-      // Desempate: WPM desc, depois precisão desc.
-      .sort((a, b) => b.wpm - a.wpm || parseFloat(b.accuracy) - parseFloat(a.accuracy))
+      // Desempate: WPM efetivo desc, depois precisão desc.
+      .sort((a, b) => effWpm(b) - effWpm(a) || parseFloat(b.accuracy) - parseFloat(a.accuracy))
       .slice(0, opts.limit || 20)
       .map(r => ({
         userId: r.userId,
@@ -2567,22 +2571,23 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(typingScores.wpm))
         .limit(100);
 
-      // Deduplicate by user, keep best wpm (em empate, maior precisão)
+      // Deduplicate by user, keep best WPM efetivo (WPM × precisão; empate → precisão)
+      const effWpm = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
       const bestByUser = new Map<string, typeof rows[0]>();
       for (const row of rows) {
         const existing = bestByUser.get(row.userId);
         if (
           !existing ||
-          row.wpm > existing.wpm ||
-          (row.wpm === existing.wpm && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
+          effWpm(row) > effWpm(existing) ||
+          (effWpm(row) === effWpm(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
         ) {
           bestByUser.set(row.userId, row);
         }
       }
 
       Array.from(bestByUser.values())
-        // Desempate: WPM desc, depois precisão desc.
-        .sort((a, b) => b.wpm - a.wpm || parseFloat(b.accuracy) - parseFloat(a.accuracy))
+        // Desempate: WPM efetivo desc, depois precisão desc.
+        .sort((a, b) => effWpm(b) - effWpm(a) || parseFloat(b.accuracy) - parseFloat(a.accuracy))
         .slice(0, 3)
         .forEach((r, i) => {
           result.push({
