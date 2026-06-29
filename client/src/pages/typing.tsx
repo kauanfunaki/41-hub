@@ -67,6 +67,11 @@ export default function TypingTest() {
   // Ritmo entre teclas — detecta macros que digitam tecla a tecla
   const lastKeyTimeRef = useRef<number | null>(null);
   const keyIntervalsRef = useRef<number[]>([]);
+  // Biometria de digitação — detecta injeção via JS e macros de SO
+  const untrustedRef = useRef<boolean>(false);                 // algum evento sintético (isTrusted=false)
+  const keyDownAtRef = useRef<Map<string, number>>(new Map()); // code -> instante do keydown (teclas pressionadas)
+  const holdTimesRef = useRef<number[]>([]);                   // duração de pressão de cada tecla (dwell time)
+  const overlapCountRef = useRef<number>(0);                   // sobreposições de teclas (típico de humano real)
 
   const startSessionMutation = useMutation({
     mutationFn: async () => {
@@ -86,6 +91,10 @@ export default function TypingTest() {
       prevTypedLenRef.current = 0;
       lastKeyTimeRef.current = null;
       keyIntervalsRef.current = [];
+      untrustedRef.current = false;
+      keyDownAtRef.current = new Map();
+      holdTimesRef.current = [];
+      overlapCountRef.current = 0;
       setState("ready");
       setTimeout(() => inputRef.current?.focus(), 100);
     },
@@ -113,6 +122,11 @@ export default function TypingTest() {
       minIntervalMs: number;
       meanIntervalMs: number;
       stdIntervalMs: number;
+      untrusted: boolean;
+      keyHoldCount: number;
+      meanHoldMs: number;
+      stdHoldMs: number;
+      overlapCount: number;
     }) => {
       const res = await apiRequest("POST", "/api/typing/submit", data);
       if (!res.ok) {
@@ -181,6 +195,16 @@ export default function TypingTest() {
         stdIntervalMs = Math.sqrt(variance);
       }
 
+      // Biometria: dwell time (tempo de pressão de cada tecla)
+      const holds = holdTimesRef.current;
+      const keyHoldCount = holds.length;
+      let meanHoldMs = 0, stdHoldMs = 0;
+      if (keyHoldCount > 0) {
+        meanHoldMs = holds.reduce((a, b) => a + b, 0) / keyHoldCount;
+        const hVar = holds.reduce((a, b) => a + (b - meanHoldMs) ** 2, 0) / keyHoldCount;
+        stdHoldMs = Math.sqrt(hVar);
+      }
+
       submitMutation.mutate({
         sessionId: session.id,
         nonce: session.nonce,
@@ -195,6 +219,11 @@ export default function TypingTest() {
         minIntervalMs: Math.round(minIntervalMs),
         meanIntervalMs: Math.round(meanIntervalMs),
         stdIntervalMs: Math.round(stdIntervalMs),
+        untrusted: untrustedRef.current,
+        keyHoldCount,
+        meanHoldMs: Math.round(meanHoldMs),
+        stdHoldMs: Math.round(stdHoldMs),
+        overlapCount: overlapCountRef.current,
       });
     }
   }, [text, typed, session, level]);
@@ -236,6 +265,29 @@ export default function TypingTest() {
 
     if (text && value.length >= text.content.length) {
       calculateResults();
+    }
+  };
+
+  // Biometria: captura dwell time (tempo de pressão) e sobreposição de teclas.
+  // Eventos sintéticos (isTrusted=false, injeção via JS/console/extensão) marcam
+  // o teste como inválido — só hardware real ou macro de SO produzem isTrusted=true.
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!e.nativeEvent.isTrusted) { untrustedRef.current = true; return; }
+    if (state !== "ready" && state !== "running") return;
+    const code = e.code || e.key;
+    if (keyDownAtRef.current.has(code)) return; // auto-repetição (tecla segurada), ignora
+    // Se já havia outra tecla pressionada, esta desceu sobreposta — natural em humanos.
+    if (keyDownAtRef.current.size > 0) overlapCountRef.current++;
+    keyDownAtRef.current.set(code, performance.now());
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!e.nativeEvent.isTrusted) { untrustedRef.current = true; return; }
+    const code = e.code || e.key;
+    const downAt = keyDownAtRef.current.get(code);
+    if (downAt != null) {
+      holdTimesRef.current.push(performance.now() - downAt);
+      keyDownAtRef.current.delete(code);
     }
   };
 
@@ -503,7 +555,12 @@ export default function TypingTest() {
           <textarea
             ref={inputRef}
             value={typed}
-            onChange={(e) => handleInput(e.target.value)}
+            onChange={(e) => {
+              if (!e.nativeEvent.isTrusted) { untrustedRef.current = true; return; }
+              handleInput(e.target.value);
+            }}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
             onPaste={handlePaste}
             onDrop={handleDrop}
             className="w-full p-4 rounded-md border bg-background font-mono text-base resize-none focus:outline-none focus:ring-2 focus:ring-primary min-h-[100px]"

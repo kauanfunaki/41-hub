@@ -3472,6 +3472,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         minIntervalMs: z.number().min(0).optional(),
         meanIntervalMs: z.number().min(0).optional(),
         stdIntervalMs: z.number().min(0).optional(),
+        // Keystroke biometrics (detecta injeção via JS e macros de SO)
+        untrusted: z.boolean().optional(),
+        keyHoldCount: z.number().int().min(0).optional(),
+        meanHoldMs: z.number().min(0).optional(),
+        stdHoldMs: z.number().min(0).optional(),
+        overlapCount: z.number().int().min(0).optional(),
       });
 
       const parsed = schema.safeParse(req.body);
@@ -3566,6 +3572,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const cv = mean > 0 ? std / mean : 1; // coeficiente de variação
         if (cv < 0.1) {
           return res.status(400).json({ error: "anti_cheat", message: "Ritmo de digitação robótico detectado" });
+        }
+      }
+
+      // ── Anti-cheat: biometria de digitação ───────────────────────────────────
+      // 1) Eventos sintéticos: teclas injetadas via JS (console, bookmarklet,
+      //    extensão) chegam com isTrusted=false. Só hardware real ou macro de SO
+      //    produzem isTrusted=true. Qualquer evento sintético invalida o teste.
+      if (parsed.data.untrusted === true) {
+        return res.status(400).json({ error: "anti_cheat", message: "Entrada automatizada detectada (eventos sintéticos)" });
+      }
+      // 2) Dwell time (tempo de pressão de cada tecla): humanos seguram cada tecla
+      //    por dezenas de ms, com variação. Macros de SO (ex: AutoHotkey) por
+      //    padrão mandam keydown+keyup quase instantâneo (~0ms) ou com duração
+      //    fixa. Tempo médio baixíssimo ou variância ~0 só acontece com automação.
+      const kh = parsed.data.keyHoldCount ?? 0;
+      const meanHold = parsed.data.meanHoldMs ?? 0;
+      const stdHold = parsed.data.stdHoldMs ?? 0;
+      if (kh >= 30) {
+        if (meanHold < 8) {
+          return res.status(400).json({ error: "anti_cheat", message: "Pressão de teclas sem tempo humano detectada" });
+        }
+        const holdCv = meanHold > 0 ? stdHold / meanHold : 1;
+        if (holdCv < 0.1) {
+          return res.status(400).json({ error: "anti_cheat", message: "Pressão de teclas robótica detectada" });
         }
       }
 
