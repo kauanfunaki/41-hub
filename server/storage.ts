@@ -2492,41 +2492,73 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(typingScores.wpm))
       .limit((opts.limit || 20) * 10); // fetch extra rows to deduplicate per user
 
-    // Ranking por WPM EFETIVO ponderado pela dificuldade:
-    //   score = WPM × (accuracy/100) × difficulty_multiplier
-    // Fácil=1.0×, Médio=1.4×, Difícil=1.8× — textos mais difíceis naturalmente
-    // suprimem o PPM, então o multiplicador reequilibra a comparação cross-level.
-    // Dentro de um único nível o multiplicador é constante e não altera a ordem.
     const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
-    const effWpm = (r: { wpm: number; accuracy: string; level: string }) =>
-      r.wpm * parseFloat(r.accuracy) / 100 * (DIFF_MULT[r.level] ?? 1.0);
 
-    const bestByUser = new Map<string, typeof rows[0]>();
+    if (opts.level) {
+      // Filtro por nível: todos os scores são do mesmo nível, então o multiplicador
+      // é constante — basta pegar o melhor WPM efetivo simples por usuário.
+      const effWpm = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
+      const bestByUser = new Map<string, typeof rows[0]>();
+      for (const row of rows) {
+        const existing = bestByUser.get(row.userId);
+        if (!existing || effWpm(row) > effWpm(existing) || (effWpm(row) === effWpm(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))) {
+          bestByUser.set(row.userId, row);
+        }
+      }
+      return Array.from(bestByUser.values())
+        .sort((a, b) => effWpm(b) - effWpm(a) || parseFloat(b.accuracy) - parseFloat(a.accuracy))
+        .slice(0, opts.limit || 20)
+        .map(r => ({ userId: r.userId, userName: r.userName, userPhoto: r.userPhoto, sectorName: r.sectorName || null, wpm: r.wpm, accuracy: r.accuracy, monthKey: r.monthKey, level: r.level }));
+    }
+
+    // Modo "Todos": média ponderada por dificuldade.
+    // Para cada usuário, pega o melhor score em cada nível e calcula:
+    //   WPM_médio = Σ(PPM_nível × peso_nível) / Σ(peso_nível)
+    // Fácil=1.0×, Médio=1.4×, Difícil=1.8× — textos mais difíceis suprimem PPM
+    // naturalmente, então o peso compensa e torna a comparação cross-level justa.
+    const effWpmSingle = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
+
+    // Primeiro: melhor score por usuário por nível
+    const bestByUserLevel = new Map<string, Map<string, typeof rows[0]>>();
     for (const row of rows) {
-      const existing = bestByUser.get(row.userId);
-      // Melhor score do usuário: maior WPM efetivo ponderado; empate → precisão.
-      if (
-        !existing ||
-        effWpm(row) > effWpm(existing) ||
-        (effWpm(row) === effWpm(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
-      ) {
-        bestByUser.set(row.userId, row);
+      if (!bestByUserLevel.has(row.userId)) bestByUserLevel.set(row.userId, new Map());
+      const userLevels = bestByUserLevel.get(row.userId)!;
+      const existing = userLevels.get(row.level);
+      if (!existing || effWpmSingle(row) > effWpmSingle(existing) || (effWpmSingle(row) === effWpmSingle(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))) {
+        userLevels.set(row.level, row);
       }
     }
 
-    return Array.from(bestByUser.values())
-      // Desempate: WPM efetivo desc, depois precisão desc.
-      .sort((a, b) => effWpm(b) - effWpm(a) || parseFloat(b.accuracy) - parseFloat(a.accuracy))
+    // Depois: média ponderada por usuário
+    const aggregated = Array.from(bestByUserLevel.entries()).map(([userId, levelMap]) => {
+      const levelRows = Array.from(levelMap.values());
+      let wpmSum = 0, accSum = 0, weightSum = 0;
+      for (const r of levelRows) {
+        const mult = DIFF_MULT[r.level] ?? 1.0;
+        wpmSum += r.wpm * mult;
+        accSum += parseFloat(r.accuracy) * mult;
+        weightSum += mult;
+      }
+      const wpmAvg = wpmSum / weightSum;
+      const accAvg = accSum / weightSum;
+      const ref = levelRows[0];
+      // Nível exibido = o mais difícil que o usuário completou
+      const bestLevel = levelRows.sort((a, b) => (DIFF_MULT[b.level] ?? 1) - (DIFF_MULT[a.level] ?? 1))[0].level;
+      return { userId, wpmAvg, accAvg, ref, bestLevel };
+    });
+
+    return aggregated
+      .sort((a, b) => b.wpmAvg - a.wpmAvg || b.accAvg - a.accAvg)
       .slice(0, opts.limit || 20)
-      .map(r => ({
-        userId: r.userId,
-        userName: r.userName,
-        userPhoto: r.userPhoto,
-        sectorName: r.sectorName || null,
-        wpm: r.wpm,
-        accuracy: r.accuracy,
-        monthKey: r.monthKey,
-        level: r.level,
+      .map(a => ({
+        userId: a.userId,
+        userName: a.ref.userName,
+        userPhoto: a.ref.userPhoto,
+        sectorName: a.ref.sectorName || null,
+        wpm: Math.round(a.wpmAvg),
+        accuracy: a.accAvg.toFixed(1),
+        monthKey: a.ref.monthKey,
+        level: a.bestLevel,
       }));
   }
 
