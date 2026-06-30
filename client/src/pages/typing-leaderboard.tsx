@@ -15,7 +15,11 @@ import {
   Zap,
   Target,
   Keyboard,
+  Download,
+  FileText,
+  Loader2,
 } from "lucide-react";
+import { downloadCertificate, getMonthLabel, getIssuedLabel } from "@/lib/certificate";
 import type { Sector } from "@shared/schema";
 
 type Level = "easy" | "medium" | "hard" | "all";
@@ -343,6 +347,7 @@ export default function TypingLeaderboard() {
   const [podiumLevel, setPodiumLevel] = useState<"easy" | "medium" | "hard">("medium");
   const [tab, setTab] = useState<"global" | "sector">("global");
   const [selectedSectorId, setSelectedSectorId] = useState<string>("all");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const monthOptions = getMonthOptions();
 
@@ -383,6 +388,34 @@ export default function TypingLeaderboard() {
 
   const hasPodium = podiumAll.length > 0;
   const prevMonthLabel = monthOptions.find((m) => m.value === prevMonth)?.label ?? prevMonth;
+
+  // Certificate — visible only for top-3 of a closed month in "Todas" view
+  const isClosed = selectedMonth < currentMonth;
+  const myRank =
+    isClosed && selectedLevel === "all" && !isLoading
+      ? leaderboard.findIndex((e) => e.userId === user?.id) + 1
+      : 0;
+  const myEntry = myRank >= 1 && myRank <= 3 ? leaderboard[myRank - 1] : null;
+
+  const handleCertificate = async (format: "png" | "pdf") => {
+    if (!myEntry) return;
+    setIsGenerating(true);
+    try {
+      await downloadCertificate(
+        {
+          userName: myEntry.userName,
+          rank: myRank as 1 | 2 | 3,
+          wpm: myEntry.wpm,
+          accuracy: myEntry.accuracy,
+          monthLabel: getMonthLabel(selectedMonth),
+          issuedLabel: getIssuedLabel(selectedMonth),
+        },
+        format,
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -426,6 +459,66 @@ export default function TypingLeaderboard() {
             setPodiumLevel={setPodiumLevel}
             monthLabel={prevMonthLabel}
           />
+        )}
+
+        {/* Banner de certificado — visível apenas para top 3 de mês fechado em "Todas" */}
+        {myEntry && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`rounded-xl border p-4 flex items-center justify-between gap-4 flex-wrap ${
+              myRank === 1
+                ? "bg-yellow-500/5 border-yellow-500/30"
+                : myRank === 2
+                ? "bg-slate-400/5 border-slate-400/30"
+                : "bg-amber-700/5 border-amber-700/30"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl leading-none" aria-hidden>
+                {myRank === 1 ? "🥇" : myRank === 2 ? "🥈" : "🥉"}
+              </span>
+              <div>
+                <p className="font-semibold text-sm">
+                  Você ficou em {myRank}º lugar!
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Baixe seu certificado de destaque referente a{" "}
+                  {monthOptions.find((m) => m.value === selectedMonth)?.label ?? selectedMonth}.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isGenerating}
+                onClick={() => handleCertificate("png")}
+                data-testid="button-cert-png"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                PNG
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isGenerating}
+                onClick={() => handleCertificate("pdf")}
+                data-testid="button-cert-pdf"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                PDF
+              </Button>
+            </div>
+          </motion.div>
         )}
 
         {/* Filtros + Tabs */}
