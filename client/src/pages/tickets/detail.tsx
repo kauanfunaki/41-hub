@@ -384,8 +384,8 @@ export default function TicketsDetail() {
 
   const [commentBody, setCommentBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);
-  const [pendingImage, setPendingImage] = useState<File | null>(null);
-  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
+  const [pendingImagePreviews, setPendingImagePreviews] = useState<string[]>([]);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [newDeadline, setNewDeadline] = useState("");
   const [deadlineReason, setDeadlineReason] = useState("");
@@ -866,9 +866,10 @@ export default function TicketsDetail() {
                         e.preventDefault();
                         const file = item.getAsFile();
                         if (!file) return;
-                        setPendingImage(file);
+                        setPendingImages((prev) => [...prev, file]);
                         const reader = new FileReader();
-                        reader.onload = (ev) => setPendingImagePreview(ev.target?.result as string);
+                        reader.onload = (ev) =>
+                          setPendingImagePreviews((prev) => [...prev, ev.target?.result as string]);
                         reader.readAsDataURL(file);
                         return;
                       }
@@ -877,23 +878,30 @@ export default function TicketsDetail() {
                 />
 
                 {/* Preview da imagem pendente */}
-                {pendingImagePreview && (
-                  <div className="relative inline-block">
-                    <img
-                      src={pendingImagePreview}
-                      alt="Preview"
-                      className="rounded-lg border max-h-40 max-w-xs object-contain"
-                    />
-                    <button
-                      type="button"
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center"
-                      onClick={() => { setPendingImage(null); setPendingImagePreview(null); }}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                    <p className="text-[10px] text-muted-foreground mt-1 truncate max-w-xs">
-                      {pendingImage?.name}
-                    </p>
+                {pendingImagePreviews.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {pendingImagePreviews.map((preview, idx) => (
+                      <div key={idx} className="relative inline-block">
+                        <img
+                          src={preview}
+                          alt="Preview"
+                          className="rounded-lg border max-h-40 max-w-xs object-contain"
+                        />
+                        <button
+                          type="button"
+                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center"
+                          onClick={() => {
+                            setPendingImages((prev) => prev.filter((_, i) => i !== idx));
+                            setPendingImagePreviews((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <p className="text-[10px] text-muted-foreground mt-1 truncate max-w-xs">
+                          {pendingImages[idx]?.name}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -915,13 +923,17 @@ export default function TicketsDetail() {
                         const input = document.createElement("input");
                         input.type = "file";
                         input.accept = "image/*";
+                        input.multiple = true;
                         input.onchange = (e) => {
-                          const file = (e.target as HTMLInputElement).files?.[0];
-                          if (!file) return;
-                          setPendingImage(file);
-                          const reader = new FileReader();
-                          reader.onload = (ev) => setPendingImagePreview(ev.target?.result as string);
-                          reader.readAsDataURL(file);
+                          const files = Array.from((e.target as HTMLInputElement).files || []);
+                          if (!files.length) return;
+                          setPendingImages((prev) => [...prev, ...files]);
+                          files.forEach((file) => {
+                            const reader = new FileReader();
+                            reader.onload = (ev) =>
+                              setPendingImagePreviews((prev) => [...prev, ev.target?.result as string]);
+                            reader.readAsDataURL(file);
+                          });
                         };
                         input.click();
                       }}
@@ -932,17 +944,19 @@ export default function TicketsDetail() {
                   <Button
                     size="sm"
                     onClick={async () => {
-                      // Se há imagem pendente, faz upload primeiro
-                      if (pendingImage) {
+                      // Faz upload de todas as imagens pendentes antes de enviar o comentário
+                      if (pendingImages.length > 0) {
                         try {
-                          await new Promise<void>((resolve, reject) => {
-                            uploadMutation.mutate(pendingImage, {
-                              onSuccess: () => resolve(),
-                              onError: (e) => reject(e),
+                          for (const img of pendingImages) {
+                            await new Promise<void>((resolve, reject) => {
+                              uploadMutation.mutate(img, {
+                                onSuccess: () => resolve(),
+                                onError: (e) => reject(e),
+                              });
                             });
-                          });
-                          setPendingImage(null);
-                          setPendingImagePreview(null);
+                          }
+                          setPendingImages([]);
+                          setPendingImagePreviews([]);
                         } catch {}
                       }
                       // Envia o comentário se tiver texto
@@ -950,7 +964,7 @@ export default function TicketsDetail() {
                         commentMutation.mutate();
                       }
                     }}
-                    disabled={(!commentBody.trim() && !pendingImage) || commentMutation.isPending || uploadMutation.isPending}
+                    disabled={(!commentBody.trim() && pendingImages.length === 0) || commentMutation.isPending || uploadMutation.isPending}
                     className="ml-auto gap-1.5"
                     data-testid="button-send-comment"
                   >
