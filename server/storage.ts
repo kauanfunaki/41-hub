@@ -2492,14 +2492,19 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(typingScores.wpm))
       .limit((opts.limit || 20) * 10); // fetch extra rows to deduplicate per user
 
-    // Ranking por WPM EFETIVO = WPM × precisão. Assim 40 PPM/100% (efetivo 40)
-    // fica acima de 60 PPM/50% (efetivo 30): velocidade só conta se for precisa.
-    const effWpm = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
+    // Ranking por WPM EFETIVO ponderado pela dificuldade:
+    //   score = WPM × (accuracy/100) × difficulty_multiplier
+    // Fácil=1.0×, Médio=1.4×, Difícil=1.8× — textos mais difíceis naturalmente
+    // suprimem o PPM, então o multiplicador reequilibra a comparação cross-level.
+    // Dentro de um único nível o multiplicador é constante e não altera a ordem.
+    const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
+    const effWpm = (r: { wpm: number; accuracy: string; level: string }) =>
+      r.wpm * parseFloat(r.accuracy) / 100 * (DIFF_MULT[r.level] ?? 1.0);
 
     const bestByUser = new Map<string, typeof rows[0]>();
     for (const row of rows) {
       const existing = bestByUser.get(row.userId);
-      // Melhor score do usuário: maior WPM efetivo e, em empate, maior precisão.
+      // Melhor score do usuário: maior WPM efetivo ponderado; empate → precisão.
       if (
         !existing ||
         effWpm(row) > effWpm(existing) ||
