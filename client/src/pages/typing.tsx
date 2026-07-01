@@ -24,6 +24,7 @@ import {
   HelpCircle,
   Square,
   ShieldAlert,
+  X,
 } from "lucide-react";
 import type { TypingText, TypingSession, TypingScore } from "@shared/schema";
 
@@ -541,8 +542,17 @@ export default function TypingTest() {
                 <Square className="h-4 w-4 mr-2" />
                 Finalizar
               </Button>
-              <Button variant="outline" onClick={handleReset} data-testid="button-reset-test">
+              <Button
+                variant="outline"
+                onClick={handleStart}
+                disabled={startSessionMutation.isPending}
+                data-testid="button-restart-test"
+              >
                 <RotateCcw className="h-4 w-4 mr-2" />
+                Reiniciar
+              </Button>
+              <Button variant="outline" onClick={handleReset} data-testid="button-reset-test">
+                <X className="h-4 w-4 mr-2" />
                 Cancelar
               </Button>
             </div>

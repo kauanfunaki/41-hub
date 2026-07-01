@@ -248,17 +248,12 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
 
 function PodiumSection({
   entries,
-  podiumLevel,
-  setPodiumLevel,
   monthLabel,
 }: {
   entries: PodiumEntry[];
-  podiumLevel: "easy" | "medium" | "hard";
-  setPodiumLevel: (l: "easy" | "medium" | "hard") => void;
   monthLabel: string;
 }) {
-  const byLevel = entries.filter((p) => p.level === podiumLevel);
-  const sorted = [...byLevel].sort((a, b) => a.rank - b.rank);
+  const sorted = [...entries].sort((a, b) => a.rank - b.rank);
   const byRank: Record<number, PodiumEntry> = {};
   sorted.forEach((e) => { byRank[e.rank] = e; });
 
@@ -275,29 +270,12 @@ function PodiumSection({
             <p className="text-base font-bold text-foreground">{monthLabel}</p>
           </div>
         </div>
-
-        {/* Seletor de dificuldade — theme-aware */}
-        <div className="flex gap-1 p-1 rounded-xl bg-muted border border-border">
-          {(["easy", "medium", "hard"] as const).map((lv) => (
-            <button
-              key={lv}
-              onClick={() => setPodiumLevel(lv)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all duration-200 border ${
-                podiumLevel === lv
-                  ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/40"
-                  : "text-muted-foreground hover:text-foreground border-transparent"
-              }`}
-            >
-              {LEVEL_LABELS[lv]}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Área do pódio */}
       <div className="px-4 pb-6">
         <AnimatePresence mode="wait">
-          {byLevel.length === 0 ? (
+          {entries.length === 0 ? (
             <motion.p
               key="empty"
               initial={{ opacity: 0 }}
@@ -305,11 +283,11 @@ function PodiumSection({
               exit={{ opacity: 0 }}
               className="text-xs text-muted-foreground text-center py-8"
             >
-              Nenhum resultado para {LEVEL_LABELS[podiumLevel]} no mês anterior.
+              Nenhum resultado no mês anterior.
             </motion.p>
           ) : (
             <motion.div
-              key={podiumLevel}
+              key="podium"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -344,7 +322,6 @@ export default function TypingLeaderboard() {
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedLevel, setSelectedLevel] = useState<Level>("all");
-  const [podiumLevel, setPodiumLevel] = useState<"easy" | "medium" | "hard">("medium");
   const [tab, setTab] = useState<"global" | "sector">("global");
   const [selectedSectorId, setSelectedSectorId] = useState<string>("all");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -455,8 +432,6 @@ export default function TypingLeaderboard() {
         {hasPodium && (
           <PodiumSection
             entries={podiumAll}
-            podiumLevel={podiumLevel}
-            setPodiumLevel={setPodiumLevel}
             monthLabel={prevMonthLabel}
           />
         )}

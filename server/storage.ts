@@ -2591,55 +2591,64 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTypingPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; wpm: number; accuracy: string }>> {
-    const result: Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; wpm: number; accuracy: string }> = [];
+    // Pódio do mês usa a mesma média ponderada por dificuldade da aba "Todas"
+    // do ranking geral, ao invés de um pódio separado por nível.
+    const rows = await db
+      .select({
+        userId: typingScores.userId,
+        userName: users.name,
+        userPhoto: users.photoUrl,
+        wpm: typingScores.wpm,
+        accuracy: typingScores.accuracy,
+        level: typingScores.level,
+      })
+      .from(typingScores)
+      .innerJoin(users, eq(typingScores.userId, users.id))
+      .where(eq(typingScores.monthKey, monthKey))
+      .orderBy(desc(typingScores.wpm));
 
-    for (const level of ["easy", "medium", "hard"] as const) {
-      const rows = await db
-        .select({
-          userId: typingScores.userId,
-          userName: users.name,
-          userPhoto: users.photoUrl,
-          wpm: typingScores.wpm,
-          accuracy: typingScores.accuracy,
-        })
-        .from(typingScores)
-        .innerJoin(users, eq(typingScores.userId, users.id))
-        .where(and(eq(typingScores.monthKey, monthKey), eq(typingScores.level, level)))
-        .orderBy(desc(typingScores.wpm))
-        .limit(100);
+    const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
+    const effWpm = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
 
-      // Deduplicate by user, keep best WPM efetivo (WPM × precisão; empate → precisão)
-      const effWpm = (r: { wpm: number; accuracy: string }) => r.wpm * parseFloat(r.accuracy) / 100;
-      const bestByUser = new Map<string, typeof rows[0]>();
-      for (const row of rows) {
-        const existing = bestByUser.get(row.userId);
-        if (
-          !existing ||
-          effWpm(row) > effWpm(existing) ||
-          (effWpm(row) === effWpm(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))
-        ) {
-          bestByUser.set(row.userId, row);
-        }
+    // Melhor score por usuário por nível
+    const bestByUserLevel = new Map<string, Map<string, typeof rows[0]>>();
+    for (const row of rows) {
+      if (!bestByUserLevel.has(row.userId)) bestByUserLevel.set(row.userId, new Map());
+      const userLevels = bestByUserLevel.get(row.userId)!;
+      const existing = userLevels.get(row.level);
+      if (!existing || effWpm(row) > effWpm(existing) || (effWpm(row) === effWpm(existing) && parseFloat(row.accuracy) > parseFloat(existing.accuracy))) {
+        userLevels.set(row.level, row);
       }
-
-      Array.from(bestByUser.values())
-        // Desempate: WPM efetivo desc, depois precisão desc.
-        .sort((a, b) => effWpm(b) - effWpm(a) || parseFloat(b.accuracy) - parseFloat(a.accuracy))
-        .slice(0, 3)
-        .forEach((r, i) => {
-          result.push({
-            level,
-            rank: i + 1,
-            userId: r.userId,
-            userName: r.userName,
-            userPhoto: r.userPhoto,
-            wpm: r.wpm,
-            accuracy: r.accuracy,
-          });
-        });
     }
 
-    return result;
+    // Média ponderada por usuário
+    const aggregated = Array.from(bestByUserLevel.entries()).map(([userId, levelMap]) => {
+      const levelRows = Array.from(levelMap.values());
+      let wpmSum = 0, accSum = 0, weightSum = 0;
+      for (const r of levelRows) {
+        const mult = DIFF_MULT[r.level] ?? 1.0;
+        wpmSum += r.wpm * mult;
+        accSum += parseFloat(r.accuracy) * mult;
+        weightSum += mult;
+      }
+      const wpmAvg = wpmSum / weightSum;
+      const accAvg = accSum / weightSum;
+      const ref = levelRows[0];
+      return { userId, wpmAvg, accAvg, ref };
+    });
+
+    return aggregated
+      .sort((a, b) => b.wpmAvg - a.wpmAvg || b.accAvg - a.accAvg)
+      .slice(0, 3)
+      .map((a, i) => ({
+        level: "all",
+        rank: i + 1,
+        userId: a.userId,
+        userName: a.ref.userName,
+        userPhoto: a.ref.userPhoto,
+        wpm: Math.round(a.wpmAvg),
+        accuracy: a.accAvg.toFixed(1),
+      }));
   }
 
   async createFeedback(data: InsertPlatformFeedback): Promise<PlatformFeedback> {
