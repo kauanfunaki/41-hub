@@ -265,6 +265,37 @@ async function requireNewsToken(req: Request, res: Response, next: NextFunction)
   }
 }
 
+// Token-based auth for Connect 41 → Hub integration (requires "connect41" scope,
+// ou "write" — tokens de integração já criados com escopo write/read continuam
+// funcionando sem precisar ser recriados).
+// Usado pela tela de login do Connect 41 (Esqueci a senha / Solicitar acesso), que
+// é chamada por quem ainda não tem conta — não há sessão de usuário para exigir.
+async function requireConnect41Token(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing Bearer token" });
+  }
+  const rawToken = authHeader.slice(7);
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  try {
+    const result = await pool.query(
+      `SELECT id, scopes FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL`,
+      [tokenHash]
+    );
+    if (!result.rows.length) {
+      return res.status(401).json({ error: "Invalid or revoked token" });
+    }
+    const scopes: string[] = result.rows[0].scopes ?? [];
+    if (!scopes.includes("connect41") && !scopes.includes("write")) {
+      return res.status(403).json({ error: "Token does not have 'connect41' or 'write' scope" });
+    }
+    next();
+  } catch (err) {
+    console.error("[requireConnect41Token] error:", err);
+    return res.status(500).json({ error: "Internal error" });
+  }
+}
+
 // Category → sector name mapping (used during news ingest)
 const CATEGORY_TO_SECTORS: Record<string, string[]> = {
   "IA": ["Tech"],
@@ -1935,6 +1966,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(201).json(ticket);
     } catch (error: any) {
       console.error("Error creating ticket:", error);
+      return res.status(500).json({ error: error.message || "Failed to create ticket" });
+    }
+  });
+
+  // ============ Connect 41 Integration ============
+  // Abre um chamado real no Hub a partir da tela de login do Connect 41 (Esqueci a
+  // senha / Solicitar acesso) — quem preenche esse form ainda não tem conta em
+  // nenhum dos dois sistemas, então isso roda com token de serviço, não sessão.
+  //
+  // Configuração necessária (env vars do Hub):
+  //   CONNECT41_SYSTEM_USER_EMAIL    — e-mail de um usuário Hub existente (Admin ou
+  //                                    Coordenador) usado como "criador" do chamado.
+  //   CONNECT41_TICKET_CATEGORY_NAME — nome exato de uma categoria de chamado já
+  //                                    cadastrada em /admin/ticket-categories.
+  //   CONNECT41_REQUESTER_SECTOR_NAME (opcional, default "Tech")
+  app.post("/api/integrations/connect41/access-requests", requireConnect41Token, async (req, res) => {
+    try {
+      const schema = z.object({
+        origem: z.literal("connect41").optional(),
+        tipo: z.enum(["SENHA", "ACESSO"]),
+        nome: z.string().min(1).max(180),
+        email: z.string().email(),
+        telefone: z.string().max(30).optional(),
+        mensagem: z.string().max(2000).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      }
+
+      const systemUserEmail = process.env.CONNECT41_SYSTEM_USER_EMAIL;
+      const categoryName = process.env.CONNECT41_TICKET_CATEGORY_NAME;
+      const requesterSectorName = process.env.CONNECT41_REQUESTER_SECTOR_NAME || "Tech";
+
+      if (!systemUserEmail || !categoryName) {
+        console.error("[connect41/access-requests] CONNECT41_SYSTEM_USER_EMAIL/CONNECT41_TICKET_CATEGORY_NAME não configurados");
+        return res.status(500).json({ error: "Integração com o Connect 41 não configurada no Hub" });
+      }
+
+      const systemUser = await storage.getUserByEmail(systemUserEmail);
+      if (!systemUser) {
+        return res.status(500).json({ error: `Usuário de sistema "${systemUserEmail}" não encontrado no Hub` });
+      }
+      const actorUser = await storage.getUserWithRoles(systemUser.id);
+      if (!actorUser) {
+        return res.status(500).json({ error: "Usuário de sistema sem papéis configurados no Hub" });
+      }
+
+      const requesterSector = await storage.getSectorByName(requesterSectorName);
+      if (!requesterSector) {
+        return res.status(500).json({ error: `Setor "${requesterSectorName}" não encontrado no Hub` });
+      }
+
+      const allCats = await storage.listAllTicketCategories();
+      const category = allCats.find((c) => c.name === categoryName && c.isActive);
+      if (!category) {
+        return res.status(500).json({ error: `Categoria "${categoryName}" não encontrada ou inativa no Hub` });
+      }
+
+      const { tipo, nome, email, telefone, mensagem } = parsed.data;
+      const title = tipo === "SENHA"
+        ? `Redefinição de senha — ${nome}`
+        : `Solicitação de acesso — ${nome}`;
+
+      const description = [
+        "Solicitação recebida pela tela de login do Connect 41 (usuário sem acesso ainda).",
+        `Nome: ${nome}`,
+        `E-mail: ${email}`,
+        telefone ? `Telefone: ${telefone}` : null,
+        mensagem ? `Mensagem: ${mensagem}` : null,
+      ].filter(Boolean).join("\n");
+
+      const ticket = await storage.createTicket({
+        title,
+        description,
+        requesterSectorId: requesterSector.id,
+        categoryId: category.id,
+        priority: "MEDIA",
+        tags: ["connect41", tipo.toLowerCase()],
+        requestData: { origem: "connect41", tipo, nome, email, telefone, mensagem },
+      }, actorUser);
+
+      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+      return res.status(201).json({
+        ticketId: ticket.id,
+        ticketUrl: baseUrl ? `${baseUrl}/tickets/${ticket.id}` : null,
+      });
+    } catch (error: any) {
+      console.error("[connect41/access-requests] error:", error);
       return res.status(500).json({ error: error.message || "Failed to create ticket" });
     }
   });
