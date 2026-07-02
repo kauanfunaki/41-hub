@@ -2681,6 +2681,55 @@ export class DatabaseStorage implements IStorage {
   async markFeedbackRead(id: string): Promise<void> {
     await db.update(platformFeedback).set({ isRead: true }).where(eq(platformFeedback.id, id));
   }
+
+  async getFeedbackById(id: string): Promise<(PlatformFeedback & { userName?: string | null }) | undefined> {
+    const [row] = await db
+      .select({
+        id: platformFeedback.id,
+        userId: platformFeedback.userId,
+        type: platformFeedback.type,
+        title: platformFeedback.title,
+        message: platformFeedback.message,
+        isRead: platformFeedback.isRead,
+        createdAt: platformFeedback.createdAt,
+        userName: users.name,
+      })
+      .from(platformFeedback)
+      .leftJoin(users, eq(platformFeedback.userId, users.id))
+      .where(eq(platformFeedback.id, id));
+    return row;
+  }
+
+  async getUserPrimarySectorId(userId: string): Promise<string | undefined> {
+    const [row] = await db
+      .select({ sectorId: userSectorRoles.sectorId })
+      .from(userSectorRoles)
+      .where(eq(userSectorRoles.userId, userId))
+      .limit(1);
+    return row?.sectorId;
+  }
+
+  // Categoria exclusiva usada para chamados abertos automaticamente a partir de
+  // feedbacks — mantida inativa (isActive=false) para não aparecer no wizard de
+  // criação manual de chamados, mas segue disponível para uso interno.
+  async getOrCreateFeedbackCategory(): Promise<TicketCategory> {
+    const [existing] = await db
+      .select()
+      .from(ticketCategories)
+      .where(and(eq(ticketCategories.name, "Feedback"), sql`${ticketCategories.parentId} IS NULL`))
+      .limit(1);
+    if (existing) return existing;
+
+    const [created] = await db
+      .insert(ticketCategories)
+      .values({
+        name: "Feedback",
+        branch: "Feedback",
+        isActive: false,
+      })
+      .returning();
+    return created;
+  }
 }
 
 export const storage = new DatabaseStorage();

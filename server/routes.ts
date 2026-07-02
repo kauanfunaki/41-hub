@@ -6089,5 +6089,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  const FEEDBACK_TYPE_LABELS: Record<string, string> = {
+    BUG: "Bug",
+    SUGESTAO: "Sugestão",
+    MELHORIA: "Melhoria",
+    OUTRO: "Outro",
+  };
+
+  app.post("/api/admin/feedback/:id/create-ticket", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const feedback = await storage.getFeedbackById(req.params.id);
+      if (!feedback) {
+        return res.status(404).json({ error: "Feedback não encontrado" });
+      }
+      if (!feedback.userId) {
+        return res.status(400).json({ error: "Feedback sem usuário associado — não é possível determinar o setor" });
+      }
+
+      const sectorId = await storage.getUserPrimarySectorId(feedback.userId);
+      if (!sectorId) {
+        return res.status(400).json({ error: "Não foi possível determinar o setor do usuário que enviou o feedback" });
+      }
+
+      const category = await storage.getOrCreateFeedbackCategory();
+
+      const typeLabel = FEEDBACK_TYPE_LABELS[feedback.type] || feedback.type;
+      const description = `[Feedback — ${typeLabel}] ${feedback.message}${feedback.userName ? `\n\nEnviado por: ${feedback.userName}` : ""}`;
+
+      const ticket = await storage.createTicket({
+        title: feedback.title,
+        description,
+        requesterSectorId: sectorId,
+        categoryId: category.id,
+      }, req.user!);
+
+      await storage.markFeedbackRead(feedback.id);
+
+      res.json(ticket);
+    } catch (err: any) {
+      console.error("[feedback] create-ticket error:", err);
+      res.status(500).json({ error: err.message || "Failed to create ticket from feedback" });
+    }
+  });
+
   return httpServer;
 }
