@@ -108,8 +108,21 @@ export function AppSidebar() {
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
   });
+  const { data: feedbackItems = [] } = useQuery<{ id: string; isRead: boolean }[]>({
+    queryKey: ["/api/admin/feedback", { sidebar: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/feedback", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isAuthenticated && !!isAdmin,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+  });
   const ticketCount = Array.isArray(activeTickets) ? activeTickets.length : 0;
   const alertCount = Array.isArray(activeAlertsData) ? activeAlertsData.filter((a) => !a.isRead).length : 0;
+  const feedbackCount = Array.isArray(feedbackItems) ? feedbackItems.filter((f) => !f.isRead).length : 0;
 
   const { restart: restartTutorial, isRestarting } = useTutorial();
 
@@ -288,6 +301,14 @@ export function AppSidebar() {
                   <Link href="/feedback">
                     <MessageSquarePlus className="h-4 w-4" />
                     <span>Feedback</span>
+                    {feedbackCount > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className="ml-auto h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center"
+                      >
+                        {feedbackCount > 99 ? "99+" : feedbackCount}
+                      </Badge>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

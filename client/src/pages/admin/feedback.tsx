@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   MessageSquarePlus, Bug, Lightbulb, Wrench, HelpCircle,
-  Inbox, Check, Ticket, Filter,
+  Inbox, Check, Ticket, Filter, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import type { Sector, TicketCategoryTree } from "@shared/schema";
 
 type FeedbackType = "BUG" | "SUGESTAO" | "MELHORIA" | "OUTRO";
 
@@ -80,10 +92,35 @@ export default function AdminFeedbackPage() {
 
   const [typeFilter, setTypeFilter] = useState<FeedbackType | "all">("all");
   const [readFilter, setReadFilter] = useState<"all" | "unread" | "read">("all");
+  const [ticketDialogItem, setTicketDialogItem] = useState<FeedbackItem | null>(null);
+  const [ticketTitle, setTicketTitle] = useState("");
+  const [ticketDescription, setTicketDescription] = useState("");
+  const [ticketSectorId, setTicketSectorId] = useState("");
+  const [ticketCategoryId, setTicketCategoryId] = useState("");
 
   const { data: items = [], isLoading } = useQuery<FeedbackItem[]>({
     queryKey: ["/api/admin/feedback"],
     queryFn: () => fetch("/api/admin/feedback", { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const { data: sectors = [] } = useQuery<Sector[]>({
+    queryKey: ["/api/admin/sectors"],
+    enabled: !!ticketDialogItem,
+  });
+
+  const { data: categories = [] } = useQuery<TicketCategoryTree[]>({
+    queryKey: ["/api/tickets/categories"],
+    enabled: !!ticketDialogItem,
+  });
+
+  const leafCategories = categories.flatMap((root) => {
+    if (root.children && root.children.length > 0) {
+      return root.children.map((child) => ({
+        ...child,
+        displayPath: `${root.name} / ${child.name}`,
+      }));
+    }
+    return [{ ...root, displayPath: root.name }];
   });
 
   const markReadMutation = useMutation({
@@ -93,6 +130,34 @@ export default function AdminFeedbackPage() {
     },
     onError: () => {
       toast({ title: "Erro ao marcar como lido", variant: "destructive" });
+    },
+  });
+
+  const createTicketMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/tickets", {
+        title: ticketTitle,
+        description: ticketDescription,
+        requesterSectorId: ticketSectorId,
+        categoryId: ticketCategoryId,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "Erro ao criar chamado");
+      }
+      return res.json();
+    },
+    onSuccess: async (ticket) => {
+      if (ticketDialogItem && !ticketDialogItem.isRead) {
+        markReadMutation.mutate(ticketDialogItem.id);
+      }
+      qc.invalidateQueries({ queryKey: ["/api/admin/feedback"] });
+      setTicketDialogItem(null);
+      toast({ title: "Chamado criado com sucesso" });
+      setLocation(`/tickets/${ticket.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao criar chamado", description: err.message, variant: "destructive" });
     },
   });
 
@@ -106,11 +171,11 @@ export default function AdminFeedbackPage() {
   const unreadCount = items.filter((i) => !i.isRead).length;
 
   function openAsTicket(item: FeedbackItem) {
-    const params = new URLSearchParams({
-      prefillTitle: item.title,
-      prefillDescription: `[Feedback — ${typeInfo(item.type).label}] ${item.message}${item.userName ? `\n\nEnviado por: ${item.userName}` : ""}`,
-    });
-    setLocation(`/tickets/new?${params.toString()}`);
+    setTicketDialogItem(item);
+    setTicketTitle(item.title);
+    setTicketDescription(`[Feedback — ${typeInfo(item.type).label}] ${item.message}${item.userName ? `\n\nEnviado por: ${item.userName}` : ""}`);
+    setTicketSectorId("");
+    setTicketCategoryId("");
   }
 
   return (
@@ -239,6 +304,86 @@ export default function AdminFeedbackPage() {
           })}
         </div>
       )}
+
+      {/* Dialog: criar chamado a partir do feedback */}
+      <Dialog open={!!ticketDialogItem} onOpenChange={(open) => !open && setTicketDialogItem(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Abrir chamado a partir do feedback</DialogTitle>
+            <DialogDescription>
+              Selecione o setor e a categoria. O título e a descrição já vêm preenchidos com os dados do feedback.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Setor solicitante</Label>
+              <Select value={ticketSectorId} onValueChange={setTicketSectorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sectors.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select value={ticketCategoryId} onValueChange={setTicketCategoryId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {leafCategories.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>{c.displayPath}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ticket-title">Título</Label>
+              <Input id="ticket-title" value={ticketTitle} onChange={(e) => setTicketTitle(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ticket-description">Descrição</Label>
+              <Textarea
+                id="ticket-description"
+                value={ticketDescription}
+                onChange={(e) => setTicketDescription(e.target.value)}
+                rows={5}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTicketDialogItem(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => createTicketMutation.mutate()}
+              disabled={
+                createTicketMutation.isPending ||
+                !ticketSectorId ||
+                !ticketCategoryId ||
+                !ticketTitle.trim() ||
+                !ticketDescription.trim()
+              }
+            >
+              {createTicketMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Ticket className="h-4 w-4 mr-2" />
+              )}
+              Criar chamado
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

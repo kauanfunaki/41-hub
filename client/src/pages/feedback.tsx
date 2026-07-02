@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   MessageSquarePlus, CheckCircle2, Bug, Lightbulb, Wrench, HelpCircle,
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,13 @@ export default function FeedbackPage() {
   const [type, setType] = useState<FeedbackType>("SUGESTAO");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+
+  const { data: adminFeedbackItems = [] } = useQuery<{ id: string; isRead: boolean }[]>({
+    queryKey: ["/api/admin/feedback"],
+    queryFn: () => fetch("/api/admin/feedback", { credentials: "include" }).then((r) => r.ok ? r.json() : []),
+    enabled: !!user?.isAdmin,
+  });
+  const unreadFeedbackCount = adminFeedbackItems.filter((f) => !f.isRead).length;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -134,6 +142,11 @@ export default function FeedbackPage() {
             <div className="flex items-center gap-2.5">
               <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Ver feedbacks recebidos</span>
+              {unreadFeedbackCount > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {unreadFeedbackCount > 99 ? "99+" : unreadFeedbackCount} não lido{unreadFeedbackCount !== 1 ? "s" : ""}
+                </Badge>
+              )}
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground" />
           </button>
