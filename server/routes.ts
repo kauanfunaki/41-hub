@@ -3787,7 +3787,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/typing/me/stats", requireAuth, async (req, res) => {
     try {
-      const stats = await storage.getUserTypingStats(req.user!.id);
+      const monthKey = req.query.month as string | undefined;
+      const stats = await storage.getUserTypingStats(req.user!.id, monthKey);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching user typing stats:", error);

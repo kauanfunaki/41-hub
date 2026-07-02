@@ -343,7 +343,7 @@ export interface IStorage {
   submitTypingSession(sessionId: string, score: { wpm: number; accuracy: string; durationMs: number; userId: string; sectorId: string | null; monthKey: string; difficulty: number; level: string }): Promise<TypingScore>;
   getTypingLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; wpm: number; accuracy: string; monthKey: string; level: string }>>;
   getUserBestTypingScore(userId: string, level?: string): Promise<TypingScore | undefined>;
-  getUserTypingStats(userId: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }>;
+  getUserTypingStats(userId: string, monthKey?: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }>;
   getTypingPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; wpm: number; accuracy: string }>>;
 
   // TI Dashboard
@@ -2574,7 +2574,10 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getUserTypingStats(userId: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }> {
+  async getUserTypingStats(userId: string, monthKey?: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }> {
+    const conditions = [eq(typingScores.userId, userId)];
+    if (monthKey) conditions.push(eq(typingScores.monthKey, monthKey));
+
     const [row] = await db
       .select({
         bestWpm: sql<number>`COALESCE(MAX(${typingScores.wpm}), 0)::int`,
@@ -2582,7 +2585,7 @@ export class DatabaseStorage implements IStorage {
         totalSessions: sql<number>`COUNT(*)::int`,
       })
       .from(typingScores)
-      .where(eq(typingScores.userId, userId));
+      .where(and(...conditions));
     return {
       bestWpm: row?.bestWpm ?? 0,
       bestAccuracy: row?.bestAccuracy != null ? Math.round(Number(row.bestAccuracy) * 100) / 100 : 0,

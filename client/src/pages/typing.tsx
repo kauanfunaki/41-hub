@@ -50,6 +50,15 @@ export default function TypingTest() {
     retry: false,
   });
 
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const { data: myMonthStats } = useQuery<{ bestWpm: number; bestAccuracy: number; totalSessions: number } | null>({
+    queryKey: ["/api/typing/me/stats", currentMonthKey],
+    queryFn: () => fetch(`/api/typing/me/stats?month=${currentMonthKey}`, { credentials: "include" }).then(r => r.ok ? r.json() : null),
+    retry: false,
+  });
+
   const [state, setState] = useState<SessionState>("idle");
   const [level, setLevel] = useState<Level>("medium");
   const [session, setSession] = useState<TypingSession | null>(null);
@@ -157,6 +166,11 @@ export default function TypingTest() {
   }, []);
 
   const handleStart = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    startPerfRef.current = null;
     setState("loading");
     startSessionMutation.mutate();
   };
@@ -458,7 +472,7 @@ export default function TypingTest() {
 
           {/* Side panel: personal stats */}
           <div className="flex flex-col gap-4">
-            <div className="rounded-xl border bg-card overflow-hidden h-full">
+            <div className="rounded-xl border bg-card overflow-hidden">
               <div className="h-[3px] bg-chart-3 w-full" />
               <div className="p-5">
                 <p className="text-sm font-semibold mb-4 flex items-center gap-2">
@@ -488,6 +502,41 @@ export default function TypingTest() {
                   <div className="text-center py-4">
                     <p className="text-sm text-muted-foreground">Nenhum teste realizado ainda.</p>
                     <p className="text-xs text-muted-foreground mt-1">Complete seu primeiro teste para ver suas estatísticas.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="h-[3px] bg-primary w-full" />
+              <div className="p-5">
+                <p className="text-sm font-semibold mb-4 flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-primary" />
+                  Estatísticas do Mês
+                </p>
+                {myMonthStats && myMonthStats.totalSessions > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-muted/50 p-3 text-center">
+                        <p className="text-2xl font-bold tabular-nums text-foreground">{myMonthStats.bestWpm ?? "—"}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Melhor WPM</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 p-3 text-center">
+                        <p className="text-2xl font-bold tabular-nums text-foreground">
+                          {myMonthStats.bestAccuracy != null ? `${myMonthStats.bestAccuracy}%` : "—"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Melhor precisão</p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                      <p className="text-2xl font-bold tabular-nums text-foreground">{myMonthStats.totalSessions}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Sessões realizadas</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">Nenhum teste este mês ainda.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Faça um teste para começar a pontuar no mês.</p>
                   </div>
                 )}
               </div>
