@@ -82,6 +82,13 @@ export default function LogicTest() {
     retry: false,
   });
 
+  const { data: todayAttempts } = useQuery<{ attemptedLevels: Level[] } | null>({
+    queryKey: ["/api/logic/me/today"],
+    queryFn: () => fetch("/api/logic/me/today", { credentials: "include" }).then(r => r.ok ? r.json() : null),
+    retry: false,
+  });
+  const attemptedLevelsToday = new Set(todayAttempts?.attemptedLevels ?? []);
+
   const [state, setState] = useState<SessionState>("idle");
   const [level, setLevel] = useState<Level>("medium");
   const [session, setSession] = useState<LogicSessionView | null>(null);
@@ -151,6 +158,7 @@ export default function LogicTest() {
       setResult((prev) => prev ? { ...prev, score } : null);
       queryClient.invalidateQueries({ queryKey: ["/api/logic/me/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/logic/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logic/me/today"] });
     },
     onError: (err: Error) => {
       toast({
@@ -312,27 +320,36 @@ export default function LogicTest() {
                   Dificuldade
                 </p>
                 <div className="flex gap-0.5 p-0.5 rounded-xl bg-muted border border-border">
-                  {(["easy", "medium", "hard"] as Level[]).map((lv) => (
-                    <button
-                      key={lv}
-                      onClick={() => setLevel(lv)}
-                      className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                        level === lv
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                      data-testid={`button-difficulty-${lv}`}
-                    >
-                      {LEVEL_LABELS[lv]}
-                    </button>
-                  ))}
+                  {(["easy", "medium", "hard"] as Level[]).map((lv) => {
+                    const done = attemptedLevelsToday.has(lv);
+                    return (
+                      <button
+                        key={lv}
+                        onClick={() => setLevel(lv)}
+                        className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                          level === lv
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        } ${done ? "opacity-60" : ""}`}
+                        data-testid={`button-difficulty-${lv}`}
+                      >
+                        {LEVEL_LABELS[lv]}
+                        {done && <CheckCircle2 className="h-3.5 w-3.5" />}
+                      </button>
+                    );
+                  })}
                 </div>
+                {attemptedLevelsToday.has(level) && (
+                  <p className="text-xs text-muted-foreground text-center max-w-xs" data-testid="text-level-done-today">
+                    Você já fez o teste de lógica no nível {LEVEL_LABELS[level]} hoje. Escolha outro nível ou volte amanhã.
+                  </p>
+                )}
               </div>
 
               <Button
                 size="lg"
                 onClick={handleStart}
-                disabled={startSessionMutation.isPending}
+                disabled={startSessionMutation.isPending || attemptedLevelsToday.has(level)}
                 data-testid="button-start-test"
               >
                 {startSessionMutation.isPending ? (

@@ -3886,17 +3886,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/logic/session", requireAuth, async (req, res) => {
     try {
-      const attemptedToday = await storage.hasLogicAttemptToday(req.user!.id);
-      if (attemptedToday) {
-        return res.status(429).json({
-          error: "daily_limit_reached",
-          message: "Você já fez o teste de lógica hoje. Tente novamente amanhã.",
-        });
-      }
-
       const rawLevel = req.body?.level as string | undefined;
       const level: "easy" | "medium" | "hard" =
         rawLevel === "easy" || rawLevel === "hard" ? rawLevel : "medium";
+
+      const attemptedToday = await storage.hasLogicAttemptToday(req.user!.id, level);
+      if (attemptedToday) {
+        return res.status(429).json({
+          error: "daily_limit_reached",
+          message: `Você já fez o teste de lógica no nível "${level === "easy" ? "Fácil" : level === "hard" ? "Difícil" : "Média"}" hoje. Tente outro nível ou volte amanhã.`,
+        });
+      }
 
       const diffRange = level === "easy" ? [1, 2] : level === "hard" ? [4, 5] : [3];
 
@@ -3955,12 +3955,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (session.nonce !== parsed.data.nonce) return res.status(400).json({ error: "Nonce inválido" });
       if (new Date() > session.expiresAt) return res.status(400).json({ error: "Sessão expirada" });
 
-      // Reforça o limite diário aqui também (evita corrida entre abas/sessões concorrentes)
-      const attemptedToday = await storage.hasLogicAttemptToday(req.user!.id);
+      // Reforça o limite diário aqui também (evita corrida entre abas/sessões concorrentes),
+      // por nível — cada dificuldade tem sua própria tentativa diária.
+      const attemptedToday = await storage.hasLogicAttemptToday(req.user!.id, session.level);
       if (attemptedToday) {
         return res.status(429).json({
           error: "daily_limit_reached",
-          message: "Você já fez o teste de lógica hoje. Tente novamente amanhã.",
+          message: "Você já fez o teste de lógica neste nível hoje. Tente novamente amanhã.",
         });
       }
 
@@ -4057,6 +4058,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching user logic score:", error);
       res.status(500).json({ error: "Failed to fetch user logic score" });
+    }
+  });
+
+  app.get("/api/logic/me/today", requireAuth, async (req, res) => {
+    try {
+      const attemptedLevels = await storage.getLogicAttemptedLevelsToday(req.user!.id);
+      res.json({ attemptedLevels });
+    } catch (error) {
+      console.error("Error fetching today's logic attempts:", error);
+      res.status(500).json({ error: "Failed to fetch today's attempts" });
     }
   });
 

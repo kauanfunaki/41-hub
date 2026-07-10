@@ -366,7 +366,8 @@ export interface IStorage {
   getUserBestLogicScore(userId: string, level?: string): Promise<LogicScore | undefined>;
   getUserLogicStats(userId: string, monthKey?: string): Promise<{ bestAccuracy: number; bestCorrectCount: number; totalSessions: number }>;
   getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; accuracy: string; attempts: number }>>;
-  hasLogicAttemptToday(userId: string): Promise<boolean>;
+  hasLogicAttemptToday(userId: string, level: string): Promise<boolean>;
+  getLogicAttemptedLevelsToday(userId: string): Promise<string[]>;
 
   // TI Dashboard
   getTiDashboard(range: '7d' | '30d'): Promise<{
@@ -2942,12 +2943,20 @@ export class DatabaseStorage implements IStorage {
       }));
   }
 
-  async hasLogicAttemptToday(userId: string): Promise<boolean> {
+  async hasLogicAttemptToday(userId: string, level: string): Promise<boolean> {
     const result = await pool.query(
-      `SELECT 1 FROM logic_scores WHERE user_id = $1 AND created_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date AT TIME ZONE 'America/Sao_Paulo' LIMIT 1`,
-      [userId]
+      `SELECT 1 FROM logic_scores WHERE user_id = $1 AND level = $2 AND created_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date AT TIME ZONE 'America/Sao_Paulo' LIMIT 1`,
+      [userId, level]
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getLogicAttemptedLevelsToday(userId: string): Promise<string[]> {
+    const result = await pool.query(
+      `SELECT DISTINCT level FROM logic_scores WHERE user_id = $1 AND created_at >= (NOW() AT TIME ZONE 'America/Sao_Paulo')::date AT TIME ZONE 'America/Sao_Paulo'`,
+      [userId]
+    );
+    return result.rows.map((r: any) => r.level);
   }
 
   async createFeedback(data: InsertPlatformFeedback): Promise<PlatformFeedback> {
