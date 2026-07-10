@@ -43,12 +43,15 @@ import AdminTicketsSettings from "@/pages/admin/tickets-settings";
 import AdminNotifications from "@/pages/admin/notifications";
 import AdminKb from "@/pages/admin/kb";
 import AdminTyping from "@/pages/admin/typing";
+import AdminLogic from "@/pages/admin/logic";
 import AdminReports from "@/pages/admin/reports";
 import TicketsIndex from "@/pages/tickets/index";
 import TicketsNew from "@/pages/tickets/new";
 import TicketsDetail from "@/pages/tickets/detail";
 import TypingTest from "@/pages/typing";
 import TypingLeaderboard from "@/pages/typing-leaderboard";
+import LogicTest from "@/pages/logic";
+import LogicLeaderboard from "@/pages/logic-leaderboard";
 import Alerts from "@/pages/alerts";
 import AdminAlerts from "@/pages/admin-alerts";
 import Analytics from "@/pages/analytics";
@@ -119,6 +122,8 @@ function Router() {
       <Route path="/tickets/:id" component={() => <TicketGuard component={TicketsDetail} />} />
       <Route path="/typing" component={TypingTest} />
       <Route path="/typing/leaderboard" component={TypingLeaderboard} />
+      <Route path="/logic" component={LogicTest} />
+      <Route path="/logic/leaderboard" component={LogicLeaderboard} />
       <Route path="/admin" component={AdminIndex} />
       <Route path="/admin/sectors" component={AdminSectors} />
       <Route path="/admin/users" component={AdminUsers} />
@@ -130,6 +135,7 @@ function Router() {
       <Route path="/admin/kb" component={AdminKb} />
       <Route path="/admin/analytics" component={() => <AdminGuard component={Analytics} />} />
       <Route path="/admin/typing" component={AdminTyping} />
+      <Route path="/admin/logic" component={AdminLogic} />
       <Route path="/admin/reports" component={AdminReports} />
       <Route path="/admin/tickets/categories" component={AdminTicketCategories} />
       <Route path="/admin/tickets/sla" component={AdminTicketSlaPolicies} />

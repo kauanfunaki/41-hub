@@ -11,6 +11,7 @@ import {
   LineChart,
   BookOpen,
   Keyboard,
+  Brain,
   Download,
   Puzzle,
   Activity,
@@ -147,6 +148,14 @@ const adminGroups: AdminGroup[] = [
         href: "/admin/typing",
         color: "text-chart-3",
         bgColor: "bg-chart-3/10",
+      },
+      {
+        title: "Config. Lógica",
+        description: "Gerenciar questões para o teste de lógica",
+        icon: Brain,
+        href: "/admin/logic",
+        color: "text-violet-500",
+        bgColor: "bg-violet-500/10",
       },
       {
         title: "Gestão de Alertas",

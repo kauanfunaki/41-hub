@@ -77,6 +77,13 @@ import {
   type InsertTypingText,
   type TypingSession,
   type TypingScore,
+  logicQuestions,
+  logicSessions,
+  logicScores,
+  type LogicQuestion,
+  type InsertLogicQuestion,
+  type LogicSession,
+  type LogicScore,
   pushSubscriptions,
 } from "@shared/schema";
 import webpush from "web-push";
@@ -345,6 +352,20 @@ export interface IStorage {
   getUserBestTypingScore(userId: string, level?: string): Promise<TypingScore | undefined>;
   getUserTypingStats(userId: string, monthKey?: string): Promise<{ bestWpm: number; bestAccuracy: number; totalSessions: number }>;
   getTypingPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; wpm: number; accuracy: string }>>;
+
+  // Logic Test
+  listLogicQuestions(activeOnly?: boolean): Promise<LogicQuestion[]>;
+  getLogicQuestion(id: string): Promise<LogicQuestion | undefined>;
+  createLogicQuestion(data: InsertLogicQuestion): Promise<LogicQuestion>;
+  updateLogicQuestion(id: string, data: Partial<InsertLogicQuestion>): Promise<LogicQuestion | undefined>;
+  deleteLogicQuestion(id: string): Promise<boolean>;
+  createLogicSession(userId: string, questionIds: string[], level: string, nonce: string, expiresAt: Date): Promise<LogicSession>;
+  getLogicSession(id: string): Promise<LogicSession | undefined>;
+  submitLogicSession(sessionId: string, score: { correctCount: number; totalQuestions: number; accuracy: string; durationMs: number; userId: string; sectorId: string | null; monthKey: string; difficulty: number; level: string }): Promise<LogicScore>;
+  getLogicLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; correctCount: number; totalQuestions: number; accuracy: string; monthKey: string; level: string }>>;
+  getUserBestLogicScore(userId: string, level?: string): Promise<LogicScore | undefined>;
+  getUserLogicStats(userId: string, monthKey?: string): Promise<{ bestAccuracy: number; bestCorrectCount: number; totalSessions: number }>;
+  getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; accuracy: string }>>;
 
   // TI Dashboard
   getTiDashboard(range: '7d' | '30d'): Promise<{
@@ -2650,6 +2671,240 @@ export class DatabaseStorage implements IStorage {
         userName: a.ref.userName,
         userPhoto: a.ref.userPhoto,
         wpm: Math.round(a.wpmAvg),
+        accuracy: a.accAvg.toFixed(1),
+      }));
+  }
+
+  async listLogicQuestions(activeOnly?: boolean): Promise<LogicQuestion[]> {
+    if (activeOnly) {
+      return db.select().from(logicQuestions).where(eq(logicQuestions.isActive, true)).orderBy(logicQuestions.createdAt);
+    }
+    return db.select().from(logicQuestions).orderBy(logicQuestions.createdAt);
+  }
+
+  async getLogicQuestion(id: string): Promise<LogicQuestion | undefined> {
+    const [row] = await db.select().from(logicQuestions).where(eq(logicQuestions.id, id));
+    return row;
+  }
+
+  async createLogicQuestion(data: InsertLogicQuestion): Promise<LogicQuestion> {
+    const [row] = await db.insert(logicQuestions).values(data).returning();
+    return row;
+  }
+
+  async updateLogicQuestion(id: string, data: Partial<InsertLogicQuestion>): Promise<LogicQuestion | undefined> {
+    const [row] = await db.update(logicQuestions).set(data).where(eq(logicQuestions.id, id)).returning();
+    return row;
+  }
+
+  async deleteLogicQuestion(id: string): Promise<boolean> {
+    await db.delete(logicQuestions).where(eq(logicQuestions.id, id));
+    return true;
+  }
+
+  async createLogicSession(userId: string, questionIds: string[], level: string, nonce: string, expiresAt: Date): Promise<LogicSession> {
+    const [row] = await db.insert(logicSessions).values({
+      userId,
+      questionIds,
+      level,
+      nonce,
+      startedAt: new Date(),
+      expiresAt,
+    }).returning();
+    return row;
+  }
+
+  async getLogicSession(id: string): Promise<LogicSession | undefined> {
+    const [row] = await db.select().from(logicSessions).where(eq(logicSessions.id, id));
+    return row;
+  }
+
+  async submitLogicSession(sessionId: string, score: { correctCount: number; totalQuestions: number; accuracy: string; durationMs: number; userId: string; sectorId: string | null; monthKey: string; difficulty: number; level: string }): Promise<LogicScore> {
+    await db.update(logicSessions).set({ submittedAt: new Date() }).where(eq(logicSessions.id, sessionId));
+    const [row] = await db.insert(logicScores).values({
+      userId: score.userId,
+      sectorId: score.sectorId,
+      monthKey: score.monthKey,
+      correctCount: score.correctCount,
+      totalQuestions: score.totalQuestions,
+      accuracy: score.accuracy,
+      durationMs: score.durationMs,
+      difficulty: score.difficulty,
+      level: score.level,
+    }).returning();
+    return row;
+  }
+
+  async getLogicLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; correctCount: number; totalQuestions: number; accuracy: string; monthKey: string; level: string }>> {
+    const conditions: any[] = [eq(logicScores.monthKey, opts.monthKey)];
+    if (opts.sectorId) {
+      conditions.push(eq(logicScores.sectorId, opts.sectorId));
+    }
+    if (opts.level) {
+      conditions.push(eq(logicScores.level, opts.level));
+    }
+
+    const rows = await db
+      .select({
+        userId: logicScores.userId,
+        userName: users.name,
+        userPhoto: users.photoUrl,
+        sectorName: sectors.name,
+        correctCount: logicScores.correctCount,
+        totalQuestions: logicScores.totalQuestions,
+        accuracy: logicScores.accuracy,
+        durationMs: logicScores.durationMs,
+        monthKey: logicScores.monthKey,
+        level: logicScores.level,
+      })
+      .from(logicScores)
+      .innerJoin(users, eq(logicScores.userId, users.id))
+      .leftJoin(sectors, eq(logicScores.sectorId, sectors.id))
+      .where(and(...conditions))
+      .orderBy(desc(logicScores.accuracy))
+      .limit((opts.limit || 20) * 10); // fetch extra rows to deduplicate per user
+
+    const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
+    // Melhor score = maior precisão; empate desempatado por menor tempo.
+    const eff = (r: { accuracy: string }) => parseFloat(r.accuracy);
+    const better = (a: typeof rows[0], b: typeof rows[0]) =>
+      eff(a) > eff(b) || (eff(a) === eff(b) && a.durationMs < b.durationMs);
+
+    if (opts.level) {
+      const bestByUser = new Map<string, typeof rows[0]>();
+      for (const row of rows) {
+        const existing = bestByUser.get(row.userId);
+        if (!existing || better(row, existing)) bestByUser.set(row.userId, row);
+      }
+      return Array.from(bestByUser.values())
+        .sort((a, b) => eff(b) - eff(a) || a.durationMs - b.durationMs)
+        .slice(0, opts.limit || 20)
+        .map(r => ({ userId: r.userId, userName: r.userName, userPhoto: r.userPhoto, sectorName: r.sectorName || null, correctCount: r.correctCount, totalQuestions: r.totalQuestions, accuracy: r.accuracy, monthKey: r.monthKey, level: r.level }));
+    }
+
+    // Modo "Todos": melhor score por usuário por nível, média ponderada por dificuldade.
+    const bestByUserLevel = new Map<string, Map<string, typeof rows[0]>>();
+    for (const row of rows) {
+      if (!bestByUserLevel.has(row.userId)) bestByUserLevel.set(row.userId, new Map());
+      const userLevels = bestByUserLevel.get(row.userId)!;
+      const existing = userLevels.get(row.level);
+      if (!existing || better(row, existing)) userLevels.set(row.level, row);
+    }
+
+    const aggregated = Array.from(bestByUserLevel.entries()).map(([userId, levelMap]) => {
+      const levelRows = Array.from(levelMap.values());
+      let accSum = 0, weightSum = 0, durationSum = 0;
+      for (const r of levelRows) {
+        const mult = DIFF_MULT[r.level] ?? 1.0;
+        accSum += parseFloat(r.accuracy) * mult;
+        weightSum += mult;
+        durationSum += r.durationMs;
+      }
+      const accAvg = accSum / weightSum;
+      const ref = levelRows[0];
+      const bestLevel = levelRows.sort((a, b) => (DIFF_MULT[b.level] ?? 1) - (DIFF_MULT[a.level] ?? 1))[0].level;
+      return { userId, accAvg, ref, bestLevel, durationAvg: durationSum / levelRows.length };
+    });
+
+    return aggregated
+      .sort((a, b) => b.accAvg - a.accAvg || a.durationAvg - b.durationAvg)
+      .slice(0, opts.limit || 20)
+      .map(a => ({
+        userId: a.userId,
+        userName: a.ref.userName,
+        userPhoto: a.ref.userPhoto,
+        sectorName: a.ref.sectorName || null,
+        correctCount: a.ref.correctCount,
+        totalQuestions: a.ref.totalQuestions,
+        accuracy: a.accAvg.toFixed(1),
+        monthKey: a.ref.monthKey,
+        level: a.bestLevel,
+      }));
+  }
+
+  async getUserBestLogicScore(userId: string, level?: string): Promise<LogicScore | undefined> {
+    const conditions: any[] = [eq(logicScores.userId, userId)];
+    if (level) {
+      conditions.push(eq(logicScores.level, level));
+    }
+    const [row] = await db.select().from(logicScores)
+      .where(and(...conditions))
+      .orderBy(desc(logicScores.accuracy))
+      .limit(1);
+    return row;
+  }
+
+  async getUserLogicStats(userId: string, monthKey?: string): Promise<{ bestAccuracy: number; bestCorrectCount: number; totalSessions: number }> {
+    const conditions = [eq(logicScores.userId, userId)];
+    if (monthKey) conditions.push(eq(logicScores.monthKey, monthKey));
+
+    const [row] = await db
+      .select({
+        bestAccuracy: sql<number>`COALESCE(MAX(${logicScores.accuracy}), 0)::float`,
+        bestCorrectCount: sql<number>`COALESCE(MAX(${logicScores.correctCount}), 0)::int`,
+        totalSessions: sql<number>`COUNT(*)::int`,
+      })
+      .from(logicScores)
+      .where(and(...conditions));
+    return {
+      bestAccuracy: row?.bestAccuracy != null ? Math.round(Number(row.bestAccuracy) * 100) / 100 : 0,
+      bestCorrectCount: row?.bestCorrectCount ?? 0,
+      totalSessions: row?.totalSessions ?? 0,
+    };
+  }
+
+  async getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; accuracy: string }>> {
+    const rows = await db
+      .select({
+        userId: logicScores.userId,
+        userName: users.name,
+        userPhoto: users.photoUrl,
+        correctCount: logicScores.correctCount,
+        accuracy: logicScores.accuracy,
+        durationMs: logicScores.durationMs,
+        level: logicScores.level,
+      })
+      .from(logicScores)
+      .innerJoin(users, eq(logicScores.userId, users.id))
+      .where(eq(logicScores.monthKey, monthKey))
+      .orderBy(desc(logicScores.accuracy));
+
+    const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
+    const eff = (r: { accuracy: string }) => parseFloat(r.accuracy);
+    const better = (a: typeof rows[0], b: typeof rows[0]) =>
+      eff(a) > eff(b) || (eff(a) === eff(b) && a.durationMs < b.durationMs);
+
+    const bestByUserLevel = new Map<string, Map<string, typeof rows[0]>>();
+    for (const row of rows) {
+      if (!bestByUserLevel.has(row.userId)) bestByUserLevel.set(row.userId, new Map());
+      const userLevels = bestByUserLevel.get(row.userId)!;
+      const existing = userLevels.get(row.level);
+      if (!existing || better(row, existing)) userLevels.set(row.level, row);
+    }
+
+    const aggregated = Array.from(bestByUserLevel.entries()).map(([userId, levelMap]) => {
+      const levelRows = Array.from(levelMap.values());
+      let accSum = 0, weightSum = 0;
+      for (const r of levelRows) {
+        const mult = DIFF_MULT[r.level] ?? 1.0;
+        accSum += parseFloat(r.accuracy) * mult;
+        weightSum += mult;
+      }
+      const accAvg = accSum / weightSum;
+      const ref = levelRows[0];
+      return { userId, accAvg, ref };
+    });
+
+    return aggregated
+      .sort((a, b) => b.accAvg - a.accAvg)
+      .slice(0, 3)
+      .map((a, i) => ({
+        level: "all",
+        rank: i + 1,
+        userId: a.userId,
+        userName: a.ref.userName,
+        userPhoto: a.ref.userPhoto,
+        correctCount: a.ref.correctCount,
         accuracy: a.accAvg.toFixed(1),
       }));
   }

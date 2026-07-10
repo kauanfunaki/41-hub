@@ -566,6 +566,55 @@ export type TypingSession = typeof typingSessions.$inferSelect;
 export type TypingScore = typeof typingScores.$inferSelect;
 export type InsertTypingScore = z.infer<typeof insertTypingScoreSchema>;
 
+// ============ Logic Test ============
+
+export const logicQuestions = pgTable("logic_questions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  language: varchar("language", { length: 10 }).notNull().default("pt"),
+  question: text("question").notNull(),
+  options: jsonb("options").$type<string[]>().notNull(),
+  correctIndex: integer("correct_index").notNull(),
+  difficulty: integer("difficulty").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const logicSessions = pgTable("logic_sessions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  questionIds: jsonb("question_ids").$type<string[]>().notNull(),
+  level: varchar("level", { length: 10 }).notNull().default("medium"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  nonce: varchar("nonce", { length: 32 }).notNull().unique(),
+  submittedAt: timestamp("submitted_at"),
+});
+
+export const logicScores = pgTable("logic_scores", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  sectorId: varchar("sector_id", { length: 36 }).references(() => sectors.id, { onDelete: "set null" }),
+  monthKey: varchar("month_key", { length: 7 }).notNull(),
+  correctCount: integer("correct_count").notNull(),
+  totalQuestions: integer("total_questions").notNull(),
+  accuracy: numeric("accuracy", { precision: 5, scale: 2 }).notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  difficulty: integer("difficulty").notNull().default(1),
+  // Human-readable level derived from average question difficulty: "easy"(1-2) | "medium"(3) | "hard"(4-5)
+  level: varchar("level", { length: 10 }).notNull().default("medium"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertLogicQuestionSchema = createInsertSchema(logicQuestions).omit({ id: true, createdAt: true });
+export const insertLogicSessionSchema = createInsertSchema(logicSessions).omit({ id: true });
+export const insertLogicScoreSchema = createInsertSchema(logicScores).omit({ id: true, createdAt: true });
+
+export type LogicQuestion = typeof logicQuestions.$inferSelect;
+export type InsertLogicQuestion = z.infer<typeof insertLogicQuestionSchema>;
+export type LogicSession = typeof logicSessions.$inferSelect;
+export type LogicScore = typeof logicScores.$inferSelect;
+export type InsertLogicScore = z.infer<typeof insertLogicScoreSchema>;
+
 // System Alerts
 export const systemAlerts = pgTable("system_alerts", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),

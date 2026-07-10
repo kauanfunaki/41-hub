@@ -3880,6 +3880,274 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============ Logic Test ============
+
+  const LOGIC_QUESTIONS_PER_SESSION = 10;
+
+  app.post("/api/logic/session", requireAuth, async (req, res) => {
+    try {
+      const rawLevel = req.body?.level as string | undefined;
+      const level: "easy" | "medium" | "hard" =
+        rawLevel === "easy" || rawLevel === "hard" ? rawLevel : "medium";
+
+      const diffRange = level === "easy" ? [1, 2] : level === "hard" ? [4, 5] : [3];
+
+      const activeQuestions = await storage.listLogicQuestions(true);
+      if (activeQuestions.length === 0) {
+        return res.status(400).json({ error: "Nenhuma questão disponível para o teste de lógica" });
+      }
+      const diffQuestions = activeQuestions.filter((q: any) => diffRange.includes(q.difficulty));
+      if (diffQuestions.length === 0) {
+        return res.status(404).json({
+          error: `Nenhuma questão cadastrada para o nível "${level}". Peça ao admin para cadastrar questões com dificuldade ${diffRange.join(" ou ")}.`,
+          level,
+        });
+      }
+
+      // Sorteia sem repetição até LOGIC_QUESTIONS_PER_SESSION questões
+      const pool = [...diffQuestions];
+      const picked: typeof diffQuestions = [];
+      const count = Math.min(LOGIC_QUESTIONS_PER_SESSION, pool.length);
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * pool.length);
+        picked.push(pool.splice(idx, 1)[0]);
+      }
+
+      const nonce = crypto.randomBytes(16).toString("hex");
+      const expiresAt = new Date(Date.now() + 6 * 60 * 1000);
+      const session = await storage.createLogicSession(req.user!.id, picked.map(q => q.id), level, nonce, expiresAt);
+
+      // Nunca envia correctIndex ao cliente
+      const questions = picked.map(q => ({ id: q.id, question: q.question, options: q.options, difficulty: q.difficulty }));
+      res.json({ session, questions, level });
+    } catch (error) {
+      console.error("Error creating logic session:", error);
+      res.status(500).json({ error: "Failed to create logic session" });
+    }
+  });
+
+  app.post("/api/logic/submit", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        sessionId: z.string().min(1),
+        nonce: z.string().min(1),
+        answers: z.array(z.number().int().min(0).nullable()),
+        durationMs: z.number().min(1000).max(6 * 60 * 1000 + 15000),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      }
+
+      const session = await storage.getLogicSession(parsed.data.sessionId);
+      if (!session) return res.status(404).json({ error: "Sessão não encontrada" });
+      if (session.userId !== req.user!.id) return res.status(403).json({ error: "Sessão pertence a outro usuário" });
+      if (session.submittedAt) return res.status(400).json({ error: "Sessão já foi submetida" });
+      if (session.nonce !== parsed.data.nonce) return res.status(400).json({ error: "Nonce inválido" });
+      if (new Date() > session.expiresAt) return res.status(400).json({ error: "Sessão expirada" });
+
+      const questionIds = session.questionIds as string[];
+      if (parsed.data.answers.length !== questionIds.length) {
+        return res.status(400).json({ error: "Número de respostas não confere com a sessão" });
+      }
+
+      const questions = await Promise.all(questionIds.map(id => storage.getLogicQuestion(id)));
+      if (questions.some(q => !q)) {
+        return res.status(400).json({ error: "Questões da sessão não encontradas" });
+      }
+
+      let correctCount = 0;
+      let difficultySum = 0;
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i]!;
+        difficultySum += q.difficulty;
+        if (parsed.data.answers[i] === q.correctIndex) correctCount++;
+      }
+      const totalQuestions = questions.length;
+      const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 10000) / 100 : 0;
+      const avgDifficulty = Math.round(difficultySum / totalQuestions);
+      const derivedLevel: "easy" | "medium" | "hard" =
+        avgDifficulty <= 2 ? "easy" : avgDifficulty <= 3 ? "medium" : "hard";
+
+      let finalDurationMs = parsed.data.durationMs;
+      const durationServerMs = Date.now() - new Date(session.startedAt).getTime();
+      if (Math.abs(finalDurationMs - durationServerMs) > 15000) {
+        finalDurationMs = durationServerMs;
+      }
+      if (finalDurationMs < 2000) {
+        return res.status(400).json({ error: "Duração muito curta (anti-cheat)" });
+      }
+
+      const userSectorId = req.user!.roles?.[0]?.sectorId || null;
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+      const score = await storage.submitLogicSession(parsed.data.sessionId, {
+        correctCount,
+        totalQuestions,
+        accuracy: accuracy.toFixed(2),
+        durationMs: finalDurationMs,
+        userId: req.user!.id,
+        sectorId: userSectorId,
+        monthKey,
+        difficulty: avgDifficulty,
+        level: session.level || derivedLevel,
+      });
+
+      res.json(score);
+    } catch (error) {
+      console.error("Error submitting logic session:", error);
+      res.status(500).json({ error: "Failed to submit logic session" });
+    }
+  });
+
+  app.get("/api/logic/leaderboard", requireAuth, async (req, res) => {
+    try {
+      const now = new Date();
+      const monthKey = (req.query.month as string) || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const sectorId = req.query.sectorId as string | undefined;
+      const rawLevel = req.query.level as string | undefined;
+      const level = rawLevel && ["easy", "medium", "hard"].includes(rawLevel) ? rawLevel as "easy" | "medium" | "hard" : undefined;
+      const leaderboard = await storage.getLogicLeaderboard({ monthKey, sectorId, level, limit: 20 });
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching logic leaderboard:", error);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/logic/podium", requireAuth, async (req, res) => {
+    try {
+      const now = new Date();
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const defaultMonth = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+      const monthKey = (req.query.month as string) || defaultMonth;
+      const podium = await storage.getLogicPodium(monthKey);
+      res.json(podium);
+    } catch (error) {
+      console.error("Error fetching logic podium:", error);
+      res.status(500).json({ error: "Failed to fetch podium" });
+    }
+  });
+
+  app.get("/api/logic/me", requireAuth, async (req, res) => {
+    try {
+      const rawLevel = req.query.level as string | undefined;
+      const level = rawLevel && ["easy", "medium", "hard"].includes(rawLevel) ? rawLevel : undefined;
+      const best = await storage.getUserBestLogicScore(req.user!.id, level);
+      res.json(best || null);
+    } catch (error) {
+      console.error("Error fetching user logic score:", error);
+      res.status(500).json({ error: "Failed to fetch user logic score" });
+    }
+  });
+
+  app.get("/api/logic/me/stats", requireAuth, async (req, res) => {
+    try {
+      const monthKey = req.query.month as string | undefined;
+      const stats = await storage.getUserLogicStats(req.user!.id, monthKey);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching user logic stats:", error);
+      res.status(500).json({ error: "Failed to fetch user logic stats" });
+    }
+  });
+
+  // ============ Admin Logic Question Routes ============
+
+  app.get("/api/admin/logic/questions", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const questions = await storage.listLogicQuestions(false);
+      res.json(questions);
+    } catch (error) {
+      console.error("Error fetching logic questions:", error);
+      res.status(500).json({ error: "Failed to fetch logic questions" });
+    }
+  });
+
+  app.post("/api/admin/logic/questions", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        question: z.string().min(5),
+        options: z.array(z.string().min(1)).min(2).max(6),
+        correctIndex: z.number().int().min(0),
+        language: z.string().max(10).optional(),
+        difficulty: z.number().int().min(1).max(5).optional(),
+        isActive: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      }
+      if (parsed.data.correctIndex >= parsed.data.options.length) {
+        return res.status(400).json({ error: "Índice da resposta correta fora do intervalo das opções" });
+      }
+      const question = await storage.createLogicQuestion(parsed.data as any);
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "logic_question_create",
+        targetType: "logic_question",
+        targetId: question.id,
+        ip: req.ip || req.socket.remoteAddress,
+      });
+      res.status(201).json(question);
+    } catch (error) {
+      console.error("Error creating logic question:", error);
+      res.status(500).json({ error: "Failed to create logic question" });
+    }
+  });
+
+  app.patch("/api/admin/logic/questions/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        question: z.string().min(5).optional(),
+        options: z.array(z.string().min(1)).min(2).max(6).optional(),
+        correctIndex: z.number().int().min(0).optional(),
+        language: z.string().max(10).optional(),
+        difficulty: z.number().int().min(1).max(5).optional(),
+        isActive: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos" });
+      }
+      if (parsed.data.options && parsed.data.correctIndex != null && parsed.data.correctIndex >= parsed.data.options.length) {
+        return res.status(400).json({ error: "Índice da resposta correta fora do intervalo das opções" });
+      }
+      const updated = await storage.updateLogicQuestion(req.params.id, parsed.data as any);
+      if (!updated) return res.status(404).json({ error: "Questão não encontrada" });
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "logic_question_update",
+        targetType: "logic_question",
+        targetId: req.params.id,
+        ip: req.ip || req.socket.remoteAddress,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating logic question:", error);
+      res.status(500).json({ error: "Failed to update logic question" });
+    }
+  });
+
+  app.delete("/api/admin/logic/questions/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteLogicQuestion(req.params.id);
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "logic_question_delete",
+        targetType: "logic_question",
+        targetId: req.params.id,
+        ip: req.ip || req.socket.remoteAddress,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting logic question:", error);
+      res.status(500).json({ error: "Failed to delete logic question" });
+    }
+  });
+
   // ============ Admin Reports Routes ============
 
   function toCsv(headers: string[], rows: Record<string, any>[]): string {

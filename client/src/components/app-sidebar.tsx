@@ -11,6 +11,7 @@ import {
   User,
   Ticket,
   Keyboard,
+  Brain,
   ChevronRight,
   Package,
   Bell,
@@ -242,18 +243,33 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               )}
 
-              {/* Digitação */}
+              {/* Testes (Digitação / Lógica) */}
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.startsWith("/typing")}
-                  data-testid="nav-digitação"
-                >
-                  <Link href="/typing">
-                    <Keyboard className="h-4 w-4" />
-                    <span>Digitação</span>
-                  </Link>
-                </SidebarMenuButton>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/typing") || location.startsWith("/logic")}
+                      data-testid="nav-testes"
+                    >
+                      <GraduationCap className="h-4 w-4" />
+                      <span>Testes</span>
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="right" align="start">
+                    <DropdownMenuItem asChild data-testid="nav-testes-digitacao">
+                      <Link href="/typing">
+                        <Keyboard className="h-4 w-4 mr-2" />
+                        Teste de Digitação
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild data-testid="nav-testes-logica">
+                      <Link href="/logic">
+                        <Brain className="h-4 w-4 mr-2" />
+                        Teste de Lógica
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </SidebarMenuItem>
 
               {/* Notícias */}
