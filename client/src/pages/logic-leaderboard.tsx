@@ -38,6 +38,7 @@ type LeaderboardEntry = {
   attempts: number;
   monthKey: string;
   level: string;
+  levels: string[];
 };
 
 type PodiumEntry = {
@@ -47,8 +48,10 @@ type PodiumEntry = {
   userName: string;
   userPhoto: string | null;
   correctCount: number;
+  totalQuestions: number;
   accuracy: string;
   attempts: number;
+  levels: string[];
 };
 
 function getInitials(name: string): string {
@@ -71,6 +74,25 @@ function getPreviousMonthKey(): string {
   const now = new Date();
   const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const LEVEL_ABBR: Record<string, string> = { easy: "F", medium: "M", hard: "D" };
+
+function LevelBadges({ levels }: { levels: string[] }) {
+  if (levels.length <= 1) return null;
+  return (
+    <span className="flex items-center gap-0.5">
+      {levels.map((lv) => (
+        <span
+          key={lv}
+          title={LEVEL_LABELS[lv as Level] ?? lv}
+          className="text-[9px] font-bold w-3.5 h-3.5 rounded-full bg-muted text-muted-foreground flex items-center justify-center shrink-0"
+        >
+          {LEVEL_ABBR[lv] ?? "?"}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function getRankIcon(rank: number) {
@@ -204,8 +226,11 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
               {Number(entry.accuracy).toFixed(0)}%
             </span>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {entry.correctCount} acertos · {entry.attempts} tentativa{entry.attempts !== 1 ? "s" : ""}
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            {entry.correctCount}/{entry.totalQuestions} acertos <LevelBadges levels={entry.levels} />
+          </span>
+          <span className="text-[10px] text-muted-foreground/70">
+            {entry.attempts} tentativa{entry.attempts !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
@@ -527,7 +552,9 @@ export default function LogicLeaderboard() {
                             {entry.sectorName}
                           </span>
                         )}
-                        {selectedLevel === "all" && (
+                        {selectedLevel === "all" ? (
+                          <LevelBadges levels={entry.levels} />
+                        ) : (
                           <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
                             {LEVEL_LABELS[entry.level as Level] ?? entry.level}
                           </span>
@@ -553,7 +580,7 @@ export default function LogicLeaderboard() {
                       <div className="flex items-center gap-0.5 justify-end mt-0.5">
                         <CheckCircle2 className="h-2.5 w-2.5 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
-                          {entry.correctCount} acertos
+                          {entry.correctCount}/{entry.totalQuestions} acertos
                         </span>
                       </div>
                       <span className="text-[10px] text-muted-foreground/70">

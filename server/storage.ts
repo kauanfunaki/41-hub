@@ -362,10 +362,10 @@ export interface IStorage {
   createLogicSession(userId: string, questionIds: string[], level: string, nonce: string, expiresAt: Date): Promise<LogicSession>;
   getLogicSession(id: string): Promise<LogicSession | undefined>;
   submitLogicSession(sessionId: string, score: { correctCount: number; totalQuestions: number; accuracy: string; durationMs: number; userId: string; sectorId: string | null; monthKey: string; difficulty: number; level: string }): Promise<LogicScore>;
-  getLogicLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; correctCount: number; totalQuestions: number; accuracy: string; attempts: number; monthKey: string; level: string }>>;
+  getLogicLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; correctCount: number; totalQuestions: number; accuracy: string; attempts: number; monthKey: string; level: string; levels: string[] }>>;
   getUserBestLogicScore(userId: string, level?: string): Promise<LogicScore | undefined>;
   getUserLogicStats(userId: string, monthKey?: string): Promise<{ bestAccuracy: number; bestCorrectCount: number; totalSessions: number }>;
-  getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; accuracy: string; attempts: number }>>;
+  getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; totalQuestions: number; accuracy: string; attempts: number; levels: string[] }>>;
   hasLogicAttemptToday(userId: string, level: string): Promise<boolean>;
   getLogicAttemptedLevelsToday(userId: string): Promise<string[]>;
 
@@ -2737,7 +2737,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getLogicLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; correctCount: number; totalQuestions: number; accuracy: string; attempts: number; monthKey: string; level: string }>> {
+  async getLogicLeaderboard(opts: { monthKey: string; sectorId?: string; level?: string; limit?: number }): Promise<Array<{ userId: string; userName: string; userPhoto: string | null; sectorName: string | null; correctCount: number; totalQuestions: number; accuracy: string; attempts: number; monthKey: string; level: string; levels: string[] }>> {
     const conditions: any[] = [eq(logicScores.monthKey, opts.monthKey)];
     if (opts.sectorId) {
       conditions.push(eq(logicScores.sectorId, opts.sectorId));
@@ -2766,10 +2766,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(logicScores.accuracy))
       .limit((opts.limit || 20) * 10); // fetch extra rows to deduplicate per user
 
-    // Quantidade de tentativas no mês (todas, independente do nível filtrado) —
-    // usado como critério de desempate: menos tentativas para o mesmo resultado vence.
+    // Quantidade de tentativas no mês — usada como critério de desempate (menos
+    // tentativas para o mesmo resultado vence). No modo "Todos", soma tentativas
+    // de todas as dificuldades; com um nível filtrado, conta só as desse nível.
     const attemptConditions: any[] = [eq(logicScores.monthKey, opts.monthKey)];
     if (opts.sectorId) attemptConditions.push(eq(logicScores.sectorId, opts.sectorId));
+    if (opts.level) attemptConditions.push(eq(logicScores.level, opts.level));
     const attemptRows = await db
       .select({ userId: logicScores.userId, attempts: sql<number>`count(*)::int` })
       .from(logicScores)
@@ -2777,7 +2779,7 @@ export class DatabaseStorage implements IStorage {
       .groupBy(logicScores.userId);
     const attemptsMap = new Map(attemptRows.map(r => [r.userId, r.attempts]));
 
-    const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
+    const LEVEL_ORDER: Record<string, number> = { easy: 0, medium: 1, hard: 2 };
     // Melhor score = maior precisão; empate desempatado por menos tentativas, depois por menor tempo.
     const eff = (r: { accuracy: string }) => parseFloat(r.accuracy);
     const better = (a: typeof rows[0], b: typeof rows[0]) =>
@@ -2796,10 +2798,12 @@ export class DatabaseStorage implements IStorage {
           return eff(b) - eff(a) || attemptsA - attemptsB || a.durationMs - b.durationMs;
         })
         .slice(0, opts.limit || 20)
-        .map(r => ({ userId: r.userId, userName: r.userName, userPhoto: r.userPhoto, sectorName: r.sectorName || null, correctCount: r.correctCount, totalQuestions: r.totalQuestions, accuracy: r.accuracy, attempts: attemptsMap.get(r.userId) ?? 1, monthKey: r.monthKey, level: r.level }));
+        .map(r => ({ userId: r.userId, userName: r.userName, userPhoto: r.userPhoto, sectorName: r.sectorName || null, correctCount: r.correctCount, totalQuestions: r.totalQuestions, accuracy: r.accuracy, attempts: attemptsMap.get(r.userId) ?? 1, monthKey: r.monthKey, level: r.level, levels: [r.level] }));
     }
 
-    // Modo "Todos": melhor score por usuário por nível, média ponderada por dificuldade.
+    // Modo "Todos": soma o melhor resultado do usuário em cada dificuldade que ele tentou.
+    // Precisão = total de acertos / total de questões (10, 20 ou 30, conforme quantas
+    // dificuldades foram tentadas) — não é mais uma média ponderada.
     const bestByUserLevel = new Map<string, Map<string, typeof rows[0]>>();
     for (const row of rows) {
       if (!bestByUserLevel.has(row.userId)) bestByUserLevel.set(row.userId, new Map());
@@ -2809,25 +2813,26 @@ export class DatabaseStorage implements IStorage {
     }
 
     const aggregated = Array.from(bestByUserLevel.entries()).map(([userId, levelMap]) => {
-      const levelRows = Array.from(levelMap.values());
-      let accSum = 0, weightSum = 0, durationSum = 0;
+      const levelRows = Array.from(levelMap.values()).sort(
+        (a, b) => (LEVEL_ORDER[a.level] ?? 99) - (LEVEL_ORDER[b.level] ?? 99)
+      );
+      let correctSum = 0, totalSum = 0, durationSum = 0;
       for (const r of levelRows) {
-        const mult = DIFF_MULT[r.level] ?? 1.0;
-        accSum += parseFloat(r.accuracy) * mult;
-        weightSum += mult;
+        correctSum += r.correctCount;
+        totalSum += r.totalQuestions;
         durationSum += r.durationMs;
       }
-      const accAvg = accSum / weightSum;
+      const accuracy = totalSum > 0 ? (correctSum / totalSum) * 100 : 0;
       const ref = levelRows[0];
-      const bestLevel = levelRows.sort((a, b) => (DIFF_MULT[b.level] ?? 1) - (DIFF_MULT[a.level] ?? 1))[0].level;
-      return { userId, accAvg, ref, bestLevel, durationAvg: durationSum / levelRows.length };
+      const levels = levelRows.map(r => r.level);
+      return { userId, accuracy, correctSum, totalSum, ref, levels, durationAvg: durationSum / levelRows.length };
     });
 
     return aggregated
       .sort((a, b) => {
         const attemptsA = attemptsMap.get(a.userId) ?? 1;
         const attemptsB = attemptsMap.get(b.userId) ?? 1;
-        return b.accAvg - a.accAvg || attemptsA - attemptsB || a.durationAvg - b.durationAvg;
+        return b.accuracy - a.accuracy || attemptsA - attemptsB || a.durationAvg - b.durationAvg;
       })
       .slice(0, opts.limit || 20)
       .map(a => ({
@@ -2835,12 +2840,13 @@ export class DatabaseStorage implements IStorage {
         userName: a.ref.userName,
         userPhoto: a.ref.userPhoto,
         sectorName: a.ref.sectorName || null,
-        correctCount: a.ref.correctCount,
-        totalQuestions: a.ref.totalQuestions,
-        accuracy: a.accAvg.toFixed(1),
+        correctCount: a.correctSum,
+        totalQuestions: a.totalSum,
+        accuracy: a.accuracy.toFixed(1),
         attempts: attemptsMap.get(a.userId) ?? 1,
         monthKey: a.ref.monthKey,
-        level: a.bestLevel,
+        level: a.levels[a.levels.length - 1],
+        levels: a.levels,
       }));
   }
 
@@ -2875,13 +2881,14 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; accuracy: string; attempts: number }>> {
+  async getLogicPodium(monthKey: string): Promise<Array<{ level: string; rank: number; userId: string; userName: string; userPhoto: string | null; correctCount: number; totalQuestions: number; accuracy: string; attempts: number; levels: string[] }>> {
     const rows = await db
       .select({
         userId: logicScores.userId,
         userName: users.name,
         userPhoto: users.photoUrl,
         correctCount: logicScores.correctCount,
+        totalQuestions: logicScores.totalQuestions,
         accuracy: logicScores.accuracy,
         durationMs: logicScores.durationMs,
         level: logicScores.level,
@@ -2898,7 +2905,7 @@ export class DatabaseStorage implements IStorage {
       .groupBy(logicScores.userId);
     const attemptsMap = new Map(attemptRows.map(r => [r.userId, r.attempts]));
 
-    const DIFF_MULT: Record<string, number> = { easy: 1.0, medium: 1.4, hard: 1.8 };
+    const LEVEL_ORDER: Record<string, number> = { easy: 0, medium: 1, hard: 2 };
     const eff = (r: { accuracy: string }) => parseFloat(r.accuracy);
     const better = (a: typeof rows[0], b: typeof rows[0]) =>
       eff(a) > eff(b) || (eff(a) === eff(b) && a.durationMs < b.durationMs);
@@ -2911,24 +2918,27 @@ export class DatabaseStorage implements IStorage {
       if (!existing || better(row, existing)) userLevels.set(row.level, row);
     }
 
+    // Soma o melhor resultado por dificuldade tentada (mesmo critério do ranking "Todos").
     const aggregated = Array.from(bestByUserLevel.entries()).map(([userId, levelMap]) => {
-      const levelRows = Array.from(levelMap.values());
-      let accSum = 0, weightSum = 0;
+      const levelRows = Array.from(levelMap.values()).sort(
+        (a, b) => (LEVEL_ORDER[a.level] ?? 99) - (LEVEL_ORDER[b.level] ?? 99)
+      );
+      let correctSum = 0, totalSum = 0;
       for (const r of levelRows) {
-        const mult = DIFF_MULT[r.level] ?? 1.0;
-        accSum += parseFloat(r.accuracy) * mult;
-        weightSum += mult;
+        correctSum += r.correctCount;
+        totalSum += r.totalQuestions;
       }
-      const accAvg = accSum / weightSum;
+      const accuracy = totalSum > 0 ? (correctSum / totalSum) * 100 : 0;
       const ref = levelRows[0];
-      return { userId, accAvg, ref };
+      const levels = levelRows.map(r => r.level);
+      return { userId, accuracy, correctSum, totalSum, ref, levels };
     });
 
     return aggregated
       .sort((a, b) => {
         const attemptsA = attemptsMap.get(a.userId) ?? 1;
         const attemptsB = attemptsMap.get(b.userId) ?? 1;
-        return b.accAvg - a.accAvg || attemptsA - attemptsB;
+        return b.accuracy - a.accuracy || attemptsA - attemptsB;
       })
       .slice(0, 3)
       .map((a, i) => ({
@@ -2937,9 +2947,11 @@ export class DatabaseStorage implements IStorage {
         userId: a.userId,
         userName: a.ref.userName,
         userPhoto: a.ref.userPhoto,
-        correctCount: a.ref.correctCount,
-        accuracy: a.accAvg.toFixed(1),
+        correctCount: a.correctSum,
+        totalQuestions: a.totalSum,
+        accuracy: a.accuracy.toFixed(1),
         attempts: attemptsMap.get(a.userId) ?? 1,
+        levels: a.levels,
       }));
   }
 
