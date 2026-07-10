@@ -33,6 +33,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
+  sidebarMenuButtonVariants,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
@@ -44,6 +45,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-provider";
 import { useTutorial } from "@/hooks/use-tutorial";
@@ -246,14 +248,16 @@ export function AppSidebar() {
               {/* Testes (Digitação / Lógica) */}
               <SidebarMenuItem>
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton
-                      isActive={location.startsWith("/typing") || location.startsWith("/logic")}
-                      data-testid="nav-testes"
-                    >
-                      <GraduationCap className="h-4 w-4" />
-                      <span>Testes</span>
-                    </SidebarMenuButton>
+                  <DropdownMenuTrigger
+                    className={cn(
+                      sidebarMenuButtonVariants({}),
+                      (location.startsWith("/typing") || location.startsWith("/logic")) &&
+                        "bg-sidebar-accent text-sidebar-accent-foreground"
+                    )}
+                    data-testid="nav-testes"
+                  >
+                    <GraduationCap className="h-4 w-4" />
+                    <span>Testes</span>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent side="right" align="start">
                     <DropdownMenuItem asChild data-testid="nav-testes-digitacao">
