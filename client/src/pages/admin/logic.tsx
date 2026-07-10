@@ -35,6 +35,8 @@ import {
   ArrowLeft,
   Loader2,
   X,
+  ImagePlus,
+  Image as ImageIcon,
 } from "lucide-react";
 import type { LogicQuestion } from "@shared/schema";
 
@@ -47,6 +49,8 @@ export default function AdminLogic() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<LogicQuestion | null>(null);
   const [formQuestion, setFormQuestion] = useState("");
+  const [formImageUrl, setFormImageUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [formOptions, setFormOptions] = useState<string[]>(["", ""]);
   const [formCorrectIndex, setFormCorrectIndex] = useState(0);
   const [formDifficulty, setFormDifficulty] = useState("1");
@@ -58,7 +62,7 @@ export default function AdminLogic() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { question: string; options: string[]; correctIndex: number; difficulty: number; language: string; isActive: boolean }) => {
+    mutationFn: async (data: { question: string; imageUrl: string | null; options: string[]; correctIndex: number; difficulty: number; language: string; isActive: boolean }) => {
       const res = await apiRequest("POST", "/api/admin/logic/questions", data);
       return res.json();
     },
@@ -73,7 +77,7 @@ export default function AdminLogic() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<{ question: string; options: string[]; correctIndex: number; difficulty: number; language: string; isActive: boolean }> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<{ question: string; imageUrl: string | null; options: string[]; correctIndex: number; difficulty: number; language: string; isActive: boolean }> }) => {
       const res = await apiRequest("PATCH", `/api/admin/logic/questions/${id}`, data);
       return res.json();
     },
@@ -103,6 +107,7 @@ export default function AdminLogic() {
   const openCreate = () => {
     setEditing(null);
     setFormQuestion("");
+    setFormImageUrl(null);
     setFormOptions(["", ""]);
     setFormCorrectIndex(0);
     setFormDifficulty("1");
@@ -114,12 +119,46 @@ export default function AdminLogic() {
   const openEdit = (q: LogicQuestion) => {
     setEditing(q);
     setFormQuestion(q.question);
+    setFormImageUrl(q.imageUrl ?? null);
     setFormOptions([...q.options]);
     setFormCorrectIndex(q.correctIndex);
     setFormDifficulty(String(q.difficulty));
     setFormLanguage(q.language);
     setFormActive(q.isActive);
     setDialogOpen(true);
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png"].includes(file.type)) {
+      toast({ title: "Formato inválido", description: "Use apenas imagens JPEG ou PNG.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "A imagem deve ter no máximo 2MB.", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await fetch("/api/admin/logic/questions/upload-image", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const body = await res.json();
+      setFormImageUrl(body.imageUrl);
+    } catch {
+      toast({ title: "Erro", description: "Não foi possível enviar a imagem.", variant: "destructive" });
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const closeDialog = () => {
@@ -162,6 +201,7 @@ export default function AdminLogic() {
     }
     const data = {
       question: formQuestion.trim(),
+      imageUrl: formImageUrl,
       options: trimmedOptions,
       correctIndex: formCorrectIndex,
       difficulty: parseInt(formDifficulty),
@@ -220,7 +260,10 @@ export default function AdminLogic() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0 space-y-2">
-                    <p className="text-sm font-medium line-clamp-2">{q.question}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium line-clamp-2">{q.question}</p>
+                      {q.imageUrl && <ImageIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {q.options.map((opt, i) => (
                         <span
@@ -294,6 +337,47 @@ export default function AdminLogic() {
                     rows={3}
                     placeholder="Digite a pergunta da questão de lógica..."
                     data-testid="input-question-content"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Imagem (opcional)</Label>
+                  {formImageUrl ? (
+                    <div className="relative rounded-lg border bg-muted/30 overflow-hidden">
+                      <img src={formImageUrl} alt="Preview" className="max-h-48 w-full object-contain" data-testid="preview-question-image" />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-7 w-7"
+                        onClick={() => setFormImageUrl(null)}
+                        data-testid="button-remove-image"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="question-image-input"
+                      className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-6 text-muted-foreground cursor-pointer hover:bg-muted/30 transition-colors"
+                    >
+                      {isUploadingImage ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <ImagePlus className="h-5 w-5" />
+                      )}
+                      <span className="text-xs">
+                        {isUploadingImage ? "Enviando..." : "Clique para adicionar uma imagem (JPEG/PNG, até 2MB)"}
+                      </span>
+                    </label>
+                  )}
+                  <input
+                    id="question-image-input"
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    className="hidden"
+                    onChange={handleImageChange}
+                    disabled={isUploadingImage}
+                    data-testid="input-question-image"
                   />
                 </div>
               </div>

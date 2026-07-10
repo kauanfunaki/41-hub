@@ -572,6 +572,7 @@ export const logicQuestions = pgTable("logic_questions", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   language: varchar("language", { length: 10 }).notNull().default("pt"),
   question: text("question").notNull(),
+  imageUrl: text("image_url"),
   options: jsonb("options").$type<string[]>().notNull(),
   correctIndex: integer("correct_index").notNull(),
   difficulty: integer("difficulty").notNull().default(1),

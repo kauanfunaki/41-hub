@@ -3886,6 +3886,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/logic/session", requireAuth, async (req, res) => {
     try {
+      const attemptedToday = await storage.hasLogicAttemptToday(req.user!.id);
+      if (attemptedToday) {
+        return res.status(429).json({
+          error: "daily_limit_reached",
+          message: "Você já fez o teste de lógica hoje. Tente novamente amanhã.",
+        });
+      }
+
       const rawLevel = req.body?.level as string | undefined;
       const level: "easy" | "medium" | "hard" =
         rawLevel === "easy" || rawLevel === "hard" ? rawLevel : "medium";
@@ -3918,7 +3926,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const session = await storage.createLogicSession(req.user!.id, picked.map(q => q.id), level, nonce, expiresAt);
 
       // Nunca envia correctIndex ao cliente
-      const questions = picked.map(q => ({ id: q.id, question: q.question, options: q.options, difficulty: q.difficulty }));
+      const questions = picked.map(q => ({ id: q.id, question: q.question, imageUrl: q.imageUrl, options: q.options, difficulty: q.difficulty }));
       res.json({ session, questions, level });
     } catch (error) {
       console.error("Error creating logic session:", error);
@@ -3946,6 +3954,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (session.submittedAt) return res.status(400).json({ error: "Sessão já foi submetida" });
       if (session.nonce !== parsed.data.nonce) return res.status(400).json({ error: "Nonce inválido" });
       if (new Date() > session.expiresAt) return res.status(400).json({ error: "Sessão expirada" });
+
+      // Reforça o limite diário aqui também (evita corrida entre abas/sessões concorrentes)
+      const attemptedToday = await storage.hasLogicAttemptToday(req.user!.id);
+      if (attemptedToday) {
+        return res.status(429).json({
+          error: "daily_limit_reached",
+          message: "Você já fez o teste de lógica hoje. Tente novamente amanhã.",
+        });
+      }
 
       const questionIds = session.questionIds as string[];
       if (parsed.data.answers.length !== questionIds.length) {
@@ -4056,6 +4073,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ============ Admin Logic Question Routes ============
 
+  app.post("/api/admin/logic/questions/upload-image", requireAuth, requireAdmin, upload.single("image"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Nenhuma imagem enviada" });
+      }
+      const imageUrl = `/api/uploads/${req.file.filename}`;
+      res.json({ imageUrl });
+    } catch (error) {
+      console.error("Error uploading logic question image:", error);
+      res.status(500).json({ error: "Failed to upload image" });
+    }
+  });
+
   app.get("/api/admin/logic/questions", requireAuth, requireAdmin, async (req, res) => {
     try {
       const questions = await storage.listLogicQuestions(false);
@@ -4070,6 +4100,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const schema = z.object({
         question: z.string().min(5),
+        imageUrl: z.string().max(500).nullable().optional(),
         options: z.array(z.string().min(1)).min(2).max(6),
         correctIndex: z.number().int().min(0),
         language: z.string().max(10).optional(),
@@ -4102,6 +4133,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const schema = z.object({
         question: z.string().min(5).optional(),
+        imageUrl: z.string().max(500).nullable().optional(),
         options: z.array(z.string().min(1)).min(2).max(6).optional(),
         correctIndex: z.number().int().min(0).optional(),
         language: z.string().max(10).optional(),

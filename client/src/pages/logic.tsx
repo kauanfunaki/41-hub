@@ -33,6 +33,7 @@ type Level = "easy" | "medium" | "hard";
 type LogicQuestionView = {
   id: string;
   question: string;
+  imageUrl?: string | null;
   options: string[];
   difficulty: number;
 };
@@ -120,9 +121,18 @@ export default function LogicTest() {
       }, 250);
     },
     onError: (err: Error) => {
-      const msg = err.message?.includes("Nenhuma questão")
-        ? err.message
-        : "Nenhuma questão disponível. Peça ao admin para cadastrar questões para este nível.";
+      let msg = "Nenhuma questão disponível. Peça ao admin para cadastrar questões para este nível.";
+      const rawBody = err.message?.replace(/^\d+:\s*/, "");
+      try {
+        const parsed = JSON.parse(rawBody || "{}");
+        if (parsed?.error === "daily_limit_reached") {
+          msg = parsed.message || "Você já fez o teste de lógica hoje. Tente novamente amanhã.";
+        } else if (parsed?.message || parsed?.error) {
+          msg = parsed.message || parsed.error;
+        }
+      } catch {
+        // corpo não era JSON — mantém mensagem padrão
+      }
       toast({ title: "Erro", description: msg, variant: "destructive" });
       setState("idle");
     },
@@ -456,6 +466,16 @@ export default function LogicTest() {
               <p className="text-lg font-medium leading-relaxed" data-testid="text-question">
                 {currentQuestion.question}
               </p>
+              {currentQuestion.imageUrl && (
+                <div className="rounded-lg border bg-muted/30 overflow-hidden flex items-center justify-center">
+                  <img
+                    src={currentQuestion.imageUrl}
+                    alt="Imagem da questão"
+                    className="max-h-72 w-auto object-contain"
+                    data-testid="image-question"
+                  />
+                </div>
+              )}
               <div className="grid gap-2.5">
                 {currentQuestion.options.map((opt, i) => {
                   const selected = answers[current] === i;

@@ -33,7 +33,6 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
-  sidebarMenuButtonVariants,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
@@ -45,7 +44,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-provider";
 import { useTutorial } from "@/hooks/use-tutorial";
@@ -73,6 +71,10 @@ export function AppSidebar() {
 
   const [recursosOpen, setRecursosOpen] = useState(
     ["/apps", "/dashboards", "/favorites"].some((p) => location.startsWith(p)),
+  );
+
+  const [testesOpen, setTestesOpen] = useState(
+    ["/typing", "/logic"].some((p) => location.startsWith(p)),
   );
 
   const { data: opsWatchers } = useQuery<{ slug: string }[]>({
@@ -245,36 +247,53 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               )}
 
-              {/* Testes (Digitação / Lógica) */}
-              <SidebarMenuItem>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    className={cn(
-                      sidebarMenuButtonVariants({}),
-                      (location.startsWith("/typing") || location.startsWith("/logic")) &&
-                        "bg-sidebar-accent text-sidebar-accent-foreground"
-                    )}
-                    data-testid="nav-testes"
-                  >
-                    <GraduationCap className="h-4 w-4" />
-                    <span>Testes</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent side="right" align="start">
-                    <DropdownMenuItem asChild data-testid="nav-testes-digitacao">
-                      <Link href="/typing">
-                        <Keyboard className="h-4 w-4 mr-2" />
-                        Teste de Digitação
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild data-testid="nav-testes-logica">
-                      <Link href="/logic">
-                        <Brain className="h-4 w-4 mr-2" />
-                        Teste de Lógica
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </SidebarMenuItem>
+              {/* Testes (collapsible: Digitação / Lógica) */}
+              <Collapsible open={testesOpen} onOpenChange={setTestesOpen}>
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={["/typing", "/logic"].some((p) => location.startsWith(p))}
+                      data-testid="nav-testes"
+                    >
+                      <GraduationCap className="h-4 w-4" />
+                      <span>Testes</span>
+                      <ChevronRight
+                        className={`ml-auto h-4 w-4 transition-transform ${
+                          testesOpen ? "rotate-90" : ""
+                        }`}
+                      />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={location.startsWith("/typing")}
+                          data-testid="nav-testes-digitacao"
+                        >
+                          <Link href="/typing">
+                            <Keyboard className="h-3.5 w-3.5" />
+                            <span>Teste de Digitação</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={location.startsWith("/logic")}
+                          data-testid="nav-testes-logica"
+                        >
+                          <Link href="/logic">
+                            <Brain className="h-3.5 w-3.5" />
+                            <span>Teste de Lógica</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
 
               {/* Notícias */}
               <SidebarMenuItem>

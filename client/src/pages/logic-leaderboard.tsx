@@ -35,6 +35,7 @@ type LeaderboardEntry = {
   correctCount: number;
   totalQuestions: number;
   accuracy: string;
+  attempts: number;
   monthKey: string;
   level: string;
 };
@@ -47,6 +48,7 @@ type PodiumEntry = {
   userPhoto: string | null;
   correctCount: number;
   accuracy: string;
+  attempts: number;
 };
 
 function getInitials(name: string): string {
@@ -203,7 +205,7 @@ function PodiumCard({ entry, rank }: { entry: PodiumEntry; rank: 1 | 2 | 3 }) {
             </span>
           </div>
           <span className="text-xs text-muted-foreground">
-            {entry.correctCount} acertos
+            {entry.correctCount} acertos · {entry.attempts} tentativa{entry.attempts !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
@@ -554,6 +556,9 @@ export default function LogicLeaderboard() {
                           {entry.correctCount} acertos
                         </span>
                       </div>
+                      <span className="text-[10px] text-muted-foreground/70">
+                        {entry.attempts} tentativa{entry.attempts !== 1 ? "s" : ""}
+                      </span>
                     </div>
                   </div>
                 );
