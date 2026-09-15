@@ -484,7 +484,7 @@ export default function TicketsDetail() {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [conclusionMessage, setConclusionMessage] = useState("");
   const [autoAssignSelf, setAutoAssignSelf] = useState(false);
-  const [formExpanded, setFormExpanded] = useState(false);
+  const [formExpanded, setFormExpanded] = useState(true);
   const [lightboxAttachment, setLightboxAttachment] = useState<{ src: string; alt: string; downloadHref: string } | null>(null);
 
   const { data: ticket, isLoading } = useQuery<TicketWithDetails>({
