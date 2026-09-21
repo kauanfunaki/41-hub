@@ -486,7 +486,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ('watcher-bpo-folha',     'Watcher BPO Folha',     'Folhas de pagamento BPO',              'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\VALIDADOR FOLHA'),
       ('watcher-irriga',        'Watcher Irriga',        'Renomeador de NFs Irriga Four',        'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\IRRIGA FOUR\\08-RENOMEADOR NOTAS'),
       ('watcher-er-dias',       'Watcher ER Dias',       'Renomeador de NFs Elio Rubens',        'BPO',  '\\\\192.168.140.249\\Publico\\DOCS BPO\\ELIO RUBENS\\08-RENOMEADOR NOTAS'),
-      ('watcher-separador',     'Watcher Separador',     'Organiza arquivos em pastas de mês',   'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\00 OLD\\2025\\0. ORGANIZADOR DE PASTAS')
+      ('watcher-separador',     'Watcher Separador',     'Organiza arquivos em pastas de mês',   'BLD',  '\\\\192.168.140.249\\Publico\\DOCS BLD\\00 OLD\\2025\\0. ORGANIZADOR DE PASTAS'),
+      ('watcher-bld-renomeador', 'Watcher BLD Renomeador', 'Renomeador de NFS-e por empresa prestadora', 'BPO', '\\\\192.168.140.249\\Publico\\DOCS BPO\\BLD\\03 NOTAS DE SERVIÇO')
     ON CONFLICT (slug) DO NOTHING`);
 
     // Seed folder_output for known local watchers
@@ -497,6 +498,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await pool.query(`
       UPDATE ops_watchers SET folder_output = '\\\\192.168.140.249\\Publico\\DOCS BPO\\ELIO RUBENS\\09-DESTINO NOTAS'
       WHERE slug = 'watcher-er-dias' AND folder_output IS NULL
+    `);
+    await pool.query(`
+      UPDATE ops_watchers SET folder_output = '\\\\192.168.140.249\\Publico\\DOCS BPO\\BLD\\03 NOTAS DE SERVIÇO\\Sucesso'
+      WHERE slug = 'watcher-bld-renomeador' AND folder_output IS NULL
     `);
 
     // sector color column
