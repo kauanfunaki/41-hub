@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
+import { getOnboardingStep } from "@/lib/onboarding";
 
 export type TutorialRole = "Coordenador" | "Usuario";
 
@@ -25,8 +26,7 @@ export function useTutorial() {
       : "Usuario";
 
   // Admins skip tutorial; show only when field is false
-  const shouldShow =
-    !!user && !user.isAdmin && !user.tutorialCompleted;
+  const shouldShow = getOnboardingStep(user) === "tutorial";
 
   return {
     shouldShow,

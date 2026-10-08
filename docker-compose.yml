@@ -44,6 +44,12 @@ services:
       AZURE_REDIRECT_URI: "https://hub.41tech.cloud/api/auth/entra/callback"
       AZURE_POST_LOGOUT_REDIRECT_URI: "https://hub.41tech.cloud/"
 
+      # Slack: read secrets from the host environment or its unversioned .env.
+      SLACK_CLIENT_ID: "${SLACK_CLIENT_ID:-}"
+      SLACK_CLIENT_SECRET: "${SLACK_CLIENT_SECRET:-}"
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN:-}"
+      SLACK_REDIRECT_URI: "${SLACK_REDIRECT_URI:-}"
+
       # (opcional) se você implementou este env no código
       # TICKETS_TARGET_SECTOR_NAME: "Tech"
 

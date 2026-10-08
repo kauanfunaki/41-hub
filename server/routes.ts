@@ -13,7 +13,9 @@ import { storage } from "./storage";
 import { pool } from "./db";
 import type { UserWithRoles } from "@shared/schema";
 import { emitEvent } from "./lib/webhooks";
-import { sendSlack, getSlackWebhookUrl } from "./lib/slack";
+import { sendSlack, getSlackWebhookUrl, getSlackBotTeamId, isSlackDirectMessagesConfigured } from "./lib/slack";
+import { SlackIdentityError, verifySlackIdentity } from "./lib/slack-identity";
+import { notifyTicketParticipantsInSlack } from "./lib/ticket-slack-notifications";
 import { isEntraConfigured, getMsalClient } from "./lib/entra";
 
 // ── Web Push (VAPID) setup ──────────────────────────────────────────────────
@@ -173,6 +175,11 @@ declare module "express-session" {
   interface SessionData {
     userId?: string;
     entraState?: string;
+    slackOauthState?: string;
+    slackOauthNonce?: string;
+    slackOauthUserId?: string;
+    slackOauthStartedAt?: number;
+    slackReminderDismissedForUserId?: string;
   }
 }
 
@@ -615,6 +622,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     req.session.userId = adminUser.id;
+    delete req.session.slackReminderDismissedForUserId;
+    delete req.session.slackOauthState;
+    delete req.session.slackOauthNonce;
+    delete req.session.slackOauthUserId;
+    delete req.session.slackOauthStartedAt;
 
     await storage.createAuditLog({
       actorUserId: adminUser.id,
@@ -701,6 +713,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         req.session.userId = user.id;
+        delete req.session.slackReminderDismissedForUserId;
+        delete req.session.slackOauthState;
+        delete req.session.slackOauthNonce;
+        delete req.session.slackOauthUserId;
+        delete req.session.slackOauthStartedAt;
 
         await storage.createAuditLog({
           actorUserId: user.id,
@@ -753,6 +770,170 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       res.redirect("/");
     });
+  });
+
+  // ==================== SLACK ACCOUNT LINKING ====================
+
+  const isSlackOAuthConfigured = () => Boolean(
+    process.env.SLACK_CLIENT_ID &&
+    process.env.SLACK_CLIENT_SECRET &&
+    process.env.SLACK_REDIRECT_URI &&
+    isSlackDirectMessagesConfigured(),
+  );
+
+  app.get("/api/users/me/slack", requireAuth, async (req, res) => {
+    let botTeamId: string | undefined;
+    if (isSlackOAuthConfigured()) {
+      try {
+        botTeamId = await getSlackBotTeamId();
+      } catch {
+        // Do not invite users to connect when the bot cannot deliver notifications.
+      }
+    }
+    const wrongWorkspace = Boolean(req.user!.slackUserId && req.user!.slackTeamId !== botTeamId);
+    res.json({
+      configured: Boolean(botTeamId),
+      connected: Boolean(req.user!.slackUserId && botTeamId && !wrongWorkspace),
+      teamId: req.user!.slackTeamId || null,
+      reminderDismissed: req.user!.slackConnectReminderDismissed,
+      sessionDismissed: req.session.slackReminderDismissedForUserId === req.user!.id,
+      wrongWorkspace: Boolean(botTeamId && wrongWorkspace),
+    });
+  });
+
+  app.patch("/api/users/me/slack/reminder", requireAuth, async (req, res) => {
+    try {
+      const parsed = z.object({ dismissed: z.boolean() }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Dados inválidos" });
+
+      if (parsed.data.dismissed) {
+        await storage.updateUser(req.user!.id, { slackConnectReminderDismissed: true });
+      }
+      req.session.slackReminderDismissedForUserId = req.user!.id;
+      return req.session.save((error) => {
+        if (error) return res.status(500).json({ error: "Não foi possível salvar a preferência." });
+        res.json({ success: true, sessionDismissed: true, reminderDismissed: parsed.data.dismissed || req.user!.slackConnectReminderDismissed });
+      });
+    } catch (error) {
+      console.error("Slack reminder preference update failed:", error);
+      res.status(500).json({ error: "Não foi possível atualizar a preferência." });
+    }
+  });
+
+  app.get("/api/users/me/slack/connect", requireAuth, async (req, res) => {
+    if (!isSlackOAuthConfigured()) {
+      return res.status(503).json({ error: "A integração com Slack ainda não foi configurada pelo administrador." });
+    }
+
+    let teamId: string;
+    try {
+      teamId = await getSlackBotTeamId();
+    } catch {
+      return res.redirect("/profile?slack=unavailable");
+    }
+    const state = crypto.randomBytes(32).toString("hex");
+    const nonce = crypto.randomBytes(32).toString("hex");
+    req.session.slackOauthState = state;
+    req.session.slackOauthNonce = nonce;
+    req.session.slackOauthUserId = req.user!.id;
+    req.session.slackOauthStartedAt = Date.now();
+    req.session.slackReminderDismissedForUserId = req.user!.id;
+
+    const query = new URLSearchParams({
+      response_type: "code",
+      client_id: process.env.SLACK_CLIENT_ID!,
+      scope: "openid profile email",
+      redirect_uri: process.env.SLACK_REDIRECT_URI!,
+      state,
+      nonce,
+      team: teamId,
+    });
+
+    return req.session.save((error) => {
+      if (error) return res.status(500).json({ error: "Não foi possível iniciar a conexão com o Slack." });
+      return res.redirect(`https://slack.com/openid/connect/authorize?${query.toString()}`);
+    });
+  });
+
+  app.get("/api/users/me/slack/callback", async (req, res) => {
+    const returnToProfile = (result: string) => res.redirect(`/profile?slack=${result}`);
+    const userId = req.session.userId;
+    const expectedState = req.session.slackOauthState;
+    const nonce = req.session.slackOauthNonce;
+    const oauthUserId = req.session.slackOauthUserId;
+    const startedAt = req.session.slackOauthStartedAt;
+    delete req.session.slackOauthState;
+    delete req.session.slackOauthNonce;
+    delete req.session.slackOauthUserId;
+    delete req.session.slackOauthStartedAt;
+    if (!userId || !isSlackOAuthConfigured()) return returnToProfile("unavailable");
+    const { code, state, error } = req.query;
+    if (error || typeof code !== "string" || typeof state !== "string" || state !== expectedState ||
+      !nonce || oauthUserId !== userId || !startedAt || Date.now() - startedAt > 10 * 60 * 1000) {
+      return returnToProfile("cancelled");
+    }
+
+    try {
+      const tokenRequest = new URLSearchParams({
+        code: String(code),
+        client_id: process.env.SLACK_CLIENT_ID!,
+        client_secret: process.env.SLACK_CLIENT_SECRET!,
+        redirect_uri: process.env.SLACK_REDIRECT_URI!,
+      });
+      const tokenResponse = await fetch("https://slack.com/api/openid.connect.token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: tokenRequest.toString(),
+        signal: AbortSignal.timeout(5000),
+      });
+      const token = await tokenResponse.json() as { ok?: boolean; id_token?: string; error?: string };
+      if (!tokenResponse.ok || !token.ok || !token.id_token) throw new Error(token.error || "Token exchange failed");
+
+      const { userId: slackUserId, teamId } = await verifySlackIdentity(token.id_token, {
+        nonce, clientId: process.env.SLACK_CLIENT_ID!, teamId: await getSlackBotTeamId(),
+      });
+      const user = await storage.getUser(userId);
+      if (!user?.isActive) return returnToProfile("unavailable");
+      await storage.updateUser(userId, {
+        slackUserId,
+        slackTeamId: teamId,
+        slackConnectReminderDismissed: false,
+      });
+      await storage.createAuditLog({
+        actorUserId: userId,
+        action: "slack_account_connected",
+        targetType: "user",
+        targetId: userId,
+        metadata: { teamId },
+        ip: req.ip || req.socket.remoteAddress,
+      });
+      return returnToProfile("connected");
+    } catch (slackError) {
+      if (slackError instanceof SlackIdentityError && slackError.reason === "wrong_workspace") {
+        return returnToProfile("wrong_workspace");
+      }
+      if ((slackError as { code?: string })?.code === "23505") return returnToProfile("already_linked");
+      console.error("Slack account linking failed:", slackError instanceof Error ? slackError.name : "Unknown error");
+      return returnToProfile("error");
+    }
+  });
+
+  app.delete("/api/users/me/slack", requireAuth, async (req, res) => {
+    try {
+      await storage.updateUser(req.user!.id, { slackUserId: null, slackTeamId: null });
+      req.session.slackReminderDismissedForUserId = req.user!.id;
+      await storage.createAuditLog({
+        actorUserId: req.user!.id,
+        action: "slack_account_disconnected",
+        targetType: "user",
+        targetId: req.user!.id,
+        ip: req.ip || req.socket.remoteAddress,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Slack account unlinking failed:", error);
+      res.status(500).json({ error: "Não foi possível desconectar a conta Slack." });
+    }
   });
 
   // Logout
@@ -871,6 +1052,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       loginAttempts.delete(ip);
 
       req.session.userId = user.id;
+      delete req.session.slackReminderDismissedForUserId;
+      delete req.session.slackOauthState;
+      delete req.session.slackOauthNonce;
+      delete req.session.slackOauthUserId;
+      delete req.session.slackOauthStartedAt;
 
       await storage.createAuditLog({
         actorUserId: user.id,
@@ -2141,6 +2327,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
       }
 
+      const previousTicket = await storage.getTicketDetail(req.params.id, req.user!);
+      if (!previousTicket) return res.status(404).json({ error: "Chamado não encontrado" });
       const updated = await storage.adminUpdateTicket(req.params.id, ticketPatch, req.user!);
       if (!updated) return res.status(404).json({ error: "Chamado não encontrado" });
 
@@ -2209,6 +2397,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      const changedFields: string[] = [];
+      if (ticketPatch.status && updated.status !== previousTicket.status) changedFields.push(`status (${updated.status})`);
+      if (ticketPatch.priority && updated.priority !== previousTicket.priority) changedFields.push("prioridade");
+      if (ticketPatch.categoryId && updated.categoryId !== previousTicket.categoryId) changedFields.push("categoria");
+      if (ticketPatch.title && updated.title !== previousTicket.title) changedFields.push("título");
+      if (ticketPatch.description && updated.description !== previousTicket.description) changedFields.push("descrição");
+      if (ticketPatch.relatedResourceId !== undefined && updated.relatedResourceId !== previousTicket.relatedResourceId) changedFields.push("recurso relacionado");
+      if (ticketPatch.tags && JSON.stringify(updated.tags) !== JSON.stringify(previousTicket.tags)) changedFields.push("tags");
+      if (resolutionDueAtManual) changedFields.push("prazo de resolução");
+      if (changedFields.length > 0) {
+        void notifyTicketParticipantsInSlack(
+          updated,
+          req.user!,
+          `Alterações: ${changedFields.join(", ")}.`,
+        );
+      }
+
       res.json(updated);
     } catch (error: any) {
       console.error("Error updating ticket:", error);
@@ -2238,6 +2443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       await storage.adminSetAssignees(req.params.id, parsed.data.assigneeIds, req.user!);
+      void notifyTicketParticipantsInSlack(ticket, req.user!, "Os responsáveis pelo chamado foram atualizados.");
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error setting assignees:", error);
@@ -2269,6 +2475,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       await storage.setAdditionalRequesters(req.params.id, parsed.data.requesterIds, req.user!);
+      void notifyTicketParticipantsInSlack(ticket, req.user!, "Os solicitantes envolvidos foram atualizados.");
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error setting additional requesters:", error);
@@ -2346,6 +2553,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       if (!parsed.data.isInternal) {
+        void notifyTicketParticipantsInSlack(ticket, req.user!, "Um novo comentário foi adicionado.");
         emitEvent("ticket_commented", {
           ticketId: ticket.id,
           title: ticket.title,
@@ -2429,6 +2637,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           sizeBytes: req.file.size,
           attachmentKey: (req.body?.attachmentKey as string) || undefined,
         });
+        void notifyTicketParticipantsInSlack(ticket, req.user!, `Um anexo foi adicionado: ${originalName}.`);
         res.status(201).json(attachment);
       } catch (error: any) {
         console.error("Error uploading attachment:", error);
@@ -2561,6 +2770,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         isInternal: false,
       });
 
+      void notifyTicketParticipantsInSlack(ticket, req.user!, markAwaiting
+        ? "Foram solicitadas informações. O chamado está aguardando resposta do solicitante."
+        : "Foram solicitadas informações no chamado.");
       res.json({ message: markAwaiting ? "Status alterado para Aguardando Usuário" : "Solicitação registrada", comment });
     } catch (error) {
       console.error("Error requesting info:", error);
@@ -2676,6 +2888,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         note,
       });
 
+      void notifyTicketParticipantsInSlack(ticket, req.user!, "O chamado foi aprovado e está aberto.");
       res.json({ message: "Chamado aprovado com sucesso" });
     } catch (error: any) {
       console.error("Error approving ticket:", error);
@@ -2758,6 +2971,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         note: parsed.data.note,
       });
 
+      void notifyTicketParticipantsInSlack(ticket, req.user!, "O chamado foi rejeitado e cancelado.");
       res.json({ message: "Chamado rejeitado" });
     } catch (error: any) {
       console.error("Error rejecting ticket:", error);
@@ -2843,7 +3057,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("Error dispatching reopen-request notification:", notifErr);
       }
 
-      // Emit webhook event → n8n handles Slack notification
+      // Keep existing webhook integrations alongside the opt-in Slack DMs.
       try {
         await emitEvent("ticket_reopen_requested", {
           ticketId: ticket.id,
@@ -2859,6 +3073,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("ticket_reopen_requested event failed:", eventErr);
       }
 
+      void notifyTicketParticipantsInSlack(ticket, req.user!, "Foi solicitada a reabertura do chamado.");
       res.status(201).json({ message: "Solicitação de reabertura enviada", reopenRequest });
     } catch (error: any) {
       console.error("Error requesting reopen:", error);
@@ -2931,6 +3146,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("Error dispatching reopen-decision notification:", notifErr);
       }
 
+      void notifyTicketParticipantsInSlack(ticket, req.user!, action === "accept"
+        ? "A solicitação de reabertura foi aceita. O chamado voltou para Em andamento."
+        : "A solicitação de reabertura foi recusada. O chamado permanece resolvido.");
       res.json({ message: action === "accept" ? "Chamado reaberto" : "Solicitação de reabertura recusada" });
     } catch (error: any) {
       console.error("Error deciding reopen request:", error);

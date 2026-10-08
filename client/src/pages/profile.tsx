@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -26,11 +26,14 @@ import {
   Target,
   Trophy,
   ShieldCheck,
+  MessageCircle,
+  Unlink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { TeamMember, ResourceWithHealth, Sector, TypingScore } from "@shared/schema";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { useSlackConnection, slackConnectionKey } from "@/hooks/use-slack-connection";
 
 function getInitials(name: string): string {
   return name
@@ -60,6 +63,7 @@ export default function Profile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
+  const [isDisconnectingSlack, setIsDisconnectingSlack] = useState(false);
   const [photoLoadError, setPhotoLoadError] = useState(false);
 
   const [showAllSectors, setShowAllSectors] = useState(false);
@@ -107,6 +111,47 @@ export default function Profile() {
     queryKey: ["/api/typing/me"],
     enabled: !!user,
   });
+
+  const { data: slackConnection, isLoading: isLoadingSlack } = useSlackConnection();
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const result = url.searchParams.get("slack");
+    if (!result) return;
+    const descriptions: Record<string, string> = {
+      connected: "Sua conta foi conectada. Você receberá notificações de chamados pelo Slack.",
+      cancelled: "A conexão foi cancelada. Você pode tentar novamente quando quiser.",
+      wrong_workspace: "Escolha o workspace em que o bot do 41Hub está instalado.",
+      already_linked: "Essa conta Slack já está vinculada a outro usuário do 41Hub.",
+      unavailable: "A integração está indisponível. Entre novamente no 41Hub ou contate o administrador.",
+      error: "Não foi possível conectar sua conta. Tente novamente ou contate o administrador.",
+    };
+    toast({
+      title: result === "connected" ? "Slack conectado" : "Conexão com Slack",
+      description: descriptions[result] || descriptions.error,
+      variant: ["connected", "cancelled"].includes(result) ? "default" : "destructive",
+    });
+    url.searchParams.delete("slack");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    void queryClient.invalidateQueries({ queryKey: slackConnectionKey(user?.id) });
+  }, [toast, user?.id]);
+
+  const handleDisconnectSlack = async () => {
+    setIsDisconnectingSlack(true);
+    try {
+      const response = await fetch("/api/users/me/slack", { method: "DELETE", credentials: "include" });
+      if (!response.ok) throw new Error("Disconnect failed");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: slackConnectionKey(user?.id) }),
+        refreshUser(),
+      ]);
+      toast({ title: "Slack desconectado", description: "Você não receberá mais notificações de chamados pelo Slack." });
+    } catch {
+      toast({ title: "Erro", description: "Não foi possível desconectar sua conta Slack.", variant: "destructive" });
+    } finally {
+      setIsDisconnectingSlack(false);
+    }
+  };
 
   const handleRemovePhoto = async () => {
     setIsRemovingPhoto(true);
@@ -272,6 +317,50 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {/* ── Integrações ───────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <SectionDivider icon={MessageCircle} label="Integrações" />
+        <div className="rounded-xl border bg-card p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#4A154B]/10 text-[#4A154B] dark:text-[#e5a4e7] shrink-0">
+            <MessageCircle className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">Slack</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {isLoadingSlack
+                ? "Verificando conexão..."
+                : slackConnection?.connected
+                  ? "Conta conectada. Você receberá mensagens diretas sobre os chamados envolvidos."
+                  : slackConnection?.wrongWorkspace
+                    ? "Sua conta está vinculada a outro workspace. Conecte novamente ao workspace do bot do 41Hub."
+                  : slackConnection?.configured
+                    ? "Conecte sua conta para receber notificações de chamados por mensagem direta."
+                    : "A integração ainda não foi configurada pelo administrador."}
+            </p>
+          </div>
+          {slackConnection?.connected ? (
+            <Button
+              variant="outline"
+              onClick={handleDisconnectSlack}
+              disabled={isDisconnectingSlack}
+              data-testid="button-disconnect-slack"
+            >
+              {isDisconnectingSlack ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Unlink className="h-4 w-4 mr-2" />}
+              Desconectar
+            </Button>
+          ) : (
+            <Button
+              onClick={() => { window.location.href = "/api/users/me/slack/connect"; }}
+              disabled={!slackConnection?.configured || isLoadingSlack}
+              data-testid="button-connect-slack"
+            >
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Conectar Slack
+            </Button>
+          )}
+        </div>
+      </section>
 
       {/* ── Teste de Digitação ───────────────────────────────────── */}
       <section className="space-y-4">

@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+node_modules
+dist
+uploads
+tools
+41-hub-local-test-bot
+*.log
+cloudflared-test.out
+cloudflared-test.err

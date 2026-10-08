@@ -25,6 +25,8 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import LocalLogin from "@/pages/local-login";
 import { PasswordChangeModal } from "@/components/password-change-modal";
+import { SlackConnectPrompt } from "@/components/slack-connect-prompt";
+import { getOnboardingStep } from "@/lib/onboarding";
 import Home from "@/pages/home";
 import Resources from "@/pages/resources";
 import Profile from "@/pages/profile";
@@ -155,6 +157,8 @@ function Router() {
 }
 
 function AuthenticatedLayout() {
+  const { user } = useAuth();
+  const onboardingStep = getOnboardingStep(user);
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3.5rem",
@@ -185,6 +189,7 @@ function AuthenticatedLayout() {
         </SidebarInset>
       </div>
       <TutorialModal />
+      {onboardingStep === "slack" && <SlackConnectPrompt key={user?.id} />}
       <GlobalSearch />
     </SidebarProvider>
   );

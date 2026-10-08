@@ -21,6 +21,11 @@ export const alertSeverityEnum = pgEnum("alert_severity", ["info", "warning", "c
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   entraOid: varchar("entra_oid", { length: 255 }).unique(),
+  // Slack identity is linked voluntarily by the user through Slack OAuth.
+  // It is used exclusively to route ticket notifications to the user's App Home.
+  slackUserId: varchar("slack_user_id", { length: 32 }).unique(),
+  slackTeamId: varchar("slack_team_id", { length: 32 }),
+  slackConnectReminderDismissed: boolean("slack_connect_reminder_dismissed").notNull().default(false),
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),
