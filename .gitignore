@@ -1,4 +1,11 @@
 .env
+.env.*
+!.env.example
+*.log
+cloudflared-test.out
+cloudflared-test.err
+tools/
+41-hub-local-test-bot/
 
 .local/
 **/.local/
