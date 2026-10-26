@@ -2513,13 +2513,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tickets/:id/comments", requireAuth, requireTicketAccess, async (req, res) => {
     try {
-      const isUser = !req.user!.isAdmin && !req.user!.roles?.some(r => r.roleName === "Coordenador");
-      if (isUser) {
-        return res.status(403).json({ error: "Usuários não podem comentar em chamados" });
-      }
-
       const ticket = await storage.getTicketDetail(req.params.id, req.user!);
       if (!ticket) return res.status(404).json({ error: "Chamado não encontrado" });
+
+      const isUser = !req.user!.isAdmin && !req.user!.roles?.some(r => r.roleName === "Coordenador");
+      if (isUser && ticket.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: "Usuários não podem comentar em chamados" });
+      }
 
       const commentSchema = z.object({
         body: z.string().min(1),

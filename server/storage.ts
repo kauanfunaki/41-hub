@@ -1775,8 +1775,11 @@ export class DatabaseStorage implements IStorage {
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId));
     if (!ticket) throw new Error("Ticket not found");
 
+    // Admins: sem restrição
+    // Criador do chamado: pode comentar em qualquer status
+    // Outros: somente quando status for AGUARDANDO_USUARIO
     if (!authorUser.isAdmin) {
-      if (ticket.status !== "AGUARDANDO_USUARIO" && ticket.status !== "AGUARDANDO_REQUERENTE") {
+      if (ticket.createdBy !== authorUser.id && ticket.status !== "AGUARDANDO_USUARIO" && ticket.status !== "AGUARDANDO_REQUERENTE") {
         throw new Error("Comentários só são permitidos quando o chamado está aguardando o usuário");
       }
       if (data.isInternal) {
