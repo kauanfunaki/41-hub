@@ -12,6 +12,7 @@ import webpush from "web-push";
 import { storage } from "./storage";
 import { pool } from "./db";
 import type { UserWithRoles } from "@shared/schema";
+import { ticketHistoryQuerySchema } from "@shared/ticket-history";
 import { emitEvent } from "./lib/webhooks";
 import { sendSlack, getSlackWebhookUrl, getSlackBotTeamId, isSlackDirectMessagesConfigured } from "./lib/slack";
 import { SlackIdentityError, verifySlackIdentity } from "./lib/slack-identity";
@@ -1967,6 +1968,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error listing tickets:", error);
       res.status(500).json({ error: "Failed to list tickets" });
+    }
+  });
+
+  app.get("/api/tickets/history", requireAuth, requireTicketAccess, async (req, res) => {
+    const parsed = ticketHistoryQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: "Filtros de histórico inválidos" });
+    try {
+      res.json(await storage.listTicketHistoryForUser(req.user!, {
+        ...parsed.data,
+        assignedToMe: parsed.data.assignedToMe === "true",
+      }));
+    } catch (error) {
+      console.error("Error listing ticket history:", error);
+      res.status(500).json({ error: "Não foi possível carregar o histórico de chamados" });
     }
   });
 

@@ -89,6 +89,7 @@ import {
 } from "@shared/schema";
 import webpush from "web-push";
 import { computeSlaDueDates, addBusinessMinutes, businessMinutesBetween } from "./lib/sla";
+import type { TicketListFilters, TicketHistoryFilters, TicketHistoryPage } from "@shared/ticket-history";
 
 // ── Schema-mismatch resilience ─────────────────────────────────────────────
 // New Drizzle schema columns (health_status_override, health_message, etc.)
@@ -263,12 +264,8 @@ export interface IStorage {
     requestData?: Record<string, any>;
   }, actorUser: UserWithRoles): Promise<Ticket>;
 
-  listTicketsForUser(user: UserWithRoles, filters: {
-    status?: string;
-    q?: string;
-    includeClosed?: boolean;
-    assignedToMe?: boolean;
-  }): Promise<TicketWithDetails[]>;
+  listTicketsForUser(user: UserWithRoles, filters: TicketListFilters): Promise<TicketWithDetails[]>;
+  listTicketHistoryForUser(user: UserWithRoles, filters: TicketHistoryFilters): Promise<TicketHistoryPage>;
 
   getTicketDetail(ticketId: string, user: UserWithRoles): Promise<TicketWithDetails | undefined>;
 
@@ -1378,13 +1375,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async listTicketsForUser(user: UserWithRoles, filters: {
-    status?: string;
-    q?: string;
-    includeClosed?: boolean;
-    assignedToMe?: boolean;
-    pendingReopen?: boolean;
-  }): Promise<TicketWithDetails[]> {
+  private ticketListConditions(user: UserWithRoles, filters: TicketListFilters) {
     const conditions: any[] = [];
 
     if (!user.isAdmin) {
@@ -1443,13 +1434,39 @@ export class DatabaseStorage implements IStorage {
       ));
     }
 
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    return and(...conditions);
+  }
+
+  async listTicketsForUser(user: UserWithRoles, filters: TicketListFilters): Promise<TicketWithDetails[]> {
+    const where = this.ticketListConditions(user, filters);
     const rawTickets = await db.select().from(tickets)
       .where(where)
       .orderBy(desc(tickets.createdAt))
       .limit(200);
 
     return this.enrichTickets(rawTickets);
+  }
+
+  async listTicketHistoryForUser(user: UserWithRoles, filters: TicketHistoryFilters): Promise<TicketHistoryPage> {
+    const where = this.ticketListConditions(user, { ...filters, includeClosed: true });
+    const priorityCondition = filters.priority ? eq(tickets.priority, filters.priority) : sql`true`;
+    const [counts] = await db.select({
+      total: sql<number>`count(*)::int`,
+      filteredTotal: sql<number>`count(*) filter (where ${priorityCondition})::int`,
+    }).from(tickets).where(where);
+    const totalPages = Math.max(1, Math.ceil(counts.filteredTotal / filters.pageSize));
+    const page = Math.min(filters.page, totalPages);
+    const rawTickets = await db.select().from(tickets)
+      .where(and(where, priorityCondition))
+      .orderBy(desc(tickets.createdAt), desc(tickets.id))
+      .limit(filters.pageSize)
+      .offset((page - 1) * filters.pageSize);
+    return {
+      items: await this.enrichTickets(rawTickets),
+      total: counts.total,
+      filteredTotal: counts.filteredTotal,
+      page, pageSize: filters.pageSize, totalPages,
+    };
   }
 
   async getTicketDetail(ticketId: string, user: UserWithRoles): Promise<TicketWithDetails | undefined> {

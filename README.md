@@ -65,6 +65,16 @@ O primeiro acesso segue a ordem **troca de senha local obrigatória → tutorial
 
 Consulte [o runbook de publicação do Slack](docs/RUNBOOK_SLACK.md) para migração do banco, variáveis, publicação e validação. Testes isolados: `npm run test:slack` (sem mensagens reais ou acesso ao banco).
 
+## Histórico e conclusão de chamados
+
+O histórico apresenta 25 chamados por página, com botões **Anterior** e **Próxima**, contagem total e filtros de busca, prioridade e atribuição. O total respeita as permissões do usuário; o filtro de prioridade reduz a lista paginada sem alterar o contador geral da aba. Alterar filtros retorna à primeira página. Falhas de carregamento oferecem **Tentar novamente**.
+
+O selo **Concluído** acompanha o status **Resolvido**, inclusive quando o chamado é resolvido diretamente de **Aberto**, sem passar por **Em andamento** (etapa que inicia o SLA). Quando o SLA foi excedido, aparece **Concluído · SLA estourado**. Cancelamentos e ciclos de resoluções anteriores não exibem conclusão em chamados reabertos. Não são criados ciclos de SLA retroativos para chamados sem medição.
+
+A API `GET /api/tickets/history` retorna `{ items, total, filteredTotal, page, pageSize, totalPages }`. Aceita `page` (a partir de 1), `pageSize` (1 a 100, padrão 25), `q`, `assignedToMe` e `priority`. A consulta usa as mesmas regras de visibilidade da lista de chamados. A rota existente `GET /api/tickets` mantém seu contrato.
+
+Validação isolada: `npm run test:tickets`, sem banco real ou integrações externas. Build: `npm run build`. Verificação de tipos: `npm run check` (o repositório já contém erros de tipos anteriores a esta correção).
+
 ## 🗄️ Modelagem de Dados (Resumo)
 
 O sistema baseia-se em três entidades principais para o controle de acesso:

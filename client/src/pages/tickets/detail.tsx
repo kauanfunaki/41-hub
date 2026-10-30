@@ -545,7 +545,12 @@ export default function TicketsDetail() {
 
   const updateMutation = useMutation({
     mutationFn: async (patch: Record<string, any>) => { const r = await apiRequest("PATCH", `/api/tickets/${ticketId}`, patch); return r.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tickets"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "events"] }); queryClient.invalidateQueries({ queryKey: ["/api/tickets", ticketId, "comments"] }); toast({ title: "Chamado atualizado" }); },
+    onSuccess: async (updated: TicketWithDetails) => {
+      queryClient.setQueryData<TicketWithDetails>(["/api/tickets", ticketId], current =>
+        current ? { ...current, ...updated } : current);
+      await queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      toast({ title: "Chamado atualizado" });
+    },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
   const assignMutation = useMutation({

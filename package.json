@@ -9,6 +9,7 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:slack": "tsx --test script/slack-notifications.test.ts",
+    "test:tickets": "tsx --test script/ticket-history.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
