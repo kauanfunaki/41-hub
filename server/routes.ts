@@ -2177,6 +2177,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // O histórico de chamados para o Connect 41 (17/11/2026): o Connect traz os
+  // chamados daqui como casos para a triagem por IA aprender com eles. Só
+  // leitura. Vai o pedido, a categoria e o setor que pediu, as datas e as
+  // respostas da equipe (comentário de quem não abriu o chamado). Não vai nome
+  // nem e-mail de ninguém. Os chamados que vieram do próprio Connect ficam de
+  // fora. `desde` (AAAA-MM-DD) traz só os abertos a partir dessa data.
+  app.get("/api/integrations/connect41/historico", requireConnect41Token, async (req, res) => {
+    try {
+      const desde = typeof req.query.desde === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde) ? req.query.desde : null;
+      const chamados = await pool.query(
+        `SELECT t.id, t.title, t.description, t.status, t.priority, t.created_at, t.closed_at,
+                coalesce(p.name || ' › ', '') || c.name AS categoria,
+                s.name AS setor_que_pediu
+           FROM tickets t
+           JOIN ticket_categories c ON c.id = t.category_id
+           LEFT JOIN ticket_categories p ON p.id = c.parent_id
+           LEFT JOIN sectors s ON s.id = t.requester_sector_id
+          WHERE coalesce(t.request_data->>'origem', '') <> 'connect41'
+            AND ($1::date IS NULL OR t.created_at >= $1::date)
+          ORDER BY t.created_at`,
+        [desde]
+      );
+      const ids = chamados.rows.map((r: any) => r.id);
+      const respostas = ids.length
+        ? await pool.query(
+            `SELECT c.ticket_id, c.body, c.is_internal, c.created_at
+               FROM ticket_comments c JOIN tickets t ON t.id = c.ticket_id
+              WHERE c.ticket_id = ANY($1) AND c.author_id IS DISTINCT FROM t.created_by
+              ORDER BY c.created_at`,
+            [ids]
+          )
+        : { rows: [] as any[] };
+      const porChamado = new Map<string, Array<{ texto: string; interno: boolean; em: string }>>();
+      for (const r of respostas.rows as any[]) {
+        const lista = porChamado.get(r.ticket_id) ?? [];
+        lista.push({ texto: String(r.body).slice(0, 4000), interno: Boolean(r.is_internal), em: new Date(r.created_at).toISOString() });
+        porChamado.set(r.ticket_id, lista);
+      }
+      return res.json({
+        chamados: (chamados.rows as any[]).map((r) => ({
+          id: r.id,
+          titulo: r.title,
+          descricao: String(r.description ?? "").slice(0, 20000),
+          situacao: r.status,
+          prioridade: r.priority,
+          categoria: r.categoria,
+          setorQuePediu: r.setor_que_pediu ?? null,
+          abertoEm: new Date(r.created_at).toISOString(),
+          fechadoEm: r.closed_at ? new Date(r.closed_at).toISOString() : null,
+          respostasDaEquipe: porChamado.get(r.id) ?? [],
+        })),
+      });
+    } catch (error: any) {
+      console.error("[connect41/historico] error:", error);
+      return res.status(500).json({ error: error.message || "Failed to list tickets" });
+    }
+  });
+
   app.get("/api/tickets/:id", requireAuth, requireTicketAccess, async (req, res) => {
     try {
       const ticket = await storage.getTicketDetail(req.params.id, req.user!);
