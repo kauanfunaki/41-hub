@@ -2069,6 +2069,114 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Chamado aberto no Connect 41 (funcionalidade-711, 17/11/2026): o Connect
+  // manda a cópia depois da triagem, só de ida. A equipe atende no Connect; o
+  // chamado daqui guarda o link de volta em requestData.connectUrl.
+  //
+  // De-para pelo nome: a categoria do Connect vira a categoria ativa do Hub com
+  // o mesmo nome (sem acento e sem maiúscula); sem par, a de
+  // CONNECT41_TICKET_CATEGORY_NAME. O setor que pediu vira o setor do Hub com o
+  // mesmo nome; sem par, o de CONNECT41_REQUESTER_SECTOR_NAME (Tech). Quem abre
+  // é o usuário de sistema (CONNECT41_SYSTEM_USER_EMAIL), com o nome e o e-mail
+  // de quem pediu na descrição.
+  //
+  // Idempotente: o mesmo chamado do Connect (connectTicketId) devolve o chamado
+  // que já existe, para a nova tentativa do Connect não duplicar.
+  app.post("/api/integrations/connect41/tickets", requireConnect41Token, async (req, res) => {
+    try {
+      const schema = z.object({
+        connectTicketId: z.string().min(1).max(64),
+        protocolo: z.string().max(40).optional(),
+        titulo: z.string().min(1).max(255),
+        descricao: z.string().min(1).max(20000),
+        categoria: z.string().max(255).optional(),
+        setorSolicitante: z.string().max(120).optional(),
+        setorQueAtende: z.string().max(120).optional(),
+        prioridade: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]).optional(),
+        solicitante: z.object({ nome: z.string().max(180), email: z.string().max(180).optional() }).optional(),
+        connectUrl: z.string().url().max(500).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Dados inválidos", details: parsed.error.issues });
+      }
+      const d = parsed.data;
+      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+      const linkDo = (id: string) => (baseUrl ? `${baseUrl}/tickets/${id}` : null);
+
+      const existente = await pool.query(
+        `SELECT id FROM tickets WHERE request_data->>'connectTicketId' = $1 LIMIT 1`,
+        [d.connectTicketId]
+      );
+      if (existente.rows.length) {
+        const id = existente.rows[0].id as string;
+        return res.status(200).json({ ticketId: id, ticketUrl: linkDo(id), jaExistia: true });
+      }
+
+      const systemUserEmail = process.env.CONNECT41_SYSTEM_USER_EMAIL;
+      const categoriaPadrao = process.env.CONNECT41_TICKET_CATEGORY_NAME;
+      const setorPadrao = process.env.CONNECT41_REQUESTER_SECTOR_NAME || "Tech";
+      if (!systemUserEmail || !categoriaPadrao) {
+        console.error("[connect41/tickets] CONNECT41_SYSTEM_USER_EMAIL/CONNECT41_TICKET_CATEGORY_NAME não configurados");
+        return res.status(500).json({ error: "Integração com o Connect 41 não configurada no Hub" });
+      }
+      const systemUser = await storage.getUserByEmail(systemUserEmail);
+      const actorUser = systemUser ? await storage.getUserWithRoles(systemUser.id) : undefined;
+      if (!actorUser) {
+        return res.status(500).json({ error: `Usuário de sistema "${systemUserEmail}" não encontrado no Hub` });
+      }
+
+      const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const ativas = (await storage.listAllTicketCategories()).filter((c) => c.isActive);
+      const category =
+        (d.categoria ? ativas.find((c) => semAcento(c.name) === semAcento(d.categoria!)) : undefined) ??
+        ativas.find((c) => c.name === categoriaPadrao);
+      if (!category) {
+        return res.status(500).json({ error: `Categoria "${categoriaPadrao}" não encontrada ou inativa no Hub` });
+      }
+
+      const setores = await pool.query(`SELECT id, name FROM sectors`);
+      const setorPorNome = (nome?: string) =>
+        nome ? (setores.rows as Array<{ id: string; name: string }>).find((s) => semAcento(s.name) === semAcento(nome)) : undefined;
+      const requesterSector = setorPorNome(d.setorSolicitante) ?? (await storage.getSectorByName(setorPadrao));
+      if (!requesterSector) {
+        return res.status(500).json({ error: `Setor "${setorPadrao}" não encontrado no Hub` });
+      }
+
+      const description = [
+        d.descricao,
+        "",
+        "—",
+        `Aberto no Connect 41${d.protocolo ? ` (${d.protocolo})` : ""}${d.solicitante ? ` por ${d.solicitante.nome}${d.solicitante.email ? ` <${d.solicitante.email}>` : ""}` : ""}.`,
+        d.setorSolicitante ? `Setor que pediu: ${d.setorSolicitante}` : null,
+        d.setorQueAtende ? `Setor que atende no Connect: ${d.setorQueAtende}` : null,
+        d.categoria && semAcento(d.categoria) !== semAcento(category.name) ? `Categoria no Connect: ${d.categoria}` : null,
+        d.connectUrl ? `No Connect: ${d.connectUrl}` : null,
+      ].filter((l) => l !== null).join("\n");
+
+      const ticket = await storage.createTicket({
+        title: d.titulo,
+        description,
+        requesterSectorId: requesterSector.id,
+        categoryId: category.id,
+        priority: d.prioridade ?? "MEDIA",
+        tags: ["connect41"],
+        requestData: {
+          origem: "connect41",
+          connectTicketId: d.connectTicketId,
+          protocolo: d.protocolo ?? null,
+          connectUrl: d.connectUrl ?? null,
+          solicitante: d.solicitante ?? null,
+        },
+      }, actorUser);
+
+      return res.status(201).json({ ticketId: ticket.id, ticketUrl: linkDo(ticket.id) });
+    } catch (error: any) {
+      console.error("[connect41/tickets] error:", error);
+      return res.status(500).json({ error: error.message || "Failed to create ticket" });
+    }
+  });
+
   app.get("/api/tickets/:id", requireAuth, requireTicketAccess, async (req, res) => {
     try {
       const ticket = await storage.getTicketDetail(req.params.id, req.user!);
