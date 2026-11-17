@@ -143,7 +143,7 @@ export function TutorialModal() {
       el.classList.remove("tutorial-highlight");
     });
 
-    if (!current?.targetSelector) return;
+    if (!shouldShow || !current?.targetSelector) return;
 
     // Wait for the new page to render before querying the DOM
     const timer = setTimeout(() => {
@@ -155,7 +155,7 @@ export function TutorialModal() {
     }, 380);
 
     return () => clearTimeout(timer);
-  }, [step, current?.targetSelector]);
+  }, [shouldShow, step, current?.targetSelector]);
 
   // Clean up all highlights when the component unmounts
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
@@ -21,7 +21,9 @@ import {
   UserCheck,
   RotateCcw,
 } from "lucide-react";
-import type { TicketWithDetails, TicketSlaCycle } from "@shared/schema";
+import type { TicketWithDetails } from "@shared/schema";
+import type { TicketHistoryPage } from "@shared/ticket-history";
+import { getTicketSlaStatus } from "@/lib/ticket-sla-status";
 import { cn } from "@/lib/utils";
 
 // ── Labels / colours ────────────────────────────────────────────────────────
@@ -64,44 +66,6 @@ const statusColors: Record<string, string> = {
   CANCELADO: "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20",
 };
 
-// ── SLA helper ───────────────────────────────────────────────────────────────
-
-function getSlaStatus(
-  cycle: TicketSlaCycle | null | undefined
-): { label: string; color: string } {
-  if (!cycle) return { label: "—", color: "" };
-  if (cycle.resolvedAt) {
-    return cycle.resolutionBreached
-      ? {
-          label: "Estourado",
-          color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-        }
-      : {
-          label: "Concluído",
-          color:
-            "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-        };
-  }
-  const hoursLeft =
-    (new Date(cycle.resolutionDueAt).getTime() - Date.now()) / 3_600_000;
-  if (hoursLeft < 0)
-    return {
-      label: "Estourado",
-      color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-    };
-  if (hoursLeft < 4)
-    return {
-      label: "Em risco",
-      color:
-        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    };
-  return {
-    label: "Em dia",
-    color:
-      "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  };
-}
-
 function toSentenceCase(str: string): string {
   if (!str) return str;
   if (str === str.toUpperCase() && str.length > 3) {
@@ -128,7 +92,7 @@ function formatDate(dateStr: string): string {
 function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
   const { user } = useAuth();
   const isAdminOrCoord = user?.isAdmin || user?.roles?.some(r => r.roleName === "Coordenador");
-  const sla = getSlaStatus(ticket.currentCycle);
+  const sla = getTicketSlaStatus(ticket);
   return (
     <Link href={`/tickets/${ticket.id}`}>
       <div
@@ -158,10 +122,11 @@ function TicketCard({ ticket }: { ticket: TicketWithDetails }) {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-            {sla.color && (
+            {sla && (
               <span
                 className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${sla.color}`}
                 data-testid={`sla-badge-${ticket.id}`}
+                title={sla.description}
               >
                 <Clock className="h-3 w-3" />
                 {sla.label}
@@ -206,6 +171,8 @@ export default function TicketsIndex() {
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<Priority>("all");
   const [assignedToMe, setAssignedToMe] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyPageSize = 25;
 
   const isAdminOrCoord =
     user?.isAdmin || user?.roles?.some((r) => r.roleName === "Coordenador");
@@ -227,21 +194,24 @@ export default function TicketsIndex() {
     refetchInterval: REFETCH_INTERVAL,
   });
 
-  // ── Histórico: RESOLVIDO + CANCELADO. Always fetched for the count badge.
-  const { data: allTickets = [], isLoading: loadingAll } = useQuery<
-    TicketWithDetails[]
-  >({
-    queryKey: ["/api/tickets", { tab: "historico", q: search || undefined, assignedToMe }],
-    queryFn: async () => {
-      const p = new URLSearchParams({ includeClosed: "true" });
+  // The server counts all visible history and loads only the requested page.
+  const { data: history, isLoading: loadingHistory, isFetching: fetchingHistory,
+    isError: historyError, refetch: refetchHistory } = useQuery<TicketHistoryPage>({
+    queryKey: ["/api/tickets", { tab: "historico", q: search || undefined, assignedToMe, priorityFilter, historyPage }],
+    queryFn: async ({ signal }) => {
+      const p = new URLSearchParams({ page: String(historyPage), pageSize: String(historyPageSize) });
       if (search) p.set("q", search);
       if (assignedToMe) p.set("assignedToMe", "true");
-      const res = await fetch(`/api/tickets?${p}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch tickets");
+      if (priorityFilter !== "all") p.set("priority", priorityFilter);
+      const res = await fetch(`/api/tickets/history?${p}`, { credentials: "include", signal });
+      if (!res.ok) throw new Error("Não foi possível carregar o histórico");
       return res.json();
     },
     refetchInterval: REFETCH_INTERVAL,
   });
+  useEffect(() => {
+    if (history && history.page !== historyPage) setHistoryPage(history.page);
+  }, [history, historyPage]);
 
   // ── Solicitações de reabertura pendentes (admin). Sempre buscado para o badge.
   const { data: reopenTickets = [], isLoading: loadingReopen } = useQuery<
@@ -268,9 +238,7 @@ export default function TicketsIndex() {
   const countAtivos = activeTickets.filter((t) => inBucket(t, ATIVOS_STATUSES)).length;
   const countAguardando = activeTickets.filter((t) => inBucket(t, AGUARDANDO_STATUSES)).length;
   const countStandby = activeTickets.filter((t) => t.status === "STANDBY").length;
-  const countHistorico = allTickets.filter(
-    (t) => t.status === "RESOLVIDO" || t.status === "CANCELADO"
-  ).length;
+  const countHistorico = history?.total ?? 0;
   const countSolicitacoes = reopenTickets.length;
 
   // Apply priority filter for the displayed list only
@@ -286,11 +254,11 @@ export default function TicketsIndex() {
       ? activeTickets.filter((t) => t.status === "STANDBY")
       : tab === "solicitacoes"
       ? reopenTickets
-      : allTickets.filter((t) => t.status === "RESOLVIDO" || t.status === "CANCELADO")
+      : history?.items ?? []
   ).filter(matchesPriority);
 
   const isLoading =
-    tab === "historico" ? loadingAll : tab === "solicitacoes" ? loadingReopen : loadingActive;
+    tab === "historico" ? loadingHistory : tab === "solicitacoes" ? loadingReopen : loadingActive;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -324,7 +292,7 @@ export default function TicketsIndex() {
           <Input
             placeholder="Buscar chamados..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setHistoryPage(1); }}
             className="pl-9"
             data-testid="input-search-tickets"
           />
@@ -332,7 +300,7 @@ export default function TicketsIndex() {
 
         <Select
           value={priorityFilter}
-          onValueChange={(v) => setPriorityFilter(v as Priority)}
+          onValueChange={(v) => { setPriorityFilter(v as Priority); setHistoryPage(1); }}
         >
           <SelectTrigger className="w-48 min-w-[12rem]" data-testid="select-priority-filter">
             <SelectValue placeholder="Prioridade" />
@@ -349,7 +317,7 @@ export default function TicketsIndex() {
         {isAdminOrCoord && (
           <button
             type="button"
-            onClick={() => setAssignedToMe((v) => !v)}
+            onClick={() => { setAssignedToMe((v) => !v); setHistoryPage(1); }}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
               assignedToMe
@@ -366,7 +334,7 @@ export default function TicketsIndex() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <TabsList data-tutorial="tickets-tabs">
             <TabsTrigger value="ativos" data-testid="tab-active">
               Em Fila
@@ -440,7 +408,12 @@ export default function TicketsIndex() {
         </div>
 
         <TabsContent value={tab} className="mt-4">
-          {isLoading ? (
+          {tab === "historico" && historyError ? (
+            <div className="text-center py-12 text-muted-foreground" role="alert">
+              <p>Não foi possível carregar o histórico.</p>
+              <Button variant="outline" className="mt-3" onClick={() => refetchHistory()}>Tentar novamente</Button>
+            </div>
+          ) : isLoading ? (
             <div className="text-center py-12 text-muted-foreground">
               Carregando...
             </div>
@@ -460,6 +433,20 @@ export default function TicketsIndex() {
                 <TicketCard key={ticket.id} ticket={ticket} />
               ))}
             </div>
+          )}
+          {tab === "historico" && history && !historyError && !loadingHistory && (
+            <nav aria-label="Paginação do histórico" className="mt-4 flex flex-wrap items-center justify-between gap-3" data-testid="history-pagination">
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {history.filteredTotal === 0 ? "0 chamados" : `${(history.page - 1) * history.pageSize + 1}–${Math.min(history.page * history.pageSize, history.filteredTotal)} de ${history.filteredTotal} chamados`}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" size="sm" disabled={history.page <= 1 || fetchingHistory}
+                  onClick={() => setHistoryPage(history.page - 1)} data-testid="history-previous">Anterior</Button>
+                <span className="text-sm" data-testid="history-page">Página {history.page} de {history.totalPages}</span>
+                <Button variant="outline" size="sm" disabled={history.page >= history.totalPages || fetchingHistory}
+                  onClick={() => setHistoryPage(history.page + 1)} data-testid="history-next">Próxima</Button>
+              </div>
+            </nav>
           )}
         </TabsContent>
       </Tabs>

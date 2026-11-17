@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, AlertCircle, Check, X } from "lucide-react";
+import { getOnboardingStep } from "@/lib/onboarding";
 
 interface PasswordRequirement {
   label: string;
@@ -27,7 +28,7 @@ export function PasswordChangeModal() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const shouldShow = user?.authProvider === "local" && user?.mustChangePassword;
+  const shouldShow = getOnboardingStep(user) === "password";
 
   const allRequirementsMet = requirements.every((r) => r.test(newPassword));
   const passwordsMatch = newPassword === confirmPassword && newPassword.length > 0;

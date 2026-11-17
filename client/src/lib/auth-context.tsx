@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import type { UserWithRoles } from "@shared/schema";
+import { queryClient } from "@/lib/queryClient";
 
 interface AuthContextType {
   user: UserWithRoles | null;
@@ -70,9 +71,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Apenas limpa o estado local — sem reload de página para não disparar
       // o isLoading=true que causaria o flash da tela de loading
       setUser(null);
+      queryClient.removeQueries({ queryKey: ["/api/users/me/slack"] });
     } catch (error) {
       console.error("Failed to logout:", error);
       setUser(null);
+      queryClient.removeQueries({ queryKey: ["/api/users/me/slack"] });
     }
   };
 
